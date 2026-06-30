@@ -1,0 +1,15 @@
+{
+  "name": "@cardgame/sim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "micro": "tsx micro.ts",
+    "macro": "tsx macro.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@cardgame/shared": "workspace:*",
+    "@cardgame/server": "workspace:*"
+  }
+}
