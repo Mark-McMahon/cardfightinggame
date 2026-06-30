@@ -11,9 +11,9 @@ import type { ClientUnit, Pairing, PublicPlayer } from '@cardgame/shared';
 //   shop → bench   = plain buy
 //   bench → board  = playUnit at the dropped slot
 //   board reorder  = moveUnit
-//   board/bench → sell zone = sell
-// board → bench (un-deploy) has no server intent and is intentionally NOT a drag — use
-// Sell to clear a board unit. Buttons + click remain as fallbacks (and back the e2e flow).
+//   board/bench → shop (drag up) = sell  (the shop is the sell target; no dedicated sell zone)
+// board → bench (un-deploy) has no server intent and is intentionally NOT a drag — drag a
+// board unit up to the shop to clear it. Buttons + click remain as fallbacks (back the e2e flow).
 // ─────────────────────────────────────────────────────────────────────────────
 
 type DragItem =
@@ -136,13 +136,19 @@ export function Shop() {
     resetDrag();
   };
 
-  // ── sell zone (board / bench → sell) ──
+  // ── sell via the shop (board / bench dragged up onto the shop = sell) ──
   const sellArmed = !!drag && drag.kind !== 'shop';
   const onSellOver = (e: DragEvent<HTMLDivElement>) => {
     if (!sellArmed) return;
     e.preventDefault();
     setHoverGap(null);
+    setBenchOver(false);
     setSellOver(true);
+  };
+  // the shop holds draggable cards, so a naive leave flickers as the cursor crosses them;
+  // only clear once the cursor truly exits the zone.
+  const onSellLeave = (e: DragEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setSellOver(false);
   };
   const onSellDrop = (e: DragEvent<HTMLDivElement>) => {
     if (!drag || drag.kind === 'shop') return;
@@ -245,9 +251,21 @@ export function Shop() {
         </button>
       </div>
 
-      {/* shop — drag a card to the board (buy + place) or to the bench (buy); click still buys */}
-      <div className="zone">
-        <h4>Shop {priv?.frozen ? '(frozen)' : ''} — drag a card down to play it, or click to buy</h4>
+      {/* shop — drag a card down to the board/bench to buy (click still buys); drag a board/bench
+          unit UP here to sell it (+1g). The shop doubles as the sell target — no dedicated sell zone. */}
+      <div
+        className={`zone shop-zone ${sellArmed ? 'sell-armed' : ''} ${sellOver ? 'sell-over' : ''}`}
+        onDragOver={onSellOver}
+        onDragLeave={onSellLeave}
+        onDrop={onSellDrop}
+      >
+        <h4>
+          {sellArmed
+            ? sellOver
+              ? '🗑 Release to sell (+1g)'
+              : '🗑 Drop a unit here to sell (+1g)'
+            : `Shop ${priv?.frozen ? '(frozen)' : ''} — drag down to play · click to buy · drag a unit up here to sell`}
+        </h4>
         <div className="units-row">
           {priv?.shop.map((o, i) => (
             <div
@@ -264,51 +282,39 @@ export function Shop() {
         </div>
       </div>
 
-      {/* board + sell zone */}
-      <div className="row board-area" style={{ alignItems: 'stretch' }}>
-        <div className="zone board-zone" style={{ flex: 1 }}>
-          <h4>Your board ({board.length}/7) — drag to reorder · front (left) is hit first</h4>
-          <div
-            className={`units-row board-row ${hoverGap !== null ? 'drop-over' : ''}`}
-            onDragOver={onBoardOver}
-            onDragLeave={onBoardLeave}
-            onDrop={onBoardDrop}
-          >
-            {board.map((u, idx) => (
-              <Fragment key={u.uid}>
-                {hoverGap === idx && <div className="drop-marker" />}
-                <div className={`col bslot ${dragMark(drag?.kind === 'board' && drag.uid === u.uid)}`} data-slot={idx} style={{ alignItems: 'center' }}>
-                  <div
-                    className="dragwrap"
-                    draggable
-                    onDragStart={() => setDrag({ kind: 'board', uid: u.uid, index: idx })}
-                    onDragEnd={resetDrag}
-                  >
-                    <UnitShape
-                      unit={u}
-                      showTip
-                      className={legal.has(u.uid) ? 'legal' : ''}
-                      onClick={legal.has(u.uid) ? () => choose(u.uid) : undefined}
-                    />
-                  </div>
-                </div>
-              </Fragment>
-            ))}
-            {hoverGap === board.length && <div className="drop-marker" key="m-end" />}
-            {board.length === 0 && hoverGap === null && (
-              <span className="dim">Drag units here — front (left) units are targeted first.</span>
-            )}
-          </div>
-        </div>
-
+      {/* board — full width now that selling happens by dragging a unit up onto the shop */}
+      <div className="zone board-zone">
+        <h4>Your board ({board.length}/7) — drag to reorder · front (left) is hit first · drag up to the shop to sell</h4>
         <div
-          className={`sell-zone ${sellArmed ? 'armed' : ''} ${sellOver ? 'over' : ''}`}
-          onDragOver={onSellOver}
-          onDragLeave={() => setSellOver(false)}
-          onDrop={onSellDrop}
+          className={`units-row board-row ${hoverGap !== null ? 'drop-over' : ''}`}
+          onDragOver={onBoardOver}
+          onDragLeave={onBoardLeave}
+          onDrop={onBoardDrop}
         >
-          <span className="sell-icon">🗑</span>
-          <span>{sellArmed ? 'Drop to sell (+1g)' : 'Sell'}</span>
+          {board.map((u, idx) => (
+            <Fragment key={u.uid}>
+              {hoverGap === idx && <div className="drop-marker" />}
+              <div className={`col bslot ${dragMark(drag?.kind === 'board' && drag.uid === u.uid)}`} data-slot={idx} style={{ alignItems: 'center' }}>
+                <div
+                  className="dragwrap"
+                  draggable
+                  onDragStart={() => setDrag({ kind: 'board', uid: u.uid, index: idx })}
+                  onDragEnd={resetDrag}
+                >
+                  <UnitShape
+                    unit={u}
+                    showTip
+                    className={legal.has(u.uid) ? 'legal' : ''}
+                    onClick={legal.has(u.uid) ? () => choose(u.uid) : undefined}
+                  />
+                </div>
+              </div>
+            </Fragment>
+          ))}
+          {hoverGap === board.length && <div className="drop-marker" key="m-end" />}
+          {board.length === 0 && hoverGap === null && (
+            <span className="dim">Drag units here — front (left) units are targeted first.</span>
+          )}
         </div>
       </div>
 

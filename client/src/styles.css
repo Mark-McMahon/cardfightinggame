@@ -321,22 +321,19 @@ input {
    transform-induced stacking context (and tooltip) paints above siblings */
 .discover-card .unit:hover { z-index: 10; }
 .dragwrap.dragging, .bslot.dragging { opacity: 0.35; }
-.board-area { gap: 10px; }
 .board-row.drop-over { background: #2c2011; }
 .drop-marker {
   flex: 0 0 4px; align-self: stretch; min-height: var(--card-h); border-radius: 3px;
   background: var(--accent); box-shadow: 0 0 10px var(--accent);
 }
 .bslot { gap: 6px; }
-.sell-zone {
-  flex: 0 0 calc(116px * var(--card-scale)); border: 2px dashed var(--line); border-radius: 2px; color: var(--dim);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 6px; text-align: center; padding: 8px; transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
-}
-.sell-zone .sell-icon { font-size: 26px; opacity: 0.45; transition: opacity 0.12s; }
-.sell-zone.armed { border-color: var(--bad); color: #ff9b9b; }
-.sell-zone.armed .sell-icon { opacity: 1; }
-.sell-zone.over { background: #3a2226; border-color: var(--bad); box-shadow: 0 0 16px var(--bad); color: var(--text); }
+/* the shop doubles as the sell target — drag a board/bench unit up here to sell it (+1g).
+   Replaces the old dedicated .sell-zone so the board gets the full row width. */
+.zone.shop-zone { transition: background 0.12s, border-color 0.12s, box-shadow 0.12s; }
+.zone.shop-zone.sell-armed { border-color: var(--bad); border-style: dashed; }
+.zone.shop-zone.sell-armed h4 { color: #ff9b9b; }
+.zone.shop-zone.sell-over { background: #3a2226; border-color: var(--bad); box-shadow: 0 0 16px var(--bad); }
+.zone.shop-zone.sell-over h4 { color: var(--text); }
 
 /* hover full-text tooltip — the card art is icon-only, so text lives here (§16.6) */
 .card-tip {
