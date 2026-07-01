@@ -661,22 +661,26 @@ written back to the persistent board, so all combat `stats` events currently car
 `permanent:false` and nothing consumes the field. `stats.sourceId` and `keyword.gained`/
 `sourceId` are additive and consumed by the replay for causality links.
 
-### 7.6 Resolved combat rules — and the current-code divergences to fix on regen
+### 7.6 Resolved combat rules — divergence ledger (items 1–3, 6 resolved in code; item 5 open)
 
-§§7.1–7.3 now state the **decided** rules (rulings D1–D4, D7 in `DECISIONS-NEEDED.md`). They
-are the intent a regeneration must satisfy; **today's `combat.ts` diverges** from several and
-is the fix target — a fresh regen builds them correctly from the start:
+§§7.1–7.3 now state the **decided** rules (rulings D1–D4, D7 in `DECISIONS-NEEDED.md`). The
+numbered items below are kept as the **historical record** of the divergences found in the
+2026-07-01 audit. **Status (2026-07-01): items 1–3 and 6 are implemented in `combat.ts` and
+green** (pinned by `EV-DTH-08/09a/09b/10` in `shared/engine/death.test.ts` and `EV-INV-CFG`
+in `shared/engine/invariants.test.ts`); item 4 is a decided stance, not a code item; **item 5
+(the writeback gap) is the one open divergence.** The "*pre-fix code*" notes describe the
+audited code, not today's:
 
 1. **Deaths are simultaneous (D1).** Collect the whole batch, register it, then resolve
-   deathrattles into the settled board. *Current code* removes-and-fires sequentially and
-   ignores the `simultaneousDeaths`/`deathrattleOrder` config flags (verified: only 4 of the 7
-   combat knobs are read — `targetingMode`, `tauntOverride`, `cleaveDefault`, `maxCombatSteps`;
+   deathrattles into the settled board. *Pre-fix code* removed-and-fired sequentially and
+   ignored the `simultaneousDeaths`/`deathrattleOrder` config flags (at audit only 4 of the 7
+   combat knobs were read — `targetingMode`, `tauntOverride`, `cleaveDefault`, `maxCombatSteps`;
    the two dead knobs `attackOrderRule`/`firstAttackerTiebreak` are deleted per D7).
 2. **Cross-side order = attacker's side first (D2)**, side A first at start of combat,
-   left→right within a side. *Current code* does all-of-A-then-all-of-B unconditionally (a
+   left→right within a side. *Pre-fix code* did all-of-A-then-all-of-B unconditionally (a
    fixed side-A advantage).
 3. **A unit dead to its own `onAttack` does not swing; cleave recomputes after a shield-break
-   insert (D3).** *Current code* does neither.
+   insert (D3).** *Pre-fix code* did neither.
 4. **Determinism is a property, not a cross-build byte guarantee (D4).** A regen must satisfy
    "same `(boards, seed)` twice → identical log" *within its own implementation*; it need
    **not** reproduce this repo's exact byte log (a different-but-valid PRNG draws a different
@@ -690,10 +694,13 @@ is the fix target — a fresh regen builds them correctly from the start:
    `attackOrderRule`/`firstAttackerTiebreak` knobs (behavior is fixed, they aren't real
    knobs); keep the `64`/`8` loop bounds as commented safety guards.
 
-**Eval status:** `EV-DTH-08/09/10` and `EV-INV-CFG` encode the decided rules above and will
-**fail against today's `combat.ts` by design** — that RED result *validates* the evals (a
-green on current code would mean a broken eval). The `EV-GLD-*` determinism goldens are
-generated after the ordering is fixed, per D4.
+**Eval status (2026-07-01):** `EV-DTH-08/09a/09b/10` and `EV-INV-CFG` encode the decided
+rules above and are **green against today's `combat.ts`** — items 1–3 and 6 are closed.
+One honest residue on item 6: `combat.ts` does not literally branch on
+`simultaneousDeaths`/`deathrattleOrder`; behavior is hardcoded to their single legal values,
+which `EV-INV-CFG` explicitly accepts ("implemented as behavior rather than necessarily
+referenced by name"). The `EV-GLD-*` determinism goldens were regenerated from the corrected
+engine, per D4. Item 5 (writeback) remains open and is tracked as §15 risk #3.
 
 ---
 
