@@ -138,7 +138,11 @@ describe('EV-SEL — selectors', () => {
 });
 
 describe('EV-ACT — actions', () => {
-  it('EV-ACT-BUFF: buffStats floors atk at 0 and hp at 1, rounds, and combat buffs are non-permanent', () => {
+  it('EV-ACT-BUFF: buffStats floors atk at 0 and hp at 1, rounds; combat buffs are combat-only unless flagged permanent (then the event carries permanent:true + the fold delta, §7.5 / decision #38)', () => {
+    // (a) clamps + the DEFAULT: an unflagged (or permanent:false) combat buff emits NO
+    // permanence marker — it stays this-combat-only and the §7.5 writeback fold ignores it.
+    // (This knowingly REWRITES the pre-#38 pin "combat-fired stat changes are never written
+    // back": the writeback gap is closed; permanence is now opt-in per ActionSpec.)
     const bigDebuff: Effect = {
       trigger: { type: 'startOfCombat' },
       target: { selector: 'self' },
@@ -150,7 +154,26 @@ describe('EV-ACT — actions', () => {
     expect(s).toBeTruthy();
     expect(s!.atk).toBe(0); // floored at 0
     expect(s!.hp).toBe(1); // floored at 1
-    expect(s!.permanent).not.toBe(true); // combat-fired stat changes are never written back (§7.5)
+    expect(s!.permanent).toBeUndefined(); // default: no permanence marker, nothing to fold
+    expect(s!.dAtk).toBeUndefined();
+    expect(s!.dHp).toBeUndefined();
+
+    // (b) a combat-fired buffStats with permanent:true emits permanent:true plus the
+    // POST-CLAMP delta (dAtk/dHp) — the exact contribution the writeback fold replays.
+    const permBuff: Effect = {
+      trigger: { type: 'startOfCombat' },
+      target: { selector: 'self' },
+      actions: [{ type: 'buffStats', atk: 3, hp: 2, permanent: true }],
+    };
+    const p = vanilla(5, 5, { effects: [permBuff] });
+    const evs2 = resolveCombat(board([p]), passiveB(), SEED);
+    const sp = byType(evs2, 'stats').find((e) => e.unitId === p.uid);
+    expect(sp).toBeTruthy();
+    expect(sp!.permanent).toBe(true);
+    expect(sp!.dAtk).toBe(3);
+    expect(sp!.dHp).toBe(2);
+    expect(sp!.atk).toBe(8); // absolutes still post-buff (replay unchanged)
+    expect(sp!.hp).toBe(7);
   });
 
   it('EV-ACT-MUL: a combat-fired multiplyStats clamps the factor to multiplyFactorCap (both phases)', () => {

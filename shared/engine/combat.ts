@@ -468,11 +468,27 @@ function fireAvengeEffect(ctx: Ctx, side: Side, u: Fighter, e: Effect, tokensOnl
       const wantAtk = action.atk ?? 0;
       const addable = Math.max(0, Math.min(wantAtk, cap - u.tokenFloorAtk));
       if (addable <= 0) continue;
+      const prevAtk = u.atk;
+      const prevHp = u.hp;
       const s = applyBuff({ atk: u.atk, hp: u.hp }, addable, action.hp ?? 0);
       u.atk = s.atk;
       u.hp = s.hp;
       u.tokenFloorAtk += addable;
-      ctx.events.push({ t: 'stats', unitId: u.uid, atk: u.atk, hp: u.hp, sourceId: u.uid });
+      if (action.permanent === true) {
+        // Data-driven via engines.wildkin.tokenBuffPermanent (false = this-combat, per card text).
+        ctx.events.push({
+          t: 'stats',
+          unitId: u.uid,
+          atk: u.atk,
+          hp: u.hp,
+          sourceId: u.uid,
+          permanent: true,
+          dAtk: u.atk - prevAtk,
+          dHp: u.hp - prevHp,
+        });
+      } else {
+        ctx.events.push({ t: 'stats', unitId: u.uid, atk: u.atk, hp: u.hp, sourceId: u.uid });
+      }
     }
     return;
   }
@@ -521,14 +537,34 @@ function applyCombatAction(
   switch (action.type) {
     case 'buffStats': {
       for (const t of targets) {
+        const prevAtk = t.atk;
+        const prevHp = t.hp;
         const s = applyBuff({ atk: t.atk, hp: t.hp }, action.atk ?? 0, action.hp ?? 0);
         t.atk = s.atk;
         t.hp = s.hp;
-        ctx.events.push({ t: 'stats', unitId: t.uid, atk: t.atk, hp: t.hp, sourceId: source.uid });
+        if (action.permanent === true) {
+          // Decision #38 (§7.5): flag the event + carry the post-clamp DELTA so the
+          // post-combat fold can replay exactly this contribution onto survivors.
+          ctx.events.push({
+            t: 'stats',
+            unitId: t.uid,
+            atk: t.atk,
+            hp: t.hp,
+            sourceId: source.uid,
+            permanent: true,
+            dAtk: t.atk - prevAtk,
+            dHp: t.hp - prevHp,
+          });
+        } else {
+          ctx.events.push({ t: 'stats', unitId: t.uid, atk: t.atk, hp: t.hp, sourceId: source.uid });
+        }
       }
       break;
     }
     case 'setStats': {
+      // NOTE (§7.5): in combat, `permanent` is honored ONLY on buffStats (a delta can be
+      // folded back; an absolute set / multiply / reset cannot be disentangled from combat
+      // damage). setStats/multiplyStats/resetToBase are always this-combat-only here.
       for (const t of targets) {
         const s = applyBuff({ atk: 0, hp: 0 }, action.atk ?? t.atk, action.hp ?? t.hp);
         t.atk = s.atk;
@@ -671,5 +707,15 @@ function finalize(ctx: Ctx): void {
     const survivorTierSum = winSide.units.reduce((s, u) => s + u.tier, 0);
     damageToLoser = lossDamage(winSide.playerTier, survivorTierSum);
   }
-  ctx.events.push({ t: 'combatEnd', winner, survivors, damageToLoser });
+  // Per-side survivor lists (decision #38, §7.5): needed by the writeback fold — `survivors`
+  // is winner-only, so a step-cap tie (both sides alive) would otherwise report nobody.
+  // Reborn-returned units are in `side.units` under their ORIGINAL uid, so they count.
+  ctx.events.push({
+    t: 'combatEnd',
+    winner,
+    survivors,
+    damageToLoser,
+    survivorsA: ctx.a.units.map((u) => u.uid),
+    survivorsB: ctx.b.units.map((u) => u.uid),
+  });
 }

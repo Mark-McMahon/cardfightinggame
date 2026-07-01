@@ -134,7 +134,9 @@ build from functional mechanics only; original names/text/art throughout.
       engine change — `stats` events now carry `sourceId` + `permanent` (`combatBeats.ts`
       holds the render-free, unit-tested segmentation). *Known gap surfaced:* combat is a
       pure function, so `permanent` is intent only — buffs aren't yet written back to the
-      board across combats (`match.ts`); flagged, not fixed.
+      board across combats (`match.ts`); flagged, not fixed. **(Gap closed 2026-07-01 by
+      decision #38: `stats.permanent` is now live — combat-fired permanent buffs fold back
+      onto surviving persistent units after combat, spec §7.5.)**
 27. **Counters — contextual only.** A manufactured-event counter (deaths / tokens /
     battlecries) is shown **only when you own a card that consumes it**; hidden otherwise.
     No always-on synergy panel.
@@ -249,6 +251,50 @@ build from functional mechanics only; original names/text/art throughout.
     uniformly means "seconds left in the current timed phase." The scheduled `beginShop` still owns
     the transition; a lone skipper still waits out the shared window (sized to the longest *watched*
     fight, #32) — this makes the wait **legible**, not shorter. Server + client only; no engine change.
+
+### Multi-lane scaling rework (Round 9) — engine writeback
+> Phase 1 of the multi-lane scaling rework: before new persistent scalers can ship, the
+> engine needs a REAL permanence mechanic. This closes design-spec §7.6 item 5 / §15 risk
+> #3 (the "writeback gap" flagged in #26's amendment) without breaking combat purity.
+
+38. **Combat-fired permanent buffs write back to the persistent board — combat stays pure.
+    (2026-07-01.)** Closes the writeback gap (§7.6 #5; amends #26's "flagged, not fixed").
+    Mechanism: `resolveCombat` is unchanged as a pure `(boards, seed) → CombatEvent[]`
+    function — it only **emits**. A combat-fired `buffStats` with `permanent:true` emits
+    `permanent:true` plus **additive** delta fields `dAtk`/`dHp` on the `stats` event (the
+    event's `atk`/`hp` are post-buff absolutes that mix in combat damage and combat-only
+    buffs, so a delta is the only foldable representation); `combatEnd` gains additive
+    `survivorsA`/`survivorsB` (per-side living uids — needed because `survivors` is
+    winner-only and a step-cap tie leaves both sides alive). After combat,
+    `Match.resolveCombatPhase` runs the deterministic fold `foldPermanentBuffs`
+    (`shared/engine/combatWriteback.ts`) per live side. **Rules:** (a) buffs apply to
+    **survivors only** — the dead accrue nothing; (b) a **Reborn resurrection counts as
+    surviving** — the reborn unit keeps its persistent uid and appears in the survivor
+    list; the in-combat reborn stat reset is not a buff and never folds; (c) **ghost
+    boards do not accrue** — the fold is never run for a dead player's snapshot side;
+    (d) a permanent buff targeting a **combat-summoned token** (per-fight `sum#N` uid) is
+    a **defined, logged no-op** — a session-log line, never a crash or a new CombatEvent;
+    (e) the **persistent `UnitInstance.uid` is the writeback key** — audit finding: it
+    already flows through `CombatUnit.uid` unchanged, so the originally-planned extra id
+    plumbing is unnecessary; (f) in combat only `buffStats` honors `permanent`
+    (set/multiply/reset stay this-combat-only) and **keyword permanence stays reserved**
+    (stats only in this phase); (g) the fold reads the log, never rewrites it; (h) **deltas
+    fold under the §6.8 stat clamps** — each `dAtk`/`dHp` replays through the same
+    `applyBuff` clamps combat's `buffStats` uses (atk floored at 0, hp at 1, rounded), so a
+    permanent DEBUFF emitted against in-combat stats riding combat-only buffs can never
+    write `atk<0`/`hp<1` onto the persistent board (a raw `+=` fold would). **Content
+    audit in the same change:** every combat-fired `buffStats` on shipped cards was given
+    an explicit `permanent:false` (Gorehide/Thornbeast read it from
+    `engines.wildkin.tokenBuffPermanent`, making that knob real), with **one deliberate
+    shop-gated exemption**: `wildkin_motherthorn` keeps `permanent:true` on its `onSummon`
+    buff — `onSummon` also fires in combat, but the effect's `tokensSummonedThisTurnAtLeast`
+    condition is shop-scoped (the counter reads 0 in combat) so it can never fire there;
+    the EV-WBK-08 lint encodes exactly this exemption, not a blanket "permanent:false
+    everywhere" — **no existing card was silently upgraded to persistent**; shop-phase
+    permanents (Chorus Tide, Quartermaster, …) already mutate the instance directly, emit
+    no combat events, and cannot double-apply. Pinned by `EV-WBK-01..09` (clamps:
+    EV-WBK-09) + golden `EV-GLD-09`; this knowingly rewrites the old `EV-ACT-BUFF` pin
+    "combat-fired stat changes are never written back."
 
 ## Tribe name map (clean-room — never ship the reference names)
 | Reference (do NOT ship) | Original name | Identity |

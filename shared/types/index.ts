@@ -321,19 +321,23 @@ export type CombatEvent =
     }
   | {
       // Round-6 replay legibility: a stat change carries WHO caused it (`sourceId`). `sourceId`
-      // is consumed by the replay (links a buff to its source). Both fields are optional/additive
+      // is consumed by the replay (links a buff to its source). All optional fields are additive
       // so determinism logs stay stable.
-      // `permanent`: RESERVED. Combat is a pure function and combat-fired stat changes are never
-      // written back to the persistent board (the "writeback gap"), so in-combat permanence is not
-      // a real mechanic — all combat buffs are this-combat-only and emit `permanent: false`. The
-      // field is kept as the seam to restore a perm/temp distinction IF the writeback gap is ever
-      // closed; until then nothing reads it (the replay's perm/temp UI was removed).
+      // `permanent`: LIVE (decision #38, spec §7.5). Combat stays a pure function, but a
+      // combat-fired `buffStats` whose ActionSpec has `permanent:true` emits `permanent:true`
+      // plus `dAtk`/`dHp` — the post-clamp DELTA that buff applied. `atk`/`hp` are post-buff
+      // ABSOLUTES (they include combat-only buffs and are useless for persistence), so the
+      // delta fields are what `foldPermanentBuffs` (combatWriteback.ts) replays onto the
+      // surviving persistent instances after combat. Non-permanent stat changes (the default,
+      // incl. combat damage/reborn resets — those are never buffs) omit all three fields.
       t: 'stats';
       unitId: string;
       atk: number;
       hp: number;
       sourceId?: string;
       permanent?: boolean;
+      dAtk?: number; // present iff permanent:true — the applied attack delta (post-clamp)
+      dHp?: number; // present iff permanent:true — the applied health delta (post-clamp)
     }
   | { t: 'death'; unitId: string }
   | { t: 'deathrattle'; unitId: string }
@@ -343,6 +347,13 @@ export type CombatEvent =
       winner: 'a' | 'b' | 'tie';
       survivors: string[];
       damageToLoser: number;
+      // Additive (decision #38, spec §7.5): living uids PER SIDE at combat end, regardless of
+      // winner. `survivors` (above) stays winner-side-only for compatibility; the per-side lists
+      // exist because a step-cap tie leaves BOTH sides alive (survivors=[] there) and the
+      // writeback fold needs each side's survivor set. A reborn-returned unit keeps its uid and
+      // appears here (it counts as surviving).
+      survivorsA?: string[];
+      survivorsB?: string[];
     };
 
 export type CombatWinner = 'a' | 'b' | 'tie';

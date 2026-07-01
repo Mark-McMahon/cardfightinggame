@@ -27,6 +27,7 @@ import {
 } from './shop';
 import { makePublicState, makePublicPlayer } from './state';
 import { resolveCombat } from './combat';
+import { foldPermanentBuffs } from './combatWriteback';
 
 export interface SeatConfig {
   name: string;
@@ -208,6 +209,9 @@ export class Match {
         const end = endEvent(log);
         // No hero damage flows TO a ghost; only the live player can take damage.
         if (end && end.winner === 'b') this.damagePlayer(pr.aSeat, end.damageToLoser);
+        // Writeback fold (§7.5, decision #38): only the LIVE side accrues. The ghost is a
+        // frozen snapshot of a dead player's board — it never accrues (its side is skipped).
+        this.applyWriteback(pr.aSeat, log, end?.survivorsA ?? [], 'a');
       } else {
         const aBoard = boardToCombat(this.sessions[pr.aSeat]);
         const bBoard = boardToCombat(this.sessions[pr.bSeat]);
@@ -222,6 +226,9 @@ export class Match {
           if (end.winner === 'a') this.damagePlayer(pr.bSeat, end.damageToLoser);
           else if (end.winner === 'b') this.damagePlayer(pr.aSeat, end.damageToLoser);
         }
+        // Writeback fold (§7.5, decision #38): BOTH live sides accrue their survivors' buffs.
+        this.applyWriteback(pr.aSeat, log, end?.survivorsA ?? [], 'a');
+        this.applyWriteback(pr.bSeat, log, end?.survivorsB ?? [], 'b');
       }
     }
 
@@ -233,6 +240,14 @@ export class Match {
 
   private damagePlayer(seat: number, amount: number): void {
     this.state.players[seat].hp -= amount;
+  }
+
+  /** §7.5 writeback: fold a side's combat-fired permanent buffs onto its surviving persistent
+   *  instances; the fold's narration (incl. token no-ops) goes to that player's session log. */
+  private applyWriteback(seat: number, log: CombatEvent[], survivors: string[], side: 'a' | 'b'): void {
+    const s = this.sessions[seat];
+    const res = foldPermanentBuffs(log, s.board, survivors, side);
+    s.log.push(...res.logLines);
   }
 
   /** §4.6 eliminations: HP≤0 → lowest open placement; more-negative HP places lower (worse). */

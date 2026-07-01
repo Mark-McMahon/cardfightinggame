@@ -88,7 +88,7 @@ finalized, each citing its `(Dn)`.
 ### Actions (WHAT)
 | id | fixture | asserted property | layer | covers |
 |---|---|---|---|---|
-| EV-ACT-BUFF | buffStats reducing atk below 0 / hp below 1 | atk floored at 0, hp floored at 1, rounded; `permanent` flag respected | P | §6.8 clamps |
+| EV-ACT-BUFF | buffStats reducing atk below 0 / hp below 1; a combat-fired buff with vs without `permanent:true` | atk floored at 0, hp floored at 1, rounded; default combat buffs emit NO permanence marker (this-combat-only); `permanent:true` emits `permanent:true` + post-clamp `dAtk`/`dHp` for the §7.5 writeback fold (decision #38 — rewrote the pre-#38 "never written back" pin) | P | §6.8 clamps, §7.5 |
 | EV-ACT-SET | (`setStats` is reserved — 0 consumers; no eval required per §6.9) | — | — | — |
 | EV-ACT-MUL | Ivorytusk fires 3 turns; also a combat-fired multiply | factor clamped to `multiplyFactorCap`(2) in **both** phases; shop-fired persists+compounds; combat-fired this-combat-only; `statSanityBound` never reached | P | §6.3, Tuskers |
 | EV-ACT-RST | Nullforge vs a ×N-doubled carry | target reduced to printed base stats (buffs stripped) | P | resetToBase |
@@ -223,7 +223,21 @@ without a threshold.)*
 
 | id | fixture | asserted property | layer |
 |---|---|---|---|
-| EV-GLD-01..08 | one fixed (boards, seed) each spanning: swarm mirror; poison-vs-shield; reborn chain; Pale-Lich amp crossing; Tusker doubler across turns; cleave with neighbors; Bonepiper replay; Pallbearer double | byte-identical `CombatEvent[]` (the reference log). **Regenerated from the chosen-intent engine; the log is a lock, never the spec.** | G |
+| EV-GLD-01..09 | one fixed (boards, seed) each spanning: swarm mirror; poison-vs-shield; reborn chain; Pale-Lich amp crossing; Tusker doubler across turns; cleave with neighbors; Bonepiper replay; Pallbearer double; a combat-fired **permanent** buff (writeback seam — pins the `permanent`/`dAtk`/`dHp` + `survivorsA/B` payload) | byte-identical `CombatEvent[]` (the reference log). **Regenerated from the chosen-intent engine; the log is a lock, never the spec.** | G |
+
+## L. Combat→board writeback fold (§7.5, decision #38) — COMBAT + MATCH (`shared/engine/combatWriteback.test.ts`)
+
+| id | fixture | asserted property | layer | covers |
+|---|---|---|---|---|
+| EV-WBK-01 | unit with a combat-fired `permanent:true` buff, two combats through `Match` | the delta folds onto the persistent `UnitInstance` (session log line emitted) and is the STARTING stat in the next combat's snapshot; compounds across combats | P | §7.5 fold |
+| EV-WBK-02 | same buff with `permanent:false` and with the flag omitted | nothing folds; no `permanent:true` event; the next combat starts from the printed/persistent stats (combat-only buffs still reset) | P | §7.5 default |
+| EV-WBK-03 | Tombspawn dies → Grave Wisps (`sum#N`) get a permanent avenge buff | defined, LOGGED no-op: `tokenNoOps` + a log line per token target; no crash; no persistent mutation; the surviving buffer accrues exactly its own deltas | P | #38 rule (d) |
+| EV-WBK-04 | (a) reborn unit dies, returns, gets a permanent buff; (b) a unit permanent-buffs itself then dies for good | (a) the reborn unit keeps its ORIGINAL persistent uid, appears in `survivorsA`, and accrues (reborn reset never folds); (b) the dead accrue nothing (logged) | P | #38 rules (a)(b)(e) |
+| EV-WBK-05 | 4-player `Match`; a player with a permanent-buffing wall dies and becomes the ghost; two ghost rounds | the ghost side fires the buff and SURVIVES, yet neither the stored ghost snapshot nor the dead player's session board ever accrues (every ghost fight starts from the same frozen snapshot) | P | #38 rule (c) |
+| EV-WBK-06 | Tideling's shop battlecry (`permanent:true`, direct instance mutation) then a combat | shop permanents apply exactly once — no combat `permanent:true` event exists, so the fold cannot double-apply | P | §7.5 no-double |
+| EV-WBK-07 | any log with permanent buffs | `foldPermanentBuffs` never rewrites the log it reads (deep-equal before/after) | P | §7.5 purity |
+| EV-WBK-08 | lint over `units.ts` | content audit pin: every combat-fired `buffStats` on a shipped card is explicitly non-permanent (or gated behind a shop-scoped condition, e.g. Mother Thorn's `onSummon`); `engines.wildkin.tokenBuffPermanent` is live and read by Gorehide/Thornbeast | P/meta | #38 audit |
+| EV-WBK-09 | a combat-only +5/+5 lands first, then a permanent -6/-5 (emitted `dAtk`/`dHp` = -6/-5, unclamped in combat) on a persistent 2/3 survivor | the fold replays deltas through the same §6.8 `applyBuff` clamps combat used: the persistent instance becomes 0/1, never -4/-2 (a raw `+=` fold is distinguishable and forbidden) | P | #38 rule (h), §6.8 clamps |
 
 ---
 
@@ -284,6 +298,12 @@ EV-MTC-01 · placement EV-MTC-03/04 · maxRounds EV-MTC-05 · pairing/ghost EV-M
 ## Invariants (4)
 1 server-authoritative → EV-INV-SRV · 2 determinism → EV-INV-DET/-SEED, EV-HND-03, EV-GLD-* ·
 3 privacy → EV-INV-PRIV · 4 config-driven → EV-INV-CFG, EV-BAL-C/E.
+
+## Combat→board writeback (§7.5, decision #38)
+fold semantics + survivors-only → EV-WBK-01/02 · reborn/uid key → EV-WBK-04 · token no-op →
+EV-WBK-03 · ghost exclusion → EV-WBK-05 · shop no-double → EV-WBK-06 · log immutability →
+EV-WBK-07 · content audit (no silent upgrades) → EV-WBK-08 · fold clamps (§6.8, permanent
+debuffs) → EV-WBK-09 · event payload byte-lock → EV-GLD-09.
 
 ---
 

@@ -88,6 +88,25 @@ const goldens: Record<string, () => { a: CombatBoard; b: CombatBoard; seed: stri
     b: board([cu('primordials_gustling', { atk: 5, hp: 100, keywords: ['cleave'] }), vanilla(0, 100), vanilla(0, 100), vanilla(0, 100)]),
     seed: 'gld-08',
   }),
+  // §7.5 writeback seam (decision #38): a combat-fired permanent buff — pins the
+  // permanent:true + dAtk/dHp event payload and the per-side survivor lists byte-stably.
+  'EV-GLD-09 combat-fired permanent buff (writeback seam)': () => ({
+    a: board([
+      cu('corsairs_ironclad', {
+        keywords: [],
+        effects: [
+          {
+            trigger: { type: 'startOfCombat' },
+            target: { selector: 'allAllies' },
+            actions: [{ type: 'buffStats', atk: 2, hp: 2, permanent: true }],
+          },
+        ],
+      }),
+      vanilla(3, 3),
+    ]),
+    b: board([vanilla(3, 4), vanilla(2, 5)]),
+    seed: 'gld-09',
+  }),
 };
 
 describe('EV-GLD — intra-impl determinism goldens (D4)', () => {

@@ -20,11 +20,24 @@ const C = engines.corsairs; // Round-6: Corsairs (tempo / reborn + shield)
 // card feeds (static/categorical — §16.6, decision #28).
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Writeback audit (decision #38, 2026-07-01): the §7.5 combat→board writeback is LIVE, so a
+// combat-fired `buffStats` with `permanent:true` now really persists onto survivors. Every
+// combat-fired buff below (startOfCombat / onAttack / onShieldBreak / deathrattle /
+// afterFriendlyDeaths / combat-side onSummon) therefore carries an EXPLICIT `permanent:false`
+// (this-combat, the pre-#38 behavior — no card is silently upgraded). Sole shop-gated
+// exemption (#38, encoded by the EV-WBK-08 lint): Mother Thorn's `onSummon` keeps
+// `permanent:true` — its `tokensSummonedThisTurnAtLeast` condition is shop-scoped (reads 0
+// in combat), so the effect can never fire in combat. Shop-fired permanents
+// (battlecry / onSell / afterFriendlyBattlecry rows) already mutate the persistent instance
+// directly and emit no combat events, so they cannot double-apply through the fold.
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Reefmourner's planted deathrattle (§16.3 #5) — board buff on the host's death.
 const PLANTED_DEATHRATTLE: Effect = {
   trigger: { type: 'deathrattle' },
   target: { selector: 'allAllies', excludeSelf: true },
-  actions: [{ type: 'buffStats', atk: R.plantedDeathrattleAtk, hp: R.plantedDeathrattleHp }],
+  actions: [{ type: 'buffStats', atk: R.plantedDeathrattleAtk, hp: R.plantedDeathrattleHp, permanent: false }],
 };
 
 export const UNITS: UnitCard[] = [
@@ -75,7 +88,8 @@ export const UNITS: UnitCard[] = [
       {
         trigger: { type: 'afterFriendlyDeaths', tokensOnly: true, threshold: 1, everyN: true },
         target: { selector: 'self' },
-        actions: [{ type: 'buffStats', atk: W.tokenDeathFloorAtk }],
+        // config-driven permanence (engines.wildkin.tokenBuffPermanent = false: "this combat").
+        actions: [{ type: 'buffStats', atk: W.tokenDeathFloorAtk, permanent: W.tokenBuffPermanent }],
       },
     ],
   },
@@ -95,7 +109,7 @@ export const UNITS: UnitCard[] = [
         trigger: { type: 'startOfCombat' },
         condition: { kind: 'countAllies', value: bp('wildkin_thornwarden').threshold },
         target: { selector: 'self' },
-        actions: [{ type: 'buffStats', atk: bp('wildkin_thornwarden').atk, hp: bp('wildkin_thornwarden').hp }],
+        actions: [{ type: 'buffStats', atk: bp('wildkin_thornwarden').atk, hp: bp('wildkin_thornwarden').hp, permanent: false }],
       },
     ],
   },
@@ -119,6 +133,8 @@ export const UNITS: UnitCard[] = [
         trigger: { type: 'onSummon' },
         condition: { kind: 'tokensSummonedThisTurnAtLeast', value: bp('wildkin_motherthorn').threshold },
         target: { selector: 'triggerSource' },
+        // permanent:true is the #38 audit's sole combat-trigger exemption: the shop-scoped
+        // condition above reads 0 in combat, so this can never fire there (EV-WBK-08 lint).
         actions: [{ type: 'buffStats', atk: bp('wildkin_motherthorn').tokenAtk, hp: bp('wildkin_motherthorn').tokenHp, permanent: true }],
       },
     ],
@@ -138,7 +154,7 @@ export const UNITS: UnitCard[] = [
       {
         trigger: { type: 'afterFriendlyDeaths', threshold: W.avengeDeathThreshold, everyN: true },
         target: { selector: 'allAllies' },
-        actions: [{ type: 'buffStats', atk: W.avengePayoffAtk, hp: W.avengePayoffHp }],
+        actions: [{ type: 'buffStats', atk: W.avengePayoffAtk, hp: W.avengePayoffHp, permanent: false }],
       },
     ],
   },
@@ -225,7 +241,8 @@ export const UNITS: UnitCard[] = [
       {
         trigger: { type: 'afterFriendlyDeaths', tokensOnly: true, threshold: 1, everyN: true },
         target: { selector: 'self' },
-        actions: [{ type: 'buffStats', atk: W.tokenDeathFloorAtk }],
+        // config-driven permanence (engines.wildkin.tokenBuffPermanent = false: "this combat").
+        actions: [{ type: 'buffStats', atk: W.tokenDeathFloorAtk, permanent: W.tokenBuffPermanent }],
       },
     ],
   },
@@ -256,7 +273,7 @@ export const UNITS: UnitCard[] = [
         trigger: { type: 'startOfCombat' },
         condition: { kind: 'countAllies', value: bp('wildkin_grovelord').threshold },
         target: { selector: 'allAllies' },
-        actions: [{ type: 'buffStats', atk: bp('wildkin_grovelord').atk, hp: bp('wildkin_grovelord').hp }],
+        actions: [{ type: 'buffStats', atk: bp('wildkin_grovelord').atk, hp: bp('wildkin_grovelord').hp, permanent: false }],
       },
     ],
   },
@@ -275,11 +292,11 @@ export const UNITS: UnitCard[] = [
     text: 'Reborn. Deathrattle: give a random friendly Revenant +1/+1.',
     effects: [
       {
-        // this-combat buff: combat-fired deathrattles don't persist across combats (writeback gap),
-        // so flagging permanent was a no-op lie — kept honest as a this-combat buff.
+        // this-combat buff BY DESIGN (explicit since #38 made combat permanence real): Cryptling's
+        // death payoff is re-earned each fight, not a free persistent trickle.
         trigger: { type: 'deathrattle' },
         target: { selector: 'randomAlly', filterTribe: 'revenants', excludeSelf: true },
-        actions: [{ type: 'buffStats', atk: 1, hp: 1 }],
+        actions: [{ type: 'buffStats', atk: 1, hp: 1, permanent: false }],
       },
     ],
   },
@@ -327,10 +344,10 @@ export const UNITS: UnitCard[] = [
     text: `Reborn. Deathrattle: give your highest-health Revenant +${V.deathPayoffHp} health.`,
     effects: [
       {
-        // this-combat buff (combat-fired deathrattle — does not persist; see Cryptling note above).
+        // this-combat buff by design (see Cryptling note above).
         trigger: { type: 'deathrattle' },
         target: { selector: 'highestStatAlly', stat: 'hp', filterTribe: 'revenants', excludeSelf: true },
-        actions: [{ type: 'buffStats', hp: V.deathPayoffHp }],
+        actions: [{ type: 'buffStats', hp: V.deathPayoffHp, permanent: false }],
       },
     ],
   },
@@ -366,7 +383,7 @@ export const UNITS: UnitCard[] = [
       {
         trigger: { type: 'deathrattle' },
         target: { selector: 'allAllies', filterTribe: 'revenants', excludeSelf: true },
-        actions: [{ type: 'buffStats', atk: 1, hp: 1 }],
+        actions: [{ type: 'buffStats', atk: 1, hp: 1, permanent: false }],
       },
     ],
   },
@@ -385,7 +402,7 @@ export const UNITS: UnitCard[] = [
       {
         trigger: { type: 'afterFriendlyDeaths', threshold: bp('revenants_mortarch').threshold, everyN: false },
         target: { selector: 'allAllies' },
-        actions: [{ type: 'buffStats', atk: bp('revenants_mortarch').atk, hp: bp('revenants_mortarch').hp }],
+        actions: [{ type: 'buffStats', atk: bp('revenants_mortarch').atk, hp: bp('revenants_mortarch').hp, permanent: false }],
       },
     ],
   },
@@ -403,7 +420,7 @@ export const UNITS: UnitCard[] = [
       {
         trigger: { type: 'deathrattle' },
         target: { selector: 'allAllies', excludeSelf: true },
-        actions: [{ type: 'buffStats', atk: 1, hp: 1 }],
+        actions: [{ type: 'buffStats', atk: 1, hp: 1, permanent: false }],
       },
     ],
   },
@@ -548,7 +565,7 @@ export const UNITS: UnitCard[] = [
       {
         trigger: { type: 'onShieldBreak' },
         target: { selector: 'allAllies' },
-        actions: [{ type: 'buffStats', atk: bp('reefkin_pearlguard').atk, hp: bp('reefkin_pearlguard').hp }],
+        actions: [{ type: 'buffStats', atk: bp('reefkin_pearlguard').atk, hp: bp('reefkin_pearlguard').hp, permanent: false }],
       },
     ],
   },
@@ -753,7 +770,7 @@ export const UNITS: UnitCard[] = [
         target: { selector: 'self' },
         actions: [
           { type: 'dealDamage', amount: I.selfDamageHpCost },
-          { type: 'buffStats', atk: I.selfDamageBuffAtk },
+          { type: 'buffStats', atk: I.selfDamageBuffAtk, permanent: false },
         ],
       },
     ],
@@ -773,7 +790,7 @@ export const UNITS: UnitCard[] = [
       {
         trigger: { type: 'deathrattle' },
         target: { selector: 'allAllies', excludeSelf: true },
-        actions: [{ type: 'buffStats', atk: 2 }],
+        actions: [{ type: 'buffStats', atk: 2, permanent: false }],
       },
     ],
   },
@@ -797,7 +814,7 @@ export const UNITS: UnitCard[] = [
       {
         trigger: { type: 'startOfCombat' },
         target: { selector: 'self' },
-        actions: [{ type: 'buffStats', atk: I.sacrificeBuffAtk, hp: I.sacrificeBuffHp }],
+        actions: [{ type: 'buffStats', atk: I.sacrificeBuffAtk, hp: I.sacrificeBuffHp, permanent: false }],
       },
     ],
   },
@@ -821,7 +838,7 @@ export const UNITS: UnitCard[] = [
       {
         trigger: { type: 'startOfCombat' },
         target: { selector: 'self' },
-        actions: [{ type: 'buffStats', atk: I.sacrificeBuffAtk, hp: I.sacrificeBuffHp }],
+        actions: [{ type: 'buffStats', atk: I.sacrificeBuffAtk, hp: I.sacrificeBuffHp, permanent: false }],
       },
     ],
   },
@@ -840,7 +857,7 @@ export const UNITS: UnitCard[] = [
       {
         trigger: { type: 'afterFriendlyDeaths', threshold: bp('infernals_bloodcaller').threshold, everyN: false },
         target: { selector: 'self' },
-        actions: [{ type: 'buffStats', atk: bp('infernals_bloodcaller').atk, hp: bp('infernals_bloodcaller').hp }],
+        actions: [{ type: 'buffStats', atk: bp('infernals_bloodcaller').atk, hp: bp('infernals_bloodcaller').hp, permanent: false }],
       },
     ],
   },
@@ -864,12 +881,12 @@ export const UNITS: UnitCard[] = [
       {
         trigger: { type: 'startOfCombat' },
         target: { selector: 'self' },
-        actions: [{ type: 'buffStats', atk: I.sacrificeBuffAtk, hp: I.sacrificeBuffHp }],
+        actions: [{ type: 'buffStats', atk: I.sacrificeBuffAtk, hp: I.sacrificeBuffHp, permanent: false }],
       },
       {
         trigger: { type: 'deathrattle' },
         target: { selector: 'allAllies', excludeSelf: true },
-        actions: [{ type: 'buffStats', atk: 2, hp: 2 }],
+        actions: [{ type: 'buffStats', atk: 2, hp: 2, permanent: false }],
       },
     ],
   },
@@ -889,7 +906,7 @@ export const UNITS: UnitCard[] = [
         trigger: { type: 'afterFriendlyDeaths', threshold: bp('infernals_abysslord').threshold, everyN: false },
         target: { selector: 'self' },
         actions: [
-          { type: 'buffStats', atk: bp('infernals_abysslord').atk, hp: bp('infernals_abysslord').hp },
+          { type: 'buffStats', atk: bp('infernals_abysslord').atk, hp: bp('infernals_abysslord').hp, permanent: false },
           { type: 'grantKeyword', keyword: 'cleave' },
         ],
       },
@@ -900,7 +917,7 @@ export const UNITS: UnitCard[] = [
     // ⭐ NEW audit capstone (Infernals T6 — fills the missing top-end + Endorsed Pattern A death scalar).
     // Each friendly death pumps your surviving Infernals; Infernals MANUFACTURE those deaths by spending
     // their own width (Hollow Priest/Pyrewalker/Dreadmaw), so every increment is a spent body. Combat-only
-    // (writeback gap) → no free permanence; re-earned each fight. The line ends FEW + TALL, so it folds to
+    // by design (explicit permanent:false since #38) → no free permanence; re-earned each fight. The line ends FEW + TALL, so it folds to
     // POISON (a touch kills the giant survivor, ignoring the buff) and a WIDE board out-actions 2-3 bodies.
     id: 'infernals_carrionsovereign',
     name: 'Carrion Sovereign',
@@ -915,7 +932,7 @@ export const UNITS: UnitCard[] = [
       {
         trigger: { type: 'afterFriendlyDeaths', threshold: bp('infernals_carrionsovereign').threshold, everyN: true },
         target: { selector: 'allAllies', filterTribe: 'infernals' },
-        actions: [{ type: 'buffStats', atk: bp('infernals_carrionsovereign').atk, hp: bp('infernals_carrionsovereign').hp }],
+        actions: [{ type: 'buffStats', atk: bp('infernals_carrionsovereign').atk, hp: bp('infernals_carrionsovereign').hp, permanent: false }],
       },
     ],
   },
@@ -1096,7 +1113,7 @@ export const UNITS: UnitCard[] = [
   {
     // ⭐ NEW audit capstone (Constructs T6 — fills the missing top-end + Endorsed Pattern A redeploy
     // scalar). Each friendly death pumps the surviving Constructs (the die-and-rebuild loop IS the fuel);
-    // combat-only → no free permanence. Deathrattle rebuilds a guardian. Folds to POISON (kills each
+    // combat-only by design (explicit permanent:false since #38) → no free permanence. Deathrattle rebuilds a guardian. Folds to POISON (kills each
     // rebuilt body regardless) + TALL (a big body punches through the small chaff before it rebuilds).
     id: 'constructs_aegisprime',
     name: 'Aegis Prime',
@@ -1111,7 +1128,7 @@ export const UNITS: UnitCard[] = [
       {
         trigger: { type: 'afterFriendlyDeaths', threshold: bp('constructs_aegisprime').threshold, everyN: true },
         target: { selector: 'allAllies', filterTribe: 'constructs' },
-        actions: [{ type: 'buffStats', atk: bp('constructs_aegisprime').atk, hp: bp('constructs_aegisprime').hp }],
+        actions: [{ type: 'buffStats', atk: bp('constructs_aegisprime').atk, hp: bp('constructs_aegisprime').hp, permanent: false }],
       },
       {
         trigger: { type: 'deathrattle' },
@@ -1253,7 +1270,7 @@ export const UNITS: UnitCard[] = [
       {
         trigger: { type: 'deathrattle' },
         target: { selector: 'allAllies', excludeSelf: true },
-        actions: [{ type: 'buffStats', atk: 2, hp: 2 }],
+        actions: [{ type: 'buffStats', atk: 2, hp: 2, permanent: false }],
       },
     ],
   },
@@ -1429,7 +1446,7 @@ export const UNITS: UnitCard[] = [
         trigger: { type: 'startOfCombat' },
         condition: { kind: 'countAllies', value: bp('primordials_tempest').threshold },
         target: { selector: 'allAllies' },
-        actions: [{ type: 'buffStats', atk: bp('primordials_tempest').atk }],
+        actions: [{ type: 'buffStats', atk: bp('primordials_tempest').atk, permanent: false }],
       },
     ],
   },
@@ -1763,7 +1780,7 @@ export const UNITS: UnitCard[] = [
         trigger: { type: 'startOfCombat' },
         condition: { kind: 'countAllies', value: bp('corsairs_reaver').threshold },
         target: { selector: 'allAllies' },
-        actions: [{ type: 'buffStats', atk: bp('corsairs_reaver').atk }],
+        actions: [{ type: 'buffStats', atk: bp('corsairs_reaver').atk, permanent: false }],
       },
     ],
   },
@@ -1783,7 +1800,7 @@ export const UNITS: UnitCard[] = [
         trigger: { type: 'startOfCombat' },
         condition: { kind: 'countAllies', value: bp('corsairs_marauder').threshold },
         target: { selector: 'allAllies' },
-        actions: [{ type: 'buffStats', atk: bp('corsairs_marauder').atk, hp: bp('corsairs_marauder').hp }],
+        actions: [{ type: 'buffStats', atk: bp('corsairs_marauder').atk, hp: bp('corsairs_marauder').hp, permanent: false }],
       },
     ],
   },

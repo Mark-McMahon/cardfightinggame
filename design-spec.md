@@ -381,8 +381,11 @@ interface ActionSpec {
 ```
 `multiplyStats` is the exponential lever (Tuskers): per-application `factor` is hard-capped
 by `engines.tuskers.multiplyFactorCap`; the exponential reach comes only from applying it
-across *turns* (shop-fired copies persist and compound; combat-fired copies are
-this-combat-only — the "writeback gap", §7.6). `plantDeathrattle` attaches a deathrattle
+across *turns* (shop-fired copies persist and compound; combat-fired copies are ALWAYS
+this-combat-only — the §7.5 writeback folds only flagged `buffStats` deltas, never
+multiplies). `permanent` on a combat-fired `buffStats` is **live** (decision #38): the buff
+writes back onto surviving persistent instances after combat (§7.5); on shop-fired actions
+it has always meant a direct persistent mutation. `plantDeathrattle` attaches a deathrattle
 `Effect` to a target (Reefmourner bridge).
 
 **ConditionSpec** (optional gate):
@@ -651,25 +654,79 @@ type CombatEvent =
   | { t:'attack'; side:'a'|'b'; attackerId; defenderId }
   | { t:'damage'; sourceId; targetId; amount; shieldBroken? }
   | { t:'keyword'; unitId; keyword; gained?; sourceId? }   // gained+sourceId ⇒ unit GAINED an ability
-  | { t:'stats'; unitId; atk; hp; sourceId?; permanent? }  // sourceId links a buff to its cause (replay)
+  | { t:'stats'; unitId; atk; hp; sourceId?; permanent?; dAtk?; dHp? } // sourceId links a buff to its cause
   | { t:'death'; unitId } | { t:'deathrattle'; unitId }
   | { t:'summon'; ownerId; unitIds:string[]; slot }
-  | { t:'combatEnd'; winner:'a'|'b'|'tie'; survivors:string[]; damageToLoser };
+  | { t:'combatEnd'; winner:'a'|'b'|'tie'; survivors:string[]; damageToLoser;
+      survivorsA?:string[]; survivorsB?:string[] };
 ```
-`stats.permanent` is **reserved** (see §7.6 writeback gap): combat-fired buffs are never
-written back to the persistent board, so all combat `stats` events currently carry
-`permanent:false` and nothing consumes the field. `stats.sourceId` and `keyword.gained`/
-`sourceId` are additive and consumed by the replay for causality links.
+`stats.sourceId` and `keyword.gained`/`sourceId` are additive and consumed by the replay
+for causality links.
 
-### 7.6 Resolved combat rules — divergence ledger (items 1–3, 6 resolved in code; item 5 open)
+**Combat→board writeback (decision #38, 2026-07-01 — closes the §7.6 #5 gap).**
+`stats.permanent` is **live**: a combat-fired `buffStats` whose ActionSpec has
+`permanent:true` emits `permanent:true` **plus the additive delta fields `dAtk`/`dHp`** —
+the post-clamp contribution that buff applied. The deltas exist because the event's
+`atk`/`hp` are post-buff **absolutes** (they mix in combat-only buffs and damage) and can
+never be folded back directly; all other stat changes (combat-only buffs, reborn resets)
+omit all three fields, keeping pre-#38 logs byte-identical. `combatEnd` gains additive
+`survivorsA`/`survivorsB` — living uids **per side** at combat end (`survivors` stays
+winner-only; a step-cap tie leaves both sides alive, so per-side lists are required).
+
+**Combat stays pure** — `resolveCombat` only *emits*. After it returns,
+`Match.resolveCombatPhase` runs the deterministic fold
+`foldPermanentBuffs(log, persistentBoard, survivorsForThatSide, side)`
+(`shared/engine/combatWriteback.ts`) for each **live** side. Each side folds only its own
+events (unit→side ownership is derived from the log itself: the `combatStart` snapshots
+seed both lines, summons inherit the summoner's side), so an enemy's permanent buff is
+never mistaken for a friendly token no-op. Fold rules:
+
+- **Survivors only.** A unit dead at combat end accrues nothing. A **Reborn resurrection
+  counts as surviving**: the reborn unit keeps its persistent uid (the same Fighter is
+  re-inserted) and is listed in `survivorsA/B`; buffs it received before dying fold
+  normally, and the in-combat reborn stat reset is not a buff and is never folded.
+- **The persistent `UnitInstance.uid` is the writeback key.** `CombatUnit.uid` carries the
+  seat-scoped uid (`'${seat}u${seq}'`) through combat unchanged — no extra id plumbing
+  exists or is needed (an audit finding; the original plan assumed an id had to be added).
+- **Combat-summoned tokens** (per-fight `sum#N` uids) have no persistent instance: a
+  permanent buff targeting one is a **defined, logged no-op** — a session-log line, never a
+  crash and never a new `CombatEvent`.
+- **Ghost boards never accrue** — the fold is simply not run for a dead player's snapshot
+  side; the stored ghost `CombatBoard` and the dead player's session board stay frozen.
+- Only `buffStats` participates: in combat, `permanent` on `setStats`/`multiplyStats`/
+  `resetToBase` is **ignored** (an absolute write can't be disentangled from combat
+  damage); those stay this-combat-only. `grantKeyword` permanence is likewise **still
+  reserved** — the `keyword` event carries no permanence seam and keyword grants remain
+  this-combat-only (stats only in this phase).
+- **Deltas fold under the §6.8 stat clamps.** The fold replays each `dAtk`/`dHp` through
+  the same `applyBuff` clamps combat's `buffStats` uses (atk floored at 0, hp at 1,
+  rounded). This matters for permanent **debuffs**: the emitted delta is post-clamp
+  against the unit's *in-combat* stats (which may be riding combat-only buffs), so a raw
+  `atk += dAtk; hp += dHp` fold could write `atk<0`/`hp≤0` onto the persistent board —
+  the clamps forbid that; a folded survivor always re-enters play with `atk≥0, hp≥1`.
+- The fold reads the log and **never rewrites it**, and shop-phase permanents (which
+  mutate the persistent instance directly and emit no combat events) can never
+  double-apply through it.
+
+Pinned by `EV-WBK-01..09` (`shared/engine/combatWriteback.test.ts`) + golden `EV-GLD-09`.
+Content note: **no shipped card uses combat-fired permanence yet** — the #38 audit gave
+every combat-fired `buffStats` an explicit `permanent:false` (EV-WBK-08 lints this), with
+one deliberate exemption: `wildkin_motherthorn` keeps `permanent:true` on its `onSummon`
+buff. `onSummon` does fire in combat, but the effect's `tokensSummonedThisTurnAtLeast`
+condition is **shop-scoped** (the counter reads 0 in combat), so it can never fire there —
+the EV-WBK-08 lint encodes exactly this shop-gated exemption rather than a blanket
+"explicit `permanent:false` everywhere". So closing the seam changed no live card
+behavior; later phases add intended persistent scalers explicitly.
+
+### 7.6 Resolved combat rules — divergence ledger (items 1–3, 5, 6 resolved in code)
 
 §§7.1–7.3 now state the **decided** rules (rulings D1–D4, D7 in `DECISIONS-NEEDED.md`). The
 numbered items below are kept as the **historical record** of the divergences found in the
-2026-07-01 audit. **Status (2026-07-01): items 1–3 and 6 are implemented in `combat.ts` and
-green** (pinned by `EV-DTH-08/09a/09b/10` in `shared/engine/death.test.ts` and `EV-INV-CFG`
-in `shared/engine/invariants.test.ts`); item 4 is a decided stance, not a code item; **item 5
-(the writeback gap) is the one open divergence.** The "*pre-fix code*" notes describe the
-audited code, not today's:
+2026-07-01 audit. **Status (2026-07-01): items 1–3, 5 and 6 are implemented and green**
+(items 1–3/6 in `combat.ts`, pinned by `EV-DTH-08/09a/09b/10` in
+`shared/engine/death.test.ts` and `EV-INV-CFG` in `shared/engine/invariants.test.ts`;
+item 5 by the §7.5 writeback fold, pinned by `EV-WBK-01..09`); item 4 is a decided stance,
+not a code item. The "*pre-fix code*" notes describe the audited code, not today's:
 
 1. **Deaths are simultaneous (D1).** Collect the whole batch, register it, then resolve
    deathrattles into the settled board. *Pre-fix code* removed-and-fired sequentially and
@@ -687,8 +744,16 @@ audited code, not today's:
    sequence — see §6.8, the determinism note). Byte-goldens are therefore **not** carried as
    tier-2 truth; `EV-GLD-*` are regenerated *from the corrected engine* only as an intra-impl
    regression guard, after D1–D3 fix the ordering.
-5. **Writeback gap** (tracked as §15 #3): combat-fired "permanent" buffs are not reconciled
-   onto the persistent board; `stats.permanent` is the reserved seam.
+5. **Writeback gap — RESOLVED IN CODE (decision #38, 2026-07-01; was tracked as §15 #3).**
+   *Pre-fix code:* combat-fired "permanent" buffs were not reconciled onto the persistent
+   board; `stats.permanent` was a reserved seam nothing read or wrote. *Now:* combat emits
+   `permanent:true` + `dAtk`/`dHp` for flagged `buffStats`, and `Match.resolveCombatPhase`
+   folds those deltas onto **surviving** persistent instances via
+   `shared/engine/combatWriteback.ts` (rules in §7.5: survivors only, reborn counts as
+   surviving, ghosts never accrue, token targets are logged no-ops, the persistent uid is
+   the key, deltas fold under the §6.8 clamps). Every existing combat-fired buff was pinned
+   `permanent:false` in the same change (sole shop-gated exemption: Mother Thorn — §7.5),
+   so no card silently gained persistence.
 6. **Config repair (D7):** wire `boardCap` and `divineShieldNegatesPoison` to config; honor
    `simultaneousDeaths`/`deathrattleOrder` (per D1/D2); **delete** the single-valued
    `attackOrderRule`/`firstAttackerTiebreak` knobs (behavior is fixed, they aren't real
@@ -700,7 +765,8 @@ One honest residue on item 6: `combat.ts` does not literally branch on
 `simultaneousDeaths`/`deathrattleOrder`; behavior is hardcoded to their single legal values,
 which `EV-INV-CFG` explicitly accepts ("implemented as behavior rather than necessarily
 referenced by name"). The `EV-GLD-*` determinism goldens were regenerated from the corrected
-engine, per D4. Item 5 (writeback) remains open and is tracked as §15 risk #3.
+engine, per D4. Item 5 (writeback) is closed by decision #38 — pinned by `EV-WBK-01..09`
+(`shared/engine/combatWriteback.test.ts`) and golden `EV-GLD-09`; §15 risk #3 is resolved.
 
 ---
 
@@ -774,8 +840,12 @@ transcribe — reference them); these are the *signatures*, which are the eval s
 - **Combat (pure):** `resolveCombat(boardA: CombatBoard, boardB: CombatBoard, seed: string):
   CombatEvent[]` (`shared/engine/combat.ts`). The `combatEnd` event carries
   `{ winner:'a'|'b'|'tie', survivors:string[], damageToLoser:number }` — the same data as
-  `CombatOutcome`, so outcome is observable from the event stream alone. Seed is a **string**;
+  `CombatOutcome`, so outcome is observable from the event stream alone — plus the additive
+  per-side `survivorsA`/`survivorsB` (§7.5, decision #38). Seed is a **string**;
   RNG is derived FNV-1a → mulberry32 (`shared/engine/rng.ts`, methods `next/int/bool/pick/shuffle`).
+- **Writeback fold (pure helper):** `foldPermanentBuffs(log, persistentBoard,
+  survivorsForThatSide, side): WritebackResult` (`shared/engine/combatWriteback.ts`, §7.5) —
+  run by `Match.resolveCombatPhase` per live side; reads the log, never rewrites it.
 - **Combat event schema:** the `CombatEvent` union in §7.5 (canonical in `shared/types`). This
   is the primary black-box observation surface for combat evals.
 - **Shop reducer:** the exported ops in `shared/engine/shop.ts` — `buyUnit, sellUnit, rollShop,
@@ -899,7 +969,10 @@ the shop-zone header, and only the zone *contents* dim (headers stay bright) so 
 reopen time land where the eye/pointer is — not only in a strip up top. Skip is thus honest about
 inputs not being live yet rather than presenting a buyable-looking shop that silently rejects buys.
 A permanent/temporary cue is
-**reserved** pending the writeback gap (§7.6) — currently all combat buffs read as this-combat.
+now **backed by live data** (`stats.permanent`, §7.5 writeback — decision #38): the replay
+may distinguish a persisting buff from a this-combat one. The current build does not yet
+render the cue (no shipped card emits combat-fired permanence); reinstate it alongside the
+first persistent scaler card.
 
 > A dev-only workbench (`client/src/scenes/ReplayLab.tsx`, gated behind the `#replay-lab` URL hash,
 > lazy-loaded so it is code-split out of the shipped bundle) renders `CombatReplay` against real
@@ -1073,8 +1146,12 @@ ships. Validate content/numbers (config + sim) before animating cards.
 2. **Determinism is entangled with RNG draw order.** Byte-identical replay is not
    reproducible from prose — it survives a regen only via the golden logs or an explicit
    RNG-draw contract (§6.8, reproducibility note).
-3. **Writeback gap (§7.6 #5).** "Permanent" combat buffs don't persist across combats;
-   close it or keep the seam explicit so content/UI don't over-promise.
+3. **Writeback gap (§7.6 #5) — RESOLVED (decision #38, 2026-07-01).** Combat-fired
+   `permanent:true` buffs now fold onto surviving persistent instances after combat (§7.5,
+   `shared/engine/combatWriteback.ts`; pinned by `EV-WBK-01..09` + `EV-GLD-09`). Residual
+   watch item: no shipped card uses the seam yet (all combat buffs are explicit
+   `permanent:false`) — when later phases add persistent scalers, they must pass the §11.3
+   sim gate like any scaling line.
 4. **Numbers need continuous tuning.** Gold curve, tier costs, pool counts, breakpoint
    thresholds are simulator-set starting points; gate content on §11.3 sim health.
 5. **Nine-tribe balance.** The six expansion tribes are less validated than the core three;

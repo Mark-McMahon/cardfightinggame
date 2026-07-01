@@ -61,7 +61,8 @@ export const breakpoints: BreakpointsConfig = {
     { card: 'infernals_bloodcaller', counter: 'deaths', threshold: 3, once: true, atk: 5, hp: 3 },
     { card: 'infernals_abysslord', counter: 'deaths', threshold: 4, once: true, atk: 8, hp: 6 },
     // Carrion Sovereign (audit: Infernals T6 capstone + Pattern-A death scalar). everyN at threshold 1
-    // → fires on EVERY friendly death; combat-only (writeback gap), so each +atk/+hp is paid by a spent
+    // → fires on EVERY friendly death; combat-only BY DESIGN (explicit permanent:false — the §7.5
+    // writeback is live, this card deliberately opts out), so each +atk/+hp is paid by a spent
     // body and resets each fight. Registered as a breakpoint so the anti-linear lint bounds it (like
     // Pack Mother). Organic ceiling = deaths manufacturable in one combat; folds to poison + width.
     { card: 'infernals_carrionsovereign', counter: 'deaths', threshold: 1, atk: 2, hp: 1 },

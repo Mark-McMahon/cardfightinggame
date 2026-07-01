@@ -91,7 +91,7 @@ export const engines: EnginesConfig = {
   wildkin: {
     tokensPerTurn: 2, // tuned up (macro §16.7b/d): SWARM was unreachable (Mother Thorn 14%) and a trap
     buffPerToken: 2, // tuned up (macro): token engine was under-rewarding
-    tokenBuffPermanent: false, // token-death floor fires IN combat ("this combat" per card text) — combat buffs don't persist (writeback gap), so flagging it permanent was a no-op lie
+    tokenBuffPermanent: false, // token-death floor is a THIS-COMBAT buff by design ("this combat" per card text). The knob is LIVE since decision #38 closed the writeback gap: Gorehide/Thornbeast read it into their ActionSpec.permanent, so flipping it to true would make the floor persist across combats via the §7.5 fold — a deliberate balance lever, no longer a no-op.
     endOfTurnTriggerMultiplier: 2,
     endOfTurnTriggerMultiplierCap: 2,
     avengeDeathThreshold: 2, // fires sooner — go-wide payoff

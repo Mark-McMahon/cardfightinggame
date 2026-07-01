@@ -43,6 +43,10 @@ export type { CustomHandler, CustomHandlerContext } from './handlers';
 // Combat (pure)
 export { resolveCombat, lossDamage } from './combat';
 
+// Combat → persistent-board writeback fold (§7.5, decision #38; run by Match after combat)
+export { foldPermanentBuffs } from './combatWriteback';
+export type { WritebackResult, WritebackApplication } from './combatWriteback';
+
 // Shop reducer ops + session
 export {
   createShopSession,
