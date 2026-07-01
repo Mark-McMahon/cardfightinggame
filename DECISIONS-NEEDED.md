@@ -12,11 +12,11 @@ current code (or even the current prose) is correct until a golden locks it.
 
 ---
 
-## STATUS — D1–D10 resolved (2026-07-01); **D11 newly raised (OPEN)**. Rulings written into `design-spec.md` + `EVALS.md`.
+## STATUS — D1–D11 all resolved (2026-07-01). Rulings written into `design-spec.md` + `EVALS.md`; D11 applied to `units.ts` + `types`.
 
 | # | Ruling | Spec home |
 |---|---|---|
-| **D11** | ⏳ **OPEN** — promote `destroy`/`sacrifice` to a named action (idiom cleanup). One sub-ruling left: does `destroy` bypass a divine shield? | §6.9, §6.3 |
+| **D11** | ✅ **RESOLVED** — `destroy`/`sacrifice` promoted to a named action; sub-ruling (a): `destroy` **bypasses** divine shield. Applied to `units.ts` + `types`. | §6.9, §6.3 |
 | **D1** | Deaths are simultaneous: collect + register the whole batch, then resolve deathrattles against the settled board. | §7.3 |
 | **D2** | Cross-side order = **attacker's side first**; side A first at start of combat; left→right within a side. | §7.3 |
 | **D3** | (i) a unit dead to its own `onAttack` does **not** swing; (ii) cleave recomputes neighbors after an `onShieldBreak` insert. | §7.2 |
@@ -146,7 +146,7 @@ repair. D8–D10 are **narrower** loop/edge rulings.
 
 ---
 
-## D11 — Promote `destroy`/`sacrifice` from the `dealDamage: 999` idiom to a named action  ⏳ OPEN
+## D11 — Promote `destroy`/`sacrifice` from the `dealDamage: 999` idiom to a named action  ✅ RESOLVED (2026-07-01)
 **Spec:** §6.9, §6.3. **Blocks:** EV-ACT-DESTROY, EV-VOCAB-01; the `units.ts` + `types` refactor.
 **Direction (user-set):** make it a **named `destroy` action**; the `dealDamage: 999` idiom is
 retired. This exists because the idiom hides load-bearing semantics an agent can't infer from
@@ -160,15 +160,15 @@ retired. This exists because the idiom hides load-bearing semantics an agent can
 - (d) **Target scope:** one `destroy` action usable on any selector; ally-target = "sacrifice".
   All 4 current uses target `lowestStatAlly`. *(Keep single action.)*
 
-**⏳ THE ONE OPEN SUB-RULING —**
-- (a) **Divine shield:** does `destroy` **bypass** a shield (true removal — the destroyed unit
-  dies even if shielded) or is it **blockable** (today's `dealDamage: 999` → a shielded ally
-  survives)? **Recommendation: BYPASS** (it's removal, not damage; a chosen sacrifice should go
-  through). ⚠ This **changes current behavior** — hence it's a decision, not a cleanup. If instead
-  you want shields to save a sacrifice, keep it blockable and document that explicitly.
+**✅ THE ONE SUB-RULING — RESOLVED (2026-07-01):**
+- (a) **Divine shield: BYPASS.** `destroy` is true removal, not damage — a shielded ally is
+  destroyed and its shield is left untouched (a chosen sacrifice goes through). This changes the
+  old `dealDamage: 999` behavior by design; that RED-vs-old result validates EV-ACT-DESTROY.
 
-**On completion:** replace the 4 `dealDamage: 999` rows with `{ type: 'destroy' }`; change the
-`sacrifice` type in `shared/types` to `destroy` (fold, don't add a 10th); finalize EV-ACT-DESTROY.
+**Applied (2026-07-01):** the 4 `dealDamage: 999` rows in `units.ts` are now `{ type: 'destroy' }`;
+`shared/types` folded `sacrifice`→`destroy` (no 10th action added); EV-ACT-DESTROY + EV-VOCAB-01
+finalized. Engine must implement `destroy` = remove target, `deaths++`, fire deathrattle, bypass
+shield, emit `death`/`deathrattle` (no `damage`).
 
 ### Ranking rationale (continued)
 D11 is a **vocabulary-completeness** item, not a live-balance one — the only behavior change is

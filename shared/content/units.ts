@@ -792,7 +792,7 @@ export const UNITS: UnitCard[] = [
       {
         trigger: { type: 'startOfCombat' },
         target: { selector: 'lowestStatAlly', stat: 'atk', excludeSelf: true },
-        actions: [{ type: 'dealDamage', amount: 999 }], // destroy (lethal); the self-buff below is unconditional
+        actions: [{ type: 'destroy' }], // D11: destroy lowest-Attack ally; the self-buff below is unconditional
       },
       {
         trigger: { type: 'startOfCombat' },
@@ -816,7 +816,7 @@ export const UNITS: UnitCard[] = [
       {
         trigger: { type: 'startOfCombat' },
         target: { selector: 'lowestStatAlly', stat: 'atk', excludeSelf: true },
-        actions: [{ type: 'dealDamage', amount: 999 }],
+        actions: [{ type: 'destroy' }],
       },
       {
         trigger: { type: 'startOfCombat' },
@@ -859,7 +859,7 @@ export const UNITS: UnitCard[] = [
       {
         trigger: { type: 'startOfCombat' },
         target: { selector: 'lowestStatAlly', stat: 'atk', excludeSelf: true },
-        actions: [{ type: 'dealDamage', amount: 999 }],
+        actions: [{ type: 'destroy' }],
       },
       {
         trigger: { type: 'startOfCombat' },
@@ -1653,7 +1653,7 @@ export const UNITS: UnitCard[] = [
       {
         trigger: { type: 'startOfCombat' },
         target: { selector: 'lowestStatAlly', stat: 'atk', excludeSelf: true },
-        actions: [{ type: 'dealDamage', amount: 999 }],
+        actions: [{ type: 'destroy' }],
       },
       {
         trigger: { type: 'startOfCombat' },

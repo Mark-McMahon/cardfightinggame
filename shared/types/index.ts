@@ -121,11 +121,12 @@ export type ActionType =
   | 'grantKeyword'
   | 'summon'
   | 'dealDamage'
+  | 'destroy' // D11: remove a target (NOT combat damage) — counts as a friendly death + fires its
+  // deathrattle; bypasses divine shield (D11(a) ruling). Promoted from the `dealDamage:999` idiom.
   | 'giveGem'
   | 'makeSpell'
   | 'gainGold'
   | 'discover'
-  | 'sacrifice'
   | 'plantDeathrattle' // attach a deathrattle Effect to a target (Round-6 bridge, §16.3 #5)
   | 'custom';
 

@@ -95,7 +95,7 @@ finalized, each citing its `(Dn)`.
 | EV-ACT-GK | grantKeyword | keyword added; `keyword` event carries `gained=true`+`sourceId` | P | grantKeyword |
 | EV-ACT-SUM | Tombspawn / Reclaimer deathrattle-summon; a start-of-combat / breakpoint summon | `summon` inserts the unit(s) at the owner's slot, shifting right; fires `onSummon` for living friendlies; over-`boardCap` summons dropped (full-board overflow → EV-DTH-06) | P | summon |
 | EV-ACT-DMG | dealDamage to a target/self | exact amount applied as combat damage (honors shield/poison/retaliation); can kill (Cinderling self-damage, Siren burst) | P | dealDamage |
-| EV-ACT-DESTROY | Hollow Priest destroys `lowestStatAlly`; variants: that ally shielded / has a deathrattle (Gravebrand) | **(D11)** target removed; **counts as a friendly death + fires its deathrattle**; **not** combat damage (no retaliation/poison/`damage` event); shield interaction per **D11(a)** | P | destroy (promoted idiom) |
+| EV-ACT-DESTROY | Hollow Priest destroys `lowestStatAlly`; variants: that ally shielded / has a deathrattle (Gravebrand) | **(D11)** target removed; **counts as a friendly death + fires its deathrattle**; **not** combat damage (no retaliation/poison/`damage` event); **bypasses divine shield — a shielded target is still destroyed, shield untouched (D11(a))** | P | destroy (promoted idiom) |
 | EV-ACT-GEM | Gemsnout end-of-turn in shop | `giveGem` raises `gems` and `gemsThisTurn` by amount | SHOP | giveGem |
 | EV-ACT-GOLD | (`gainGold` is reserved — 0 consumers; no eval required per §6.9) | — | — | — |
 | EV-ACT-PLANT | Reefmourner plants on ally; ally later dies | planted `Effect` stored on `instance.grantedEffects`, persists, fires as a deathrattle on host death | P/SHOP | plantDeathrattle |

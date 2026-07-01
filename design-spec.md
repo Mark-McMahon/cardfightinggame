@@ -564,8 +564,9 @@ it silently became reserved; a card needing something not listed means *stop and
 **`destroy` (the one promotion in current content — pins the load-bearing semantics the
 `dealDamage: 999` idiom hid; D11):** removes the target; **counts as a friendly death and fires
 its deathrattle** (the Infernals sacrifice→`deaths`-breakpoint engine and Gravebrand/Dreadmaw
-depend on this); is **not** combat damage (no retaliation, no poison flag). Divine-shield
-interaction is the one open sub-ruling — see D11(a).
+depend on this); is **not** combat damage (no retaliation, no poison flag). **Divine shield does
+NOT save the target — `destroy` bypasses it (D11(a), decided 2026-07-01):** it is removal, not
+damage, so a shielded ally is destroyed and its shield is untouched.
 
 ---
 

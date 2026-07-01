@@ -64,12 +64,13 @@ Every eval in `EVALS.md` green (`P` property + `G` intra-impl determinism golden
 `../cardfightinggame` engine by design** — `EV-DTH-08/09/10`, `EV-KW-CLV-DS`, `EV-INV-CFG` —
 must come out **GREEN** here: that green *is* the regeneration succeeding.
 
-## One open decision — D11(a)
-`destroy` is promoted from the `dealDamage:999` idiom (§6.9, EV-ACT-DESTROY). The lone open
-sub-ruling: does `destroy` **bypass a divine shield** (recommended) or stay blockable? Either
-rule it and edit the 4 rows in `units.ts` (`{type:'destroy'}`) + fold `sacrifice→destroy` in
-`types` before starting, **or** leave the idiom and accept that `EV-VOCAB-01`'s anti-idiom
-clause stays RED until you do. See `DECISIONS-NEEDED.md` D11.
+## D11 — RESOLVED & APPLIED (2026-07-01)
+`destroy` is promoted from the `dealDamage:999` idiom (§6.9, EV-ACT-DESTROY). **Ruling: `destroy`
+BYPASSES divine shield** (it is removal, not damage — a shielded target is destroyed, shield
+untouched). Already applied to the frozen seed: the 4 rows in `units.ts` are `{type:'destroy'}`
+and `types` folded `sacrifice→destroy`. The engine must implement `destroy` = remove target,
+`deaths++`, fire its deathrattle, bypass shield, emit `death`/`deathrattle` (no `damage`). No open
+human decisions remain. See `DECISIONS-NEEDED.md` D11.
 
 ## Run (after regenerating)
 ```bash
@@ -91,5 +92,5 @@ pnpm sim:micro   # pnpm sim:macro
 > the decided intent in §7.1–7.3 (D1–D3): simultaneous deaths, attacker-side-first cross-side
 > order, no-swing-on-self-kill, cleave-recompute-after-shield-break. Honor the four invariants
 > (§1). Generate `EV-GLD-*` determinism goldens from your corrected engine (D4 — do not
-> reproduce any prior byte log). D11 is the only open human decision — [state your D11(a)
-> ruling, or leave the `dealDamage:999` idiom and note EV-VOCAB-01 stays RED].
+> reproduce any prior byte log). D11 is resolved & applied: `destroy` is a named action that
+> bypasses divine shield (remove target, `deaths++`, fire deathrattle, no `damage` event).
