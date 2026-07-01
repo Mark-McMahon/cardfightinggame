@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": [
+    "shared/**/*.ts",
+    "server/**/*.ts",
+    "sim/**/*.ts",
+    "client/src/**/*.ts",
+    "client/src/**/*.tsx"
+  ],
+  "exclude": ["node_modules", "**/dist/**", "e2e/**"]
+}

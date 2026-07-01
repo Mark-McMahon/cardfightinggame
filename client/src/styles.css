@@ -1,0 +1,362 @@
+:root {
+  /* Warm Hearth — aged leather/wood + ember gold (replaces the v1 cold navy-charcoal).
+     The whole app reskins off these; card portraits (cardArt.ts) stay tribe-themed. */
+  --bg: #1a1410;       /* warm near-black */
+  --panel: #241c15;    /* aged wood */
+  --panel2: #2f261c;   /* raised leather */
+  --line: #4a3a28;     /* stitched border */
+  --text: #efe6d6;     /* parchment */
+  --dim: #9c8a72;      /* faded ink */
+  --accent: #e0a82e;   /* ember gold */
+  --good: #7f9a3f;     /* moss green */
+  --bad: #b4452f;      /* rust red */
+  --gold: #e8be46;     /* coin gold */
+  /* display face for headings — system serifs only, no web-font dependency */
+  --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  /* material edges — a lit top + shadowed inner reads as carved wood, not flat glass.
+     Hard-offset drop (no blur) is the retro/physical tell vs. modern soft shadows. */
+  --edge-hi: #ffffff14;            /* lit bevel highlight (top) */
+  --edge-lo: #00000066;            /* recessed inner shadow */
+  --bevel: inset 0 1px 0 var(--edge-hi), inset 0 -2px 0 var(--edge-lo);
+  --plaque: inset 0 1px 0 var(--edge-hi), inset 0 -1px 0 #00000055, 0 2px 0 #00000055;
+  /* card sizing — one knob scales the whole token (box + its type + the row gaps/min-heights
+     that reserve space for it). Base = 1.0 (112x140). Bumped because 13" boards had room to
+     spare and the cards read small. Dial up/down here; everything below derives from it. */
+  --card-scale: 1.2;
+  --card-w: calc(112px * var(--card-scale));
+  --card-h: calc(140px * var(--card-scale));
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  /* faint horizontal grain + a warm top vignette — gives the surface aged-paper/wood
+     material so it doesn't read as a flat modern fill. Fixed so it doesn't scroll. */
+  background:
+    repeating-linear-gradient(0deg, #0000000a 0 2px, transparent 2px 4px),
+    radial-gradient(125% 80% at 50% 0%, #2a2014 0%, var(--bg) 60%);
+  background-attachment: fixed;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-size: 14px;
+}
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel2);
+  border: 2px solid var(--line);
+  border-radius: 2px;
+  padding: 7px 12px;
+  cursor: pointer;
+  box-shadow: var(--bevel);
+  transition: background 0.12s, transform 0.05s, box-shadow 0.05s;
+}
+button:hover:not(:disabled) { background: #3a2f22; }
+/* press = the key sinks: drop the bevel for a recessed inner shadow */
+button:active:not(:disabled) { transform: translateY(1px); box-shadow: inset 0 2px 3px var(--edge-lo); }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+button.primary { background: var(--accent); color: #2a1c0c; border-color: var(--accent); font-weight: 600; }
+button.danger { background: #3a2226; border-color: var(--bad); }
+input {
+  font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 2px; padding: 8px 10px;
+}
+
+.app { max-width: 1100px; margin: 0 auto; padding: 16px; }
+.center { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 8vh; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.col { display: flex; flex-direction: column; gap: 8px; }
+.panel { background: var(--panel); border: 2px solid var(--line); border-radius: 2px; padding: 12px; box-shadow: var(--plaque); }
+.title { font-family: var(--serif); font-size: 28px; font-weight: 700; letter-spacing: 0.3px; }
+.dim { color: var(--dim); }
+.spacer { flex: 1; }
+.tag { font-size: 11px; padding: 1px 6px; border-radius: 2px; background: var(--panel2); border: 1px solid var(--line); }
+
+/* players bar */
+.players { display: flex; gap: 6px; flex-wrap: wrap; }
+.pchip { padding: 6px 8px; border-radius: 2px; background: var(--panel2); border: 1px solid var(--line); min-width: 96px; }
+.pchip.dead { opacity: 0.45; }
+.pchip.me { border-color: var(--accent); }
+.pchip .nm { font-weight: 600; font-size: 12px; display: flex; gap: 4px; align-items: center; }
+.pchip .hp { color: #ff8a8a; font-weight: 700; }
+.pchip.vs { outline: 2px dashed var(--accent); }
+
+/* in-match layout: standings sidebar (col 1) + gameplay body (col 2). The sidebar spans all
+   rows; every other child auto-flows down column 2, so the board keeps its full width. */
+.match-main {
+  display: grid;
+  grid-template-columns: 224px minmax(0, 1fr);
+  gap: 14px;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 16px;
+  align-items: start;
+}
+/* span every implicit body row — `1 / -1` would only span the explicit grid (one row here),
+   making row 1 as tall as the sidebar and leaving a gap under the header; `span 99` covers all. */
+.match-main > .standings { grid-column: 1; grid-row: 1 / span 99; position: sticky; top: 16px; align-self: start; }
+.match-main > :not(.standings) { grid-column: 2; min-width: 0; }
+
+/* sidebar header — round/timer/opponent folded out of the body into the player rail */
+.side-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.side-round { font-family: var(--serif); font-size: 18px; font-weight: 800; letter-spacing: 0.2px; }
+.side-timer { font-size: 15px; font-weight: 700; color: var(--dim); font-variant-numeric: tabular-nums; }
+.side-timer.low { color: #ff8a8a; }
+.side-vs { margin-top: 5px; font-size: 12px; color: var(--dim); }
+.side-vs strong { color: var(--accent); font-weight: 700; }
+.side-foot { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11px; color: var(--dim); text-align: center; letter-spacing: 0.5px; }
+
+/* standings sidebar — living ranked by HP, dead greyed at the bottom in finish order */
+.standings-title { margin: 14px 0 8px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; }
+.srow { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 2px; border: 1px solid transparent; }
+.srow + .srow { margin-top: 4px; }
+.srank { width: 16px; text-align: right; font-weight: 800; color: var(--dim); font-variant-numeric: tabular-nums; }
+.sname { flex: 1; min-width: 0; font-weight: 600; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stier { font-size: 10px; font-weight: 800; color: var(--dim); background: #2a2a2a; border: 1px solid var(--line); border-radius: 2px; padding: 1px 5px; font-variant-numeric: tabular-nums; }
+.shp { color: #ff8a8a; font-weight: 800; font-variant-numeric: tabular-nums; }
+.srow.me { background: #3a2c14; border-color: var(--accent); }
+.srow.me .srank { color: var(--accent); }
+.srow.vs { border-color: var(--accent); border-style: dashed; }
+.srow.dead { opacity: 0.4; }
+.srow.dead .shp { color: var(--dim); }
+.sdiv { height: 1px; background: var(--line); margin: 7px 4px; }
+
+/* narrow screens: stack the standings above the gameplay body */
+@media (max-width: 860px) {
+  .match-main { grid-template-columns: 1fr; }
+  .match-main > .standings { grid-column: 1; grid-row: auto; position: static; }
+  .match-main > :not(.standings) { grid-column: 1; }
+}
+
+/* unit shape (placeholder art) — iconographic card face (§16.6) */
+.unit {
+  width: var(--card-w); height: var(--card-h); border-radius: 2px; position: relative;
+  background: var(--panel2); border: 2px solid var(--line); padding: calc(7px * var(--card-scale));
+  display: flex; flex-direction: column; user-select: none;
+  /* carved frame + hard-offset drop: a physical token, not a floaty rounded rect */
+  box-shadow: var(--bevel), 0 2px 0 #00000055;
+}
+/* tribe-themed procedural portrait (§16.6 override) — the card's focal art. The svg is a
+   0..200 face framed with a slice crop; overflow:hidden keeps the crop inside the rounded box.
+   The .unit itself stays overflow:visible so the hover .card-tip can escape. */
+.unit .portrait {
+  position: relative; height: calc(52px * var(--card-scale));
+  margin: calc(-3px * var(--card-scale)) calc(-3px * var(--card-scale)) calc(4px * var(--card-scale));
+  border-radius: 2px; overflow: hidden;
+}
+.unit .portrait svg { width: 100%; height: 100%; display: block; }
+/* tier badge overlays the art top-right */
+.unit .tier {
+  position: absolute; top: 3px; right: 3px;
+  font-size: calc(9px * var(--card-scale)); font-weight: 800; line-height: 1; color: #fff;
+  background: #000a; border-radius: 2px; padding: 1px 4px;
+}
+/* margin-bottom:auto absorbs all free space below the name, pinning the kw row + stats to the
+   card bottom as a group — so the stats sit in the SAME place whether or not the card has
+   keyword emojis (emojis are added above the stats, they don't shift the stats up/down). */
+.unit .nm { font-size: calc(12px * var(--card-scale)); font-weight: 600; line-height: 1.15; min-height: calc(27px * var(--card-scale)); margin-bottom: auto; }
+/* keyword markers: icon-only chips overlaying the portrait's bottom-left (the ability sentence
+   in the hover spells each one out). Overlaying frees the vertical room the band-art now uses. */
+.unit .portrait .kw {
+  position: absolute; left: 3px; bottom: 3px; display: flex; gap: 3px;
+  background: #000b; border-radius: 2px; padding: 2px 4px; line-height: 1;
+}
+.unit .kwtag { font-size: calc(12px * var(--card-scale)); line-height: 1; filter: drop-shadow(0 1px 1px #000); cursor: default; }
+.unit .stats { display: flex; justify-content: space-between; margin-top: calc(5px * var(--card-scale)); font-weight: 800; font-size: calc(16px * var(--card-scale)); }
+.unit .atk { color: #ffd479; }
+.unit .hp { color: #ff8a8a; }
+/* a stat raised above its printed base shows green — buffs no longer masquerade as base (§16.6) */
+.unit .stats .buffed { color: #7ee081; }
+.unit.golden { border-color: var(--gold); box-shadow: 0 0 8px #e8be4655; }
+.unit.clickable { cursor: pointer; }
+.unit.clickable:hover { border-color: var(--accent); transform: translateY(-2px); }
+.unit.legal { border-color: var(--good); box-shadow: 0 0 10px var(--good); cursor: pointer; }
+.unit.dead { opacity: 0.25; filter: grayscale(1); }
+.unit.attacking { border-color: var(--accent); box-shadow: 0 0 12px var(--accent); }
+.unit.token .nm { font-style: italic; }
+
+.zone { border: 2px solid var(--line); border-radius: 2px; padding: 11px 12px; min-height: calc(150px * var(--card-scale)); background: #1f1710; box-shadow: inset 0 2px 6px #00000040; }
+.zone h4 { margin: 0 0 9px; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; }
+.units-row { display: flex; gap: calc(9px * var(--card-scale)); flex-wrap: wrap; min-height: var(--card-h); }
+/* the board is the focal surface — a heavier frame + warmer solid fill sets it apart from shop/bench */
+.zone.board-zone { border-color: #6b5226; background: #261b0e; min-height: calc(168px * var(--card-scale)); }
+.zone.board-zone h4 { color: var(--accent); opacity: 0.85; }
+
+.gold { color: var(--gold); font-weight: 800; }
+
+/* economy control bar — gold/tier readouts + the icon-led action buttons (§16.6 cleanup) */
+.econ-bar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+.coin {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 19px; font-weight: 800; color: var(--gold); font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, #2c2613, #221d0e); border: 1px solid #6b5a1e;
+  border-radius: 2px; padding: 6px 14px 6px 11px;
+}
+.coin .coin-ico { font-size: 16px; filter: drop-shadow(0 1px 1px #000); }
+.tier-pill {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--text);
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 2px; padding: 6px 13px;
+}
+.tier-pill .tp-n { color: var(--accent); font-weight: 800; }
+.gem-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 17px; font-weight: 800; color: #7fe0c0; font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, #123029, #0d221d); border: 1px solid #1e6b57;
+  border-radius: 2px; padding: 6px 13px 6px 10px;
+}
+.gem-pill .gem-ico { font-size: 15px; filter: drop-shadow(0 1px 1px #000); }
+/* shared shape for Tier Up / Roll / Freeze: icon + label, with a compact cost chip */
+.ctl-btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border-radius: 2px; font-weight: 600; }
+.ctl-btn .ctl-ico { font-size: 16px; line-height: 1; }
+.ctl-btn .ctl-cost {
+  font-size: 11px; font-weight: 800; color: var(--gold); font-variant-numeric: tabular-nums;
+  background: #0004; border-radius: 2px; padding: 1px 6px;
+}
+.ctl-btn:disabled .ctl-cost { color: var(--dim); }
+/* Freeze is a toggle — the active state fills blue so "is it frozen?" reads at a glance */
+.ctl-btn.freeze.active { background: #16334e; border-color: #6ab0ff; color: #cfe6ff; }
+.ctl-btn.freeze.active:hover:not(:disabled) { background: #1c4467; }
+.ctl-btn.ready { padding: 9px 22px; font-size: 15px; }
+.toast-wrap { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 6px; z-index: 50; }
+.toast { background: var(--panel2); border: 1px solid var(--accent); border-radius: 2px; padding: 8px 12px; max-width: 320px; }
+
+/* combat overlay — single battle line per side, causal beat-based replay (§16.6 rework) */
+.overlay { position: fixed; inset: 0; background: #120d09ee; z-index: 40; display: flex; flex-direction: column; align-items: center; padding: 24px; overflow: auto; }
+.combat-head { display: flex; align-items: center; gap: 12px; width: 100%; max-width: 1200px; }
+.combat-head h2 { margin: 0; font-family: var(--serif); letter-spacing: 0.3px; }
+.ctx-counter { font-size: 16px; font-weight: 800; padding: 2px 10px; border-radius: 2px; background: #2a1530; border: 1px solid #8a5cb0; transition: box-shadow 0.2s, border-color 0.2s; }
+/* the deaths counter crossing a payoff threshold = the "why" behind a swing → flares gold */
+.ctx-counter.fired { border-color: var(--gold); box-shadow: 0 0 14px #e8be46aa; background: #3a2a10; }
+
+/* the battlefield is the positioned frame the attacker↔defender / source→target links measure against */
+.battlefield { position: relative; display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 1200px; margin-top: 8px; }
+.link-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 6; overflow: visible; }
+.bl-side { display: flex; flex-direction: column; gap: 4px; }
+.bl-label { font-weight: 700; font-size: 13px; }
+.bl-line {
+  display: flex; gap: calc(10px * var(--card-scale)); flex-wrap: nowrap; align-items: center; min-height: calc(146px * var(--card-scale));
+  padding: 10px; border-radius: 2px; background: #1f1710; border: 2px solid var(--line); box-shadow: inset 0 2px 6px #00000040;
+  /* overflow must stay visible so the hover card-tip (reused from the shop) isn't clipped —
+     `overflow-x: auto` would force `overflow-y` to auto and cut off the tooltip. Wide boards
+     (summon-heavy combats) overflow the frame and scroll via the `.overlay` instead. */
+  overflow: visible;
+}
+.bl-slot { position: relative; flex: 0 0 auto; }
+/* hover-to-inspect during combat: lift the hovered card above its neighbours and restore
+   full brightness so the same shop tooltip reads clearly even mid-beat (§16.6). */
+.bl-slot:hover { z-index: 30; }
+.bl-slot:hover .unit { opacity: 1; filter: none; }
+.bl-empty { padding: 0 8px; }
+.bl-divider { display: flex; align-items: center; justify-content: center; height: 2px; background: linear-gradient(90deg, transparent, var(--line), transparent); position: relative; margin: 2px 0; }
+.vs-badge { position: absolute; font-size: 16px; font-weight: 800; color: var(--dim); background: var(--bg); padding: 0 10px; }
+
+/* focus system: in a paired beat, the two participants stay lit and everyone else recedes */
+.bl-slot .unit { transition: opacity 0.25s, filter 0.25s; }
+.is-dim .unit { opacity: 0.32; filter: grayscale(0.7) brightness(0.7); }
+.is-attacker .unit { border-color: var(--accent); box-shadow: 0 0 14px var(--accent); }
+.is-target .unit { border-color: #ff5a52; box-shadow: 0 0 16px #ff5a52; }
+.is-source .unit { border-color: var(--gold); box-shadow: 0 0 12px #e8be4688; }
+/* target reticle — the single enemy currently being struck is unmistakable */
+.target-reticle {
+  position: absolute; inset: -7px; border-radius: 3px; border: 2px dashed #ff5a52;
+  pointer-events: none; z-index: 6; animation: reticle-spin 2.2s linear infinite;
+}
+@keyframes reticle-spin { to { transform: rotate(360deg); } }
+
+/* a buffed unit wears a blue ring, held for the whole beat (combat buffs are all this-combat-only) */
+.bufftgt.unit { border-color: #6ab0ff !important; box-shadow: 0 0 0 2px #6ab0ff, 0 0 16px #6ab0ffaa !important; }
+/* the changed number visibly pops so you can follow *which* unit changed when several do */
+@keyframes statpop { 0% { transform: scale(1); } 35% { transform: scale(1.75); } 100% { transform: scale(1); } }
+.pop-atk .stats .atk { display: inline-block; animation: statpop 0.5s ease; }
+.pop-hp .stats .hp { display: inline-block; animation: statpop 0.5s ease; }
+
+/* floating combat numbers */
+.dmgfloat { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); font-weight: 900; font-size: 20px; color: #ff5252; text-shadow: 0 1px 3px #000; pointer-events: none; z-index: 7; }
+/* anchored buff chip — sits just above the unit and HOLDS for the whole beat (no fly-away),
+   so reading-time == beat-dwell rather than racing its own fade timer */
+.bufffloat {
+  position: absolute; top: -10px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; align-items: center;
+  font-weight: 900; font-size: 14px; white-space: nowrap; pointer-events: none; z-index: 8;
+  padding: 1px 6px; border-radius: 2px; text-shadow: 0 1px 3px #000;
+  background: #16334eee; border: 1px solid #6ab0ff;
+}
+.bufffloat .bf-atk { color: #ffd479; }
+.bufffloat .bf-hp { color: #7ee081; }
+.shieldflash { position: absolute; inset: -4px; border-radius: 2px; border: 3px solid #ffe07a; box-shadow: 0 0 16px #ffe07a; pointer-events: none; z-index: 4; }
+.hitflash { position: absolute; inset: 0; border-radius: 2px; background: radial-gradient(circle, #fff 0%, #ffd47a55 60%, transparent 75%); mix-blend-mode: screen; pointer-events: none; z-index: 3; }
+.ctx-num { display: inline-block; font-variant-numeric: tabular-nums; }
+
+/* keyword GAINED mid-combat (e.g. Spinefish → Poison): the recipient gets a green ring +
+   a floating "+Poison" chip, so it's unmistakable WHICH card got the ability. The card's
+   keyword icon (☠️) also appears for the rest of the replay (added to the unit's keywords). */
+.gaintgt.unit { border-color: #7ee08a !important; box-shadow: 0 0 0 2px #7ee08a, 0 0 16px #7ee08aaa !important; }
+/* anchored like the buff chip: sits just above the unit and HOLDS for the whole beat (no fly-away) */
+.gainfloat {
+  position: absolute; top: -10px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; align-items: center;
+  font-weight: 900; font-size: 13.5px; white-space: nowrap; pointer-events: none; z-index: 9;
+  padding: 1px 7px; border-radius: 2px; text-shadow: 0 1px 3px #000;
+  background: #0e3a1eee; border: 1px solid #7ee08a; color: #c8f7d2;
+}
+.gainfloat .gn-ico { font-size: 15px; }
+/* afflicted (poison hit, will die this combat): a faint sickly tint so the doom reads */
+.doomed.unit { border-color: #9be86b !important; box-shadow: 0 0 12px #6db04488 !important; }
+
+/* per-beat caption — names the cause (e.g. "Cryptling deathrattle"), briefly */
+.beat-caption {
+  margin-top: 10px; font-size: 14px; font-weight: 700; padding: 4px 14px; border-radius: 2px;
+  background: var(--panel2); border: 1px solid var(--line); display: inline-flex; align-items: center; gap: 6px;
+}
+.beat-caption.breakpoint { border-color: var(--gold); background: #3a2a10; color: var(--gold); }
+.beat-caption .cap-spark { font-size: 16px; }
+
+.result-banner { font-family: var(--serif); font-weight: 800; margin: 12px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.result-banner .rb-word { font-size: 30px; line-height: 1; }
+.result-banner .rb-dmg { font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; font-size: 17px; font-weight: 800; padding: 2px 12px; border-radius: 999px; }
+.result-banner .rb-dmg.you { color: var(--bad); background: #3a1414; border: 1px solid var(--bad); }
+.result-banner .rb-dmg.foe { color: var(--good); background: #14300f; border: 1px solid var(--good); }
+.combat-controls { width: 100%; max-width: 1200px; margin-top: 14px; }
+.combat-controls .scrub { flex: 1; min-width: 120px; accent-color: var(--accent); cursor: pointer; }
+.win { color: var(--good); } .loss { color: var(--bad); } .tie { color: var(--dim); }
+.discover-modal { position: fixed; inset: 0; background: #120d09cc; z-index: 45; display: flex; align-items: center; justify-content: center; }
+.discover-card { background: var(--panel); border: 1px solid var(--accent); border-radius: 2px; padding: 20px; }
+.hpbar { height: 5px; background: #0006; border-radius: 3px; overflow: hidden; margin-top: 3px; }
+.hpbar > div { height: 100%; background: var(--good); }
+.pending { background: #2a2410; border: 1px solid var(--accent); border-radius: 2px; padding: 8px 12px; }
+
+/* shop drag-and-drop (§16.6, decision #28) */
+.dragwrap { cursor: grab; transition: opacity 0.12s; position: relative; }
+.dragwrap:active { cursor: grabbing; }
+/* lift the hovered card so its tooltip paints above neighbouring cards */
+.bslot { position: relative; }
+.dragwrap:hover, .bslot:hover { z-index: 10; }
+/* discover-modal cards have no drag wrapper; lift the unit itself so its
+   transform-induced stacking context (and tooltip) paints above siblings */
+.discover-card .unit:hover { z-index: 10; }
+.dragwrap.dragging, .bslot.dragging { opacity: 0.35; }
+.board-row.drop-over { background: #2c2011; }
+.drop-marker {
+  flex: 0 0 4px; align-self: stretch; min-height: var(--card-h); border-radius: 3px;
+  background: var(--accent); box-shadow: 0 0 10px var(--accent);
+}
+.bslot { gap: 6px; }
+/* the shop doubles as the sell target — drag a board/bench unit up here to sell it (+1g).
+   Replaces the old dedicated .sell-zone so the board gets the full row width. */
+.zone.shop-zone { transition: background 0.12s, border-color 0.12s, box-shadow 0.12s; }
+.zone.shop-zone.sell-armed { border-color: var(--bad); border-style: dashed; }
+.zone.shop-zone.sell-armed h4 { color: #ff9b9b; }
+.zone.shop-zone.sell-over { background: #3a2226; border-color: var(--bad); box-shadow: 0 0 16px var(--bad); }
+.zone.shop-zone.sell-over h4 { color: var(--text); }
+
+/* hover full-text tooltip — the card art is icon-only, so text lives here (§16.6) */
+.card-tip {
+  position: absolute; left: calc(100% + 10px); top: -2px;
+  width: 220px; background: var(--panel); border: 1px solid var(--accent); border-radius: 2px;
+  padding: 10px; z-index: 60; text-align: left; pointer-events: none; font-size: 12px;
+  opacity: 0; visibility: hidden; transition: opacity 0.12s; box-shadow: 3px 3px 0 #000a;
+}
+.unit:hover .card-tip { opacity: 1; visibility: visible; }
+.card-tip .tip-name { font-weight: 800; font-size: 13px; }
+.card-tip .tip-sub { color: var(--dim); margin-bottom: 4px; }
+.card-tip .tip-sub .buffed { color: #7ee081; font-weight: 700; }
+.card-tip .tip-sub .tip-base { color: var(--dim); font-weight: 400; }
+.card-tip .tip-text { margin-top: 4px; border-top: 1px solid var(--line); padding-top: 4px; line-height: 1.3; }
