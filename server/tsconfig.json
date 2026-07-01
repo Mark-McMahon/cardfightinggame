@@ -2,7 +2,11 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
-    "types": ["node"]
+    "types": ["node"],
+    // @colyseus/schema requires assignment (not "define") semantics for class fields: with
+    // useDefineForClassFields:true (the ES2022 default) the field initializers overwrite the
+    // schema's tracked accessors, so field VALUES never encode (client sees the shape, no data).
+    "useDefineForClassFields": false
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules", "dist"]
