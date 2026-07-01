@@ -57,6 +57,15 @@ importers:
 
   shared: {}
 
+  sim:
+    dependencies:
+      '@cardgame/server':
+        specifier: workspace:*
+        version: link:../server
+      '@cardgame/shared':
+        specifier: workspace:*
+        version: link:../shared
+
 packages:
 
   '@colyseus/auth@0.15.12':

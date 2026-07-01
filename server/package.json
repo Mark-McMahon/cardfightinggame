@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "main": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./bots": "./bots/BotAgent.ts"
+  },
   "scripts": {
     "dev": "tsx watch index.ts",
     "start": "tsx index.ts",
