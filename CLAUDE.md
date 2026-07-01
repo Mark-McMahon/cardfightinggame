@@ -11,7 +11,7 @@ Tuskers/Primordials/Sirens/Corsairs), and the client was rebuilt for game-feel (
 cards, causal-beat combat replay, drag-and-drop shop).
 
 - **`design-spec.md`** — the self-contained, developer-ready build document, now a **single current-state spec** (the old v1/§16 split is collapsed). **Read this first**, starting with the "reproducibility contract" preamble: canonical data lives in `shared/content/*` + `shared/config/*`; engine semantics are pinned by §§6–8 + the `shared/engine/*.test.ts` goldens. **§7.6 records known combat-timing divergences** (a real open correctness item — intent vs current code).
-- **`requirements.md`** — the decision ledger: 29 locked decisions across 6 rounds, with rationale. Consult when a design choice is ambiguous; it records *why* each was made.
+- **`requirements.md`** — the decision ledger: 36 locked decisions across 8 rounds, with rationale. Consult when a design choice is ambiguous; it records *why* each was made.
 - **`season10_interaction_reference.xlsx`** — the mechanics source of truth (9 tribes / 26 engines / 7 cross-tribe systems). **Functional reference only** (see clean-room rule below). The `.xlsx` is binary; use a tool that can read sheets, not `cat`.
 
 **Balance gate (design-spec §11.3, §14), binding on new content:** the three multipliers
@@ -24,6 +24,40 @@ Validate content/numbers (config + sim) before animating cards.
 This overrides everything else. Build **only from functional mechanics** in the reference file. **Never ship** any card name, ability text, flavor, hero name, art, or branding from any existing game — and never ship the nine reference tribe names (Beasts, Murlocs, Demons, Quilboar, Elementals, Nagas, Undead, Mechs, Pirates). All content is original by construction. The reference names appear only as left-column cross-references in the docs and must never leave this repo. When in doubt, pick the more clearly-original option and note it.
 
 Original tribe names (theme "mythic menagerie"): Wildkin, Reefkin, Infernals, Tuskers, Primordials, Sirens, Revenants, Constructs, Corsairs. **The vertical slice uses only Wildkin, Revenants, Reefkin.**
+
+## Binding constraint: regeneration currency (keep the spec regenerable)
+
+This project follows **Chad Fowler's "regenerative software"** premise: the durable, load-bearing
+artifact is the **specification**, not the implementation. The code is a *generated output* of
+`design-spec.md` (the build document) + `requirements.md` (the decision ledger) + the canonical
+data in `shared/config/*` and `shared/content/*` + the pinning goldens in `shared/engine/*.test.ts`
+(and `client`/`sim` evals). You must be able to **delete `shared/engine/`, `server/`, and `client/`
+at any time and regenerate them from those documents alone**, and have the same evals pass. That is
+the "reproducibility contract" in the `design-spec.md` preamble, and it is only true if the docs
+never lag the code.
+
+**Therefore every change that alters behavior, architecture, or a decision updates the source of
+truth in the SAME change — never in a follow-up, never "later."** Concretely, before a change is
+done:
+
+1. **Behavior or architecture changed → update `design-spec.md`** in the relevant §. Code and spec
+   are edited together; a PR/commit that changes one without the other is incomplete. (E.g. moving
+   the replay pacing to `shared/engine/combatReplay.ts`, or sizing the combat window to the fight,
+   updates §10 in the same pass.)
+2. **A locked decision changed or a new one was made → add/update a `requirements.md` ledger entry**
+   with its rationale and an absolute date. Don't silently contradict a recorded decision.
+3. **Engine semantics changed or added → update or add the pinning golden/eval** so the regen is
+   judged *behaviorally* (property/invariant tests), not against legacy code. A new `custom` handler
+   still needs its determinism test.
+4. **A new tunable number → `shared/config/*`**, never hardcoded in logic (invariant #4). Pure
+   presentation/pacing constants (e.g. replay dwell) may live beside their logic but must still be
+   single-sourced, not duplicated across workspaces.
+
+**Litmus test before calling any change complete:** *"If someone regenerated the code from
+`design-spec.md` + `requirements.md` + config + content + the goldens right now, would they rebuild
+what I just wrote — and would the evals still pass?"* If not, the docs/goldens are stale: fix them
+until the answer is yes. If you find code that contradicts the spec, either correct the code or
+record it as an explicit known divergence (the §7.6 pattern) — **never leave a silent gap.**
 
 ## Planned architecture (the parts that span multiple files)
 

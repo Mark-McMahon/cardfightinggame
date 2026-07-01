@@ -1,7 +1,9 @@
 // Shared presentational components, built ON the carried-forward art (cardArt.ts / icons.ts) and
 // the carried-forward class names (styles.css). No game logic — pure rendering of props.
 
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode, CSSProperties, DragEvent, MouseEvent } from 'react';
+import { animate } from 'framer-motion';
 import type { TribeId, Keyword, ClientUnit, ShopOffer, PublicState, PublicPlayer } from '@cardgame/shared';
 import { TRIBES, getCard, triples } from '@cardgame/shared';
 import { CARD_VIEWBOX, cardFace, portraitBg } from './cardArt';
@@ -52,6 +54,37 @@ export function StatBadge({ kind, icon, iconClass, children, title }: { kind: st
   );
 }
 
+/**
+ * A count that TWEENS to its target instead of snapping — the number visibly ticks (e.g. 5→6) so a
+ * buff (or a hit) reads as a discrete, followable change. Presentation-only; the value it lands on is
+ * always the authoritative prop. `delayMs` lets a strike defer its hp drain to the contact instant.
+ */
+function TickNum({ value, delayMs = 0, durationMs = 360 }: { value: number; delayMs?: number; durationMs?: number }): ReactNode {
+  const [display, setDisplay] = useState(value);
+  const prev = useRef(value);
+  useEffect(() => {
+    if (prev.current === value) return;
+    const from = prev.current;
+    prev.current = value;
+    const controls = animate(from, value, {
+      duration: durationMs / 1000,
+      delay: delayMs / 1000,
+      ease: 'easeOut',
+      onUpdate: (v) => setDisplay(Math.round(v)),
+    });
+    return () => controls.stop();
+  }, [value, delayMs, durationMs]);
+  return <>{display}</>;
+}
+
+/** Combat-only card extras: a tweened health bar + ticking stat numbers, timed to the current beat. */
+export interface CombatCardProps {
+  hpMax: number;
+  changeDelayMs: number; // when this beat's stat/hp change should visually begin
+  hpDrainMs: number; // health-bar drain duration
+  tickMs: number; // stat number tick duration
+}
+
 interface CardProps {
   model: CardModel;
   className?: string;
@@ -61,11 +94,12 @@ interface CardProps {
   draggable?: boolean;
   onDragStart?: (e: DragEvent) => void;
   onDragEnd?: (e: DragEvent) => void;
+  combat?: CombatCardProps; // when set, render the health bar + ticking stats
   children?: ReactNode; // combat overlays (dmg floats, reticle, etc.) mount inside the .unit
 }
 
 /** The card token — procedural portrait + tier + keyword chips + Atk/HP + hover tooltip. */
-export function Card({ model, className, style, title, onClick, draggable, onDragStart, onDragEnd, children }: CardProps): ReactNode {
+export function Card({ model, className, style, title, onClick, draggable, onDragStart, onDragEnd, combat, children }: CardProps): ReactNode {
   const { cardId, name, tribe, tier, atk, hp, keywords, golden, isToken, text } = model;
   const base = getCard(cardId);
   const mult = golden ? triples.goldenStatMultiplier : 1;
@@ -73,7 +107,14 @@ export function Card({ model, className, style, title, onClick, draggable, onDra
   const baseHp = base ? base.hp * mult : hp;
   const atkBuffed = atk > baseAtk;
   const hpBuffed = hp > baseHp;
+  // Split keywords into innate (printed on the card) vs granted this game (via a battlecry/aura),
+  // so the tooltip can name them in words and call the added ones out separately. No catalog entry
+  // (a token) ⇒ treat every keyword as innate rather than mislabel them all as "added".
+  const baseKeywords = base?.keywords ?? keywords;
+  const innateKeywords = keywords.filter((k) => baseKeywords.includes(k));
+  const addedKeywords = keywords.filter((k) => !baseKeywords.includes(k));
   const cls = ['unit', golden ? 'golden' : '', isToken ? 'token' : '', className ?? ''].filter(Boolean).join(' ');
+  const hpFill = combat ? Math.max(0, Math.min(1, hp / Math.max(1, combat.hpMax))) : 0;
   return (
     <div className={cls} style={style} title={title} onClick={onClick} draggable={draggable} onDragStart={onDragStart} onDragEnd={onDragEnd}>
       <div className="portrait" style={{ background: portraitBg(tribe) }}>
@@ -88,9 +129,14 @@ export function Card({ model, className, style, title, onClick, draggable, onDra
         )}
       </div>
       <div className="nm">{name}</div>
+      {combat && (
+        <div className="hpbar" aria-hidden>
+          <div style={{ width: `${hpFill * 100}%`, transition: `width ${combat.hpDrainMs}ms ease ${combat.changeDelayMs}ms` }} />
+        </div>
+      )}
       <div className="stats">
-        <span className={'atk' + (atkBuffed ? ' buffed' : '')}>{atk}</span>
-        <span className={'hp' + (hpBuffed ? ' buffed' : '')}>{hp}</span>
+        <span className={'atk' + (atkBuffed ? ' buffed' : '')}>{combat ? <TickNum value={atk} delayMs={combat.changeDelayMs} durationMs={combat.tickMs} /> : atk}</span>
+        <span className={'hp' + (hpBuffed ? ' buffed' : '')}>{combat ? <TickNum value={hp} delayMs={combat.changeDelayMs} durationMs={combat.tickMs} /> : hp}</span>
       </div>
       <div className="card-tip">
         <div className="tip-name">{name}</div>
@@ -104,7 +150,26 @@ export function Card({ model, className, style, title, onClick, draggable, onDra
             </span>
           )}
         </div>
+        {innateKeywords.length > 0 && (
+          <div className="tip-kw">
+            {innateKeywords.map((k) => (
+              <span key={k} className="tip-kwchip">
+                {KW_ICON[k]} {KW_LABEL[k]}
+              </span>
+            ))}
+          </div>
+        )}
         {text && <div className="tip-text">{text}</div>}
+        {addedKeywords.length > 0 && (
+          <div className="tip-added">
+            <span className="tip-added-hd">Added this game</span>
+            {addedKeywords.map((k) => (
+              <span key={k} className="tip-kwchip added">
+                {KW_ICON[k]} {KW_LABEL[k]}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       {children}
     </div>

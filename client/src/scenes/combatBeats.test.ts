@@ -125,3 +125,94 @@ describe('combatBeats — causal segmentation', () => {
     expect(beats([])).toEqual([]);
   });
 });
+
+// A snapshot that carries real cardIds, so the content-aware "does this unit own a deathrattle?"
+// check can run (the resolver emits a `deathrattle` marker for EVERY death; only REAL ones become
+// their own beat — see combatReplay.ts).
+const drSnap = (units: Array<{ uid: string; name: string; cardId: string }>): BoardSnapshot => ({
+  playerTier: 1,
+  units: units.map((u) => ({ uid: u.uid, cardId: u.cardId, name: u.name, tribe: 'revenants', tier: 1, atk: 1, hp: 1, keywords: [], golden: false })),
+});
+
+describe('combatBeats — deathrattle choreography', () => {
+  it('gives a REAL deathrattle its own beat after the death, with its payoff attached', () => {
+    // Cryptling (real deathrattle: buff a friendly) dies; its buff rides on the deathrattle beat.
+    const log: CombatEvent[] = [
+      {
+        t: 'combatStart',
+        seed: 's',
+        a: drSnap([{ uid: 'a1', name: 'Cryptling', cardId: 'revenants_cryptling' }, { uid: 'a2', name: 'Kin', cardId: 'revenants_cryptling' }]),
+        b: drSnap([{ uid: 'b1', name: 'Grunt', cardId: 'wildkin_thornbeast' }]),
+      },
+      { t: 'attack', side: 'b', attackerId: 'b1', defenderId: 'a1' },
+      { t: 'damage', sourceId: 'b1', targetId: 'a1', amount: 2 },
+      { t: 'death', unitId: 'a1' },
+      { t: 'deathrattle', unitId: 'a1' },
+      { t: 'stats', unitId: 'a2', atk: 2, hp: 2, sourceId: 'a1' }, // caused by a1 → rides the deathrattle beat
+      { t: 'combatEnd', winner: 'a', survivors: ['a2'], damageToLoser: 1 },
+    ];
+    const bs = beats(log);
+    expect(kinds(bs)).toEqual(['start', 'strike', 'deaths', 'deathrattle', 'end']);
+
+    const deaths = bs[2];
+    expect(deaths.events.map((e) => e.t)).toEqual(['death']); // deaths beat holds ONLY the death
+    expect(deaths.caption).toBe('Cryptling falls');
+
+    const dr = bs[3];
+    expect(dr.kind).toBe('deathrattle');
+    expect(dr.events.map((e) => e.t)).toEqual(['deathrattle', 'stats']); // marker + its payoff
+    expect(dr.caption).toBe("Cryptling's deathrattle");
+    expect(dr.sourceIds).toEqual(['a1']);
+  });
+
+  it('absorbs the marker deathrattle for a unit with NO deathrattle (never mislabels it)', () => {
+    // Thornbeast has no deathrattle; the resolver still emits a marker on its death. It must not
+    // create a deathrattle beat, and the deaths caption must read "falls", not "'s deathrattle".
+    const log: CombatEvent[] = [
+      {
+        t: 'combatStart',
+        seed: 's',
+        a: drSnap([{ uid: 'a1', name: 'Cryptling', cardId: 'revenants_cryptling' }]),
+        b: drSnap([{ uid: 'b1', name: 'Grunt', cardId: 'wildkin_thornbeast' }]),
+      },
+      { t: 'attack', side: 'a', attackerId: 'a1', defenderId: 'b1' },
+      { t: 'damage', sourceId: 'a1', targetId: 'b1', amount: 5 },
+      { t: 'death', unitId: 'b1' },
+      { t: 'deathrattle', unitId: 'b1' }, // marker for a unit with no deathrattle
+      { t: 'combatEnd', winner: 'a', survivors: ['a1'], damageToLoser: 1 },
+    ];
+    const bs = beats(log);
+    expect(kinds(bs)).toEqual(['start', 'strike', 'deaths', 'end']);
+    const deaths = bs[2];
+    expect(deaths.events.map((e) => e.t)).toEqual(['death', 'deathrattle']); // marker absorbed, kept for round-trip
+    expect(deaths.caption).toBe('Grunt falls');
+    expect(deaths.caption).not.toContain('deathrattle');
+    // round-trip still holds with the absorbed marker
+    expect(bs.flatMap((b) => b.events)).toEqual(log);
+  });
+
+  it('separates a deathrattle payoff from an avenge/reborn buff (different source) into its own beat', () => {
+    // a1 (Cryptling) dies → its deathrattle buffs a2 (source a1); THEN a living avenger a3 buffs
+    // itself (source a3). The avenge buff must break off into an aftermath beat, not ride the DR.
+    const log: CombatEvent[] = [
+      {
+        t: 'combatStart',
+        seed: 's',
+        a: drSnap([
+          { uid: 'a1', name: 'Cryptling', cardId: 'revenants_cryptling' },
+          { uid: 'a2', name: 'Kin', cardId: 'revenants_cryptling' },
+          { uid: 'a3', name: 'Avenger', cardId: 'revenants_boncolossus' },
+        ]),
+        b: drSnap([{ uid: 'b1', name: 'Grunt', cardId: 'wildkin_thornbeast' }]),
+      },
+      { t: 'attack', side: 'b', attackerId: 'b1', defenderId: 'a1' },
+      { t: 'damage', sourceId: 'b1', targetId: 'a1', amount: 2 },
+      { t: 'death', unitId: 'a1' },
+      { t: 'deathrattle', unitId: 'a1' },
+      { t: 'stats', unitId: 'a2', atk: 2, hp: 2, sourceId: 'a1' }, // deathrattle payoff (source a1)
+      { t: 'stats', unitId: 'a3', atk: 5, hp: 5, sourceId: 'a3' }, // avenge (source a3) → breaks off
+      { t: 'combatEnd', winner: 'a', survivors: ['a2', 'a3'], damageToLoser: 1 },
+    ];
+    expect(kinds(beats(log))).toEqual(['start', 'strike', 'deaths', 'deathrattle', 'aftermath', 'end']);
+  });
+});

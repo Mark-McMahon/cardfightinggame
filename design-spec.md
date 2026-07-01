@@ -794,24 +794,127 @@ front-end architecture.
 SVG avatar** — a per-tribe face system with a unique per-card recipe (`client/src/
 cardArt.ts`, a pure `string→SVG` function; no assets, no IO, no state). Overlaid: tier
 badge, icon-only keyword chips, large Atk/HP, and the **static axis glyph** (§6.6). Bridge
-cards carry a faint colour *tint* of the tribe they reach into. Hover tooltip = full
-ability text + base-vs-buffed stats.
+cards carry a faint colour *tint* of the tribe they reach into. Keyword icons are toxin/guard
+metaphors kept off the death glyphs (poison = 🧪, not a skull — ☠️/💀 collide with the Deaths
+axis 💀 and the Revenants crest 🪦). Hover tooltip = keywords **named in full** (a granted
+keyword — e.g. a poison buff applied in the shop — is listed under a separate **Added this
+game** block, since the face chip alone doesn't say which effects were granted vs printed),
+full ability text, and base-vs-buffed stats. Triggers (battlecry/deathrattle) stay text-only
+(no face icon): they read in the ability text, not as another death-adjacent glyph.
 
 **Battlefield.** One clean **left→right battle line per side, no wrapping**. Leftmost =
 next-to-act and first-targeted; adjacency is visually obvious (matters for cleave +
 Bonepiper). The engine is already single-line — this is client-only.
 
-**Combat replay — causal beats.** The event stream is segmented into **causal beats**
-(never all-at-once) in a render-free, unit-tested module (`client/src/scenes/
-combatBeats.ts`) consumed by `CombatReplay.tsx` (Framer Motion). The five legibility wins:
-(1) **who hits whom** — attacker lunges, tracer flies to the specific defender,
-non-participants dim; (2) **what got buffed, by what** — the changed stat pops, a chip
-floats off, a link is drawn back to `stats.sourceId`; (3) **pacing by impact** — each
-beat's dwell scales with a computed weight (trivial events batch; board-wide buffs / key
-deaths / breakpoints hold), with step (◀/▶), scrub, and speed controls; (4) **causality** —
-a strike, the deaths it caused, and the buffs those deaths triggered are separate ordered
-beats, captioned with the cause; (5) a permanent/temporary cue is **reserved** pending the
-writeback gap (§7.6) — currently all combat buffs read as this-combat.
+**Combat replay — choreographed causal beats.** The event stream is segmented into **causal
+beats** (never all-at-once) in a render-free, unit-tested module. That module is **pure and lives
+in the shared engine** (`shared/engine/combatReplay.ts`) — not the client — because both the
+client (which animates the beats via `CombatReplay.tsx` + Framer Motion) and the **server**
+(which sizes the combat-phase window from the same pacing math, below) consume it; a single
+source of truth keeps them from drifting. `client/src/scenes/combatBeats.ts` re-exports it so
+the scene keeps a stable local path.
+
+The load-bearing rule is **presentation is decoupled from simulation**: the presenter plays beats
+**one at a time**, each as *entry → hold → exit*, and only advances once the current beat's
+choreography has had its full dwell — driven by a **frame-rate-independent rAF clock**
+(`useBeatClock`), never a drifting `setTimeout` chain. All *sub-beat* feel-timing (the lunge
+wind-up/travel/recoil, the contact instant, the health-bar drain, the death 0-HP hold + crumble,
+the buff flash + number tick, the float rise) is single-sourced in **one `TIMING` config**
+(`client/src/scenes/replayTiming.ts`, presentation-only) with a global **`combatSpeed`** knob —
+which is the shared `COMBAT_SPEED`, so the server window is sized from the same tempo. Each
+choreography is **fitted to its beat's dwell** so a compressed (monster-board) replay still lands
+cleanly. The legibility wins:
+
+(1) **who hits whom (asymmetric telegraph)** — a strike is **directional motion only the attacker
+makes**, so the initiator reads *pre-attentively*, without decoding the colour legend (colour is
+secondary reinforcement, never the initiative signal). It is **sequenced so the eye lands on the
+attacker before it acts**: the attacker first **glows and scales up in place** (a stationary
+*highlight* hold) while **the rest of the board dims**, then **winds up** (a short pull-back *away*
+from the defender — the anticipation "tell"), then **thrusts** into the struck defender (an
+*accelerating* lunge that visibly pokes in — a committed travel, not a nudge), holds at contact,
+and finally **recoils** back to its slot and settles as the glow lifts. The attacker **never
+shakes and is never knocked back by its own blow**. The **defender only reacts**: on impact it is
+**knocked back away from the attacker** (a quick shove, then an ease back to its slot) — it **never
+travels toward the attacker and never lunges**. The rule is *whatever the attacker does, the
+defender does the opposite or nothing*, so the lunge — which belongs to exactly one card — is the
+"who started it" signal even when both units take damage. The struck defender's damage payoff is
+**bound to the impact keyframe, never to beat-start**: the attacker's lunge fires an **`onImpact`**
+callback at the frame its translate reaches the defender (`TIMING.strike.impactFraction` of full
+thrust extension), and *that* is what drains the **health bar** (tweened, never snapped) and ticks
+the HP number down. Until impact the struck card **holds its pre-damage HP** — bar full, number
+un-ticked — so slowing the replay (or a longer lunge) keeps HP full through the wind-up/travel and
+drains it **only when the sprite actually lands**; the drain can never precede the blow. (This is a
+correctness contract, not just feel: a beat-start drain — the classic bug — reads as HP falling
+*before* the attacker arrives, and a regen must fire the drain off the lunge's impact, not a timer
+measured from the beat opening.) At that same instant the defender flashes, its damage number
+rises-and-fades, a small **screen shake** punctuates the blow, and a popped divine shield throws a
+shatter ring. A **cleave** splashes each neighbour with a gentle shove *away from the attacker*
+(never a competing shake) and staggered **amber** numbers (vs. the defender's red) so the wide hit
+reads as a left→right sweep. All of this sub-beat timing (highlight → wind-up → thrust → impact →
+recoil, the impact-bound drain/tick, plus the defender's knockback/settle) is single-sourced in the
+`TIMING.strike` config (`replayTiming.ts`); a strike's dwell **weight**
+(`shared/engine/combatReplay.ts`) is sized so that choreography plays uncompressed on a normal fight.
+
+(2) **the death cadence (strict, non-overlapping)** — damage number pops → the health bar drains →
+the card **HOLDS visibly at 0 HP** → it **crumbles** (shrink + tip + desaturate) → **only then** is
+it removed and the line **reflows** as neighbours slide in → and **only then** does its deathrattle
+play, as **its own beat**. A death and its deathrattle are never the same beat, and a deathrattle
+never fires during the death animation or the next strike.
+
+(3) **honest deathrattle labelling** — the resolver emits a `deathrattle` **marker event for every
+death** (a per-death marker, not proof of a deathrattle). The beat layer is therefore
+**content-aware**: it consults the card catalog (`UNIT_BY_ID`, resolving summoned-token cardIds
+from their owner best-effort) and gives a **its-own beat only to a REAL deathrattle**; a marker for
+a unit that has no deathrattle is **absorbed silently** into the death beat and never labels the
+card — so "X's deathrattle" only ever names a card that actually has one.
+
+(4) **visible buffs, as their own beat** — a buff flashes a **gold** ring on the recipient, floats a
+gold `+atk/+hp` chip, and the stat number **ticks up** (counts, with a bounce) rather than silently
+changing; the buff is slotted as its own beat (never overlapping a strike), and a link is drawn
+back to `stats.sourceId`.
+
+(5) **clean floating text** — every popup shares **one anchored stack above the card** (scale-in →
+rise → fade over a fixed duration); two texts on one card **stack, never overlap**; colours are
+consistent (**red** damage, **gold** buff, **green** keyword-gain).
+
+(6) **pacing by impact + controls** — each beat's dwell scales with a computed weight (trivial
+strikes batch; board-wide buffs / key deaths / deathrattles / breakpoints hold), with step (◀/▶),
+scrub and speed controls, plus **Skip ✕ which dismisses the whole combat window** (the frozen shop
+shows behind it) instead of jumping to the end and still waiting. **The revealed shop is an inert
+preview, not yet live:** the server still owns the combat hold, so the client gates every intent on
+the real public `phase` (buys during `combat` would bounce with `not shop phase`). Skipping the
+replay does **not** shorten that hold — the next shop doesn't exist until `beginShop` runs — so the
+locked state must be **unmistakable**, not merely a greyed shop (a greyed shop with
+`pointer-events:none` reads as *broken* because a click produces no feedback at all). The frozen
+shop therefore shows a **prominent "Shop locked — combat is still resolving" banner with a live
+countdown** (the seconds tick down from the public `timer`, below) plus a **"🔒 locked"** label on
+the shop-zone header, and only the zone *contents* dim (headers stay bright) so the reason and the
+reopen time land where the eye/pointer is — not only in a strip up top. Skip is thus honest about
+inputs not being live yet rather than presenting a buyable-looking shop that silently rejects buys.
+A permanent/temporary cue is
+**reserved** pending the writeback gap (§7.6) — currently all combat buffs read as this-combat.
+
+> A dev-only workbench (`client/src/scenes/ReplayLab.tsx`, gated behind the `#replay-lab` URL hash,
+> lazy-loaded so it is code-split out of the shipped bundle) renders `CombatReplay` against real
+> `resolveCombat` logs for a set of canned matchups (cleave / shields / deaths-and-reborn / brawl),
+> so this game-feel layer can be audited in isolation without driving a full match to reach combat.
+
+**Replay window sized to the fight (never truncated).** The server holds the `combat` phase
+for `combatWindowMs(logs)` — the longest natural replay across the round's *watched* fights
+(bots don't watch), padded by `REPLAY_TAIL_PAD_MS` and clamped to
+`[REPLAY_WINDOW_MIN_MS, REPLAY_WINDOW_CAP_MS]` — **not** a fixed hold. A fixed hold (formerly
+6.5s) truncated any non-trivial fight mid-combat; sizing to the actual log guarantees the
+replay always plays through to the result banner. A fight whose natural playback exceeds the
+cap is **compressed client-side** (the replay auto-scales its dwell) to finish inside the
+window. The pacing constants (`REPLAY_BASE_STEP_MS`, `COMBAT_SPEED`, cap, floor, pad) are
+**presentation, not balance** — they live beside the beat logic in
+`shared/engine/combatReplay.ts` and drive both the client dwell and the server window (so the
+`combatSpeed` tempo knob can never desync them). Pinned by `shared/engine/combatReplay.test.ts`.
+During the hold the server also publishes the remaining seconds in the public `timer` field (which
+means "seconds left in the current timed phase" — the shop budget during `shop`, the time until the
+next shop during `combat`; it was formerly hard-zeroed in `combat`), so a client that skipped its
+replay sees a live countdown to when the frozen shop reopens. `MatchRoom` keeps its tick running
+through `combat` to refresh it; the scheduled `beginShop` still owns the actual phase transition.
 
 **Contextual counters (decision #27).** Show a manufactured-event counter (deaths / tokens
 / battlecries / gems) **only when you own a card that consumes it** — never an always-on
@@ -914,9 +1017,10 @@ cardfightinggame/
 │     ├─ auras.ts               #   passive modifier queries (multipliers, caps, activeWhen)
 │     ├─ breakpoints.ts (+.test)#   breakpoint lookup + lint
 │     ├─ instances.ts, state.ts, pool.ts, match.ts
+│     ├─ combatReplay.ts (+.test)#   pure causal-beat segmentation + replay pacing (client render + server window)
 │     └─ handlers/index.ts      #   custom escape-hatch (the 2 handlers)
 ├─ server/                      # Colyseus: rooms/MatchRoom.ts, bots/BotAgent.ts, pairing, reconnect
-├─ client/                      # React + Vite: src/cardArt.ts, scenes/ (Shop, CombatReplay + combatBeats), components, icons, styles
+├─ client/                      # React + Vite: src/cardArt.ts, scenes/ (Shop, CombatReplay; combatBeats re-exports shared/engine/combatReplay), components, icons, styles
 ├─ sim/                         # micro.ts, macro.ts, metrics.ts, audit.ts, web*.ts, report
 └─ e2e/                         # Playwright
 ```

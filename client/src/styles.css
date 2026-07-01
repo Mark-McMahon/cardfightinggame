@@ -171,7 +171,6 @@ input {
 .unit.clickable { cursor: pointer; }
 .unit.clickable:hover { border-color: var(--accent); transform: translateY(-2px); }
 .unit.legal { border-color: var(--good); box-shadow: 0 0 10px var(--good); cursor: pointer; }
-.unit.dead { opacity: 0.25; filter: grayscale(1); }
 .unit.attacking { border-color: var(--accent); box-shadow: 0 0 12px var(--accent); }
 .unit.token .nm { font-style: italic; }
 
@@ -242,64 +241,99 @@ input {
   overflow: visible;
 }
 .bl-slot { position: relative; flex: 0 0 auto; }
-/* hover-to-inspect during combat: lift the hovered card above its neighbours and restore
-   full brightness so the same shop tooltip reads clearly even mid-beat (§16.6). */
+/* hover-to-inspect during combat: lift the hovered card above its neighbours so the same shop
+   tooltip reads clearly even mid-beat (§16.6). */
 .bl-slot:hover { z-index: 30; }
-.bl-slot:hover .unit { opacity: 1; filter: none; }
 .bl-empty { padding: 0 8px; }
 .bl-divider { display: flex; align-items: center; justify-content: center; height: 2px; background: linear-gradient(90deg, transparent, var(--line), transparent); position: relative; margin: 2px 0; }
 .vs-badge { position: absolute; font-size: 16px; font-weight: 800; color: var(--dim); background: var(--bg); padding: 0 10px; }
 
-/* focus system: in a paired beat, the two participants stay lit and everyone else recedes */
-.bl-slot .unit { transition: opacity 0.25s, filter 0.25s; }
-.is-dim .unit { opacity: 0.32; filter: grayscale(0.7) brightness(0.7); }
-.is-attacker .unit { border-color: var(--accent); box-shadow: 0 0 14px var(--accent); }
+/* focus system: the active participants light up, and during a STRIKE the rest of the board dims —
+   the asymmetry (only the initiator is spotlit + lunges) is the clearest "who started it" signal. */
+.bl-slot .unit { transition: box-shadow 0.2s, border-color 0.2s, opacity 0.22s; }
+.is-attacker .unit { border-color: var(--accent); box-shadow: 0 0 18px var(--accent); z-index: 4; }
 .is-target .unit { border-color: #ff5a52; box-shadow: 0 0 16px #ff5a52; }
 .is-source .unit { border-color: var(--gold); box-shadow: 0 0 12px #e8be4688; }
-/* target reticle — the single enemy currently being struck is unmistakable */
+/* the initiator is lit while everyone that isn't part of the swing recedes (never fully gone) */
+.battlefield.striking .bl-slot:not(.is-attacker):not(.is-target):not(.is-splash) .unit { opacity: 0.42; }
+.battlefield.striking .is-attacker { z-index: 5; }
+/* the fx layer carries the per-strike motion (attacker lunge / defender knockback); it wraps the
+   card and must not affect layout — the parent .bl-slot owns position + reflow. */
+.fx { position: relative; will-change: transform; }
+/* target reticle — a soft ring that fades in on the struck enemy, then turns slowly. */
 .target-reticle {
-  position: absolute; inset: -7px; border-radius: 3px; border: 2px dashed #ff5a52;
-  pointer-events: none; z-index: 6; animation: reticle-spin 2.2s linear infinite;
+  position: absolute; inset: -6px; border-radius: 4px; border: 2px solid #ff5a5299;
+  box-shadow: 0 0 10px #ff5a5255; pointer-events: none; z-index: 6;
+  animation: reticle-in 220ms ease-out both, reticle-spin 6s linear 220ms infinite;
 }
+@keyframes reticle-in { from { opacity: 0; transform: scale(1.25); } to { opacity: 1; transform: scale(1); } }
 @keyframes reticle-spin { to { transform: rotate(360deg); } }
 
-/* a buffed unit wears a blue ring, held for the whole beat (combat buffs are all this-combat-only) */
-.bufftgt.unit { border-color: #6ab0ff !important; box-shadow: 0 0 0 2px #6ab0ff, 0 0 16px #6ab0ffaa !important; }
-/* the changed number visibly pops so you can follow *which* unit changed when several do */
-@keyframes statpop { 0% { transform: scale(1); } 35% { transform: scale(1.75); } 100% { transform: scale(1); } }
-.pop-atk .stats .atk { display: inline-block; animation: statpop 0.5s ease; }
-.pop-hp .stats .hp { display: inline-block; animation: statpop 0.5s ease; }
+/* combat health bar — DRAINS smoothly (the width transition + its delay are set inline so the drain
+   starts at the contact instant, never snapping). */
+.unit .hpbar { height: 4px; background: #0006; border-radius: 3px; overflow: hidden; margin: 2px 0 1px; }
+.unit .hpbar > div { height: 100%; background: linear-gradient(90deg, #66c766, #8fe08f); }
 
-/* floating combat numbers */
-.dmgfloat { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); font-weight: 900; font-size: 20px; color: #ff5252; text-shadow: 0 1px 3px #000; pointer-events: none; z-index: 7; }
-/* anchored buff chip — sits just above the unit and HOLDS for the whole beat (no fly-away),
-   so reading-time == beat-dwell rather than racing its own fade timer */
-.bufffloat {
-  position: absolute; top: -10px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; align-items: center;
-  font-weight: 900; font-size: 14px; white-space: nowrap; pointer-events: none; z-index: 8;
-  padding: 1px 6px; border-radius: 2px; text-shadow: 0 1px 3px #000;
-  background: #16334eee; border: 1px solid #6ab0ff;
-}
-.bufffloat .bf-atk { color: #ffd479; }
-.bufffloat .bf-hp { color: #7ee081; }
-.shieldflash { position: absolute; inset: -4px; border-radius: 2px; border: 3px solid #ffe07a; box-shadow: 0 0 16px #ffe07a; pointer-events: none; z-index: 4; }
-.hitflash { position: absolute; inset: 0; border-radius: 2px; background: radial-gradient(circle, #fff 0%, #ffd47a55 60%, transparent 75%); mix-blend-mode: screen; pointer-events: none; z-index: 3; }
-.ctx-num { display: inline-block; font-variant-numeric: tabular-nums; }
-
-/* keyword GAINED mid-combat (e.g. Spinefish → Poison): the recipient gets a green ring +
-   a floating "+Poison" chip, so it's unmistakable WHICH card got the ability. The card's
-   keyword icon (☠️) also appears for the rest of the replay (added to the unit's keywords). */
+/* a buffed / keyword-gained unit wears a ring for the beat; the changed number then TICKS + pops. */
+.bufftgt.unit { border-color: var(--gold) !important; box-shadow: 0 0 0 2px var(--gold), 0 0 16px #e8be46aa !important; }
 .gaintgt.unit { border-color: #7ee08a !important; box-shadow: 0 0 0 2px #7ee08a, 0 0 16px #7ee08aaa !important; }
-/* anchored like the buff chip: sits just above the unit and HOLDS for the whole beat (no fly-away) */
-.gainfloat {
-  position: absolute; top: -10px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; align-items: center;
-  font-weight: 900; font-size: 13.5px; white-space: nowrap; pointer-events: none; z-index: 9;
-  padding: 1px 7px; border-radius: 2px; text-shadow: 0 1px 3px #000;
-  background: #0e3a1eee; border: 1px solid #7ee08a; color: #c8f7d2;
+@keyframes statpop { 0% { transform: scale(1); } 35% { transform: scale(1.6); } 100% { transform: scale(1); } }
+.pop-atk .stats .atk { display: inline-block; animation: statpop 0.45s ease; }
+.pop-hp .stats .hp { display: inline-block; animation: statpop 0.45s ease; }
+
+/* impact flash — a bright bloom on the struck card at contact, then gone */
+.hitflash {
+  position: absolute; inset: 0; border-radius: 2px; pointer-events: none; z-index: 5; opacity: 0;
+  background: radial-gradient(circle, #ffffff 0%, #ffd47a66 55%, transparent 76%); mix-blend-mode: screen;
+  animation-name: hitflash; animation-timing-function: ease-out; animation-fill-mode: both;
 }
-.gainfloat .gn-ico { font-size: 15px; }
-/* afflicted (poison hit, will die this combat): a faint sickly tint so the doom reads */
-.doomed.unit { border-color: #9be86b !important; box-shadow: 0 0 12px #6db04488 !important; }
+@keyframes hitflash { 0% { opacity: 0; } 14% { opacity: 1; } 100% { opacity: 0; } }
+/* divine-shield shatter — a bright ring blooms out and fades at contact when a shield pops */
+.shieldflash {
+  position: absolute; inset: -4px; border-radius: 3px; border: 3px solid #ffe07a; box-shadow: 0 0 18px #ffe07a;
+  pointer-events: none; z-index: 6; opacity: 0;
+  animation-name: shieldflash; animation-duration: 400ms; animation-timing-function: ease-out; animation-fill-mode: both;
+}
+@keyframes shieldflash {
+  0% { opacity: 0; transform: scale(0.88); }
+  22% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.4); }
+}
+
+/* FLOATING TEXT — one consistent anchor above the card; every popup scales in, floats up, fades.
+   They live in a single column so two texts on the same card stack (never overlap). Consistent
+   colours: damage RED, buff GOLD, keyword-gain GREEN. */
+.floatstack {
+  position: absolute; left: 50%; bottom: calc(100% - 16px); transform: translateX(-50%);
+  display: flex; flex-direction: column-reverse; align-items: center; gap: 3px;
+  pointer-events: none; z-index: 9; width: max-content;
+}
+.floaty {
+  font-weight: 900; white-space: nowrap; text-shadow: 0 1px 3px #000; opacity: 0;
+  animation-name: floatrise; animation-timing-function: ease-out; animation-fill-mode: both; animation-duration: 720ms;
+}
+.floaty.dmg { font-size: 21px; color: #ff5252; text-shadow: 0 1px 3px #000, 0 0 7px #ff000077; }
+.floaty.dmg.splash { font-size: 16px; color: #ffb15a; }
+.floaty.buff { font-size: 14px; padding: 1px 7px; border-radius: 2px; background: #3a2a10ee; border: 1px solid var(--gold); display: inline-flex; gap: 5px; align-items: center; }
+.floaty.buff .bf-atk { color: #ffd479; }
+.floaty.buff .bf-hp { color: #7ee081; }
+.floaty.gain { font-size: 13px; padding: 1px 7px; border-radius: 2px; background: #0e3a1eee; border: 1px solid #7ee08a; color: #c8f7d2; display: inline-flex; gap: 4px; align-items: center; }
+.floaty.gain .gn-ico { font-size: 15px; }
+@keyframes floatrise {
+  0% { opacity: 0; transform: translateY(9px) scale(0.6); }
+  18% { opacity: 1; transform: translateY(0) scale(1.14); }
+  45% { opacity: 1; transform: translateY(-6px) scale(1); }
+  100% { opacity: 0; transform: translateY(-26px) scale(0.95); }
+}
+
+/* death: after the 0-HP hold (the inline animation-delay) the card CRUMBLES — shrinks, tips, and
+   desaturates — as its own beat, before it is removed and the row reflows. */
+.unit.dying { animation-name: crumble; animation-timing-function: ease-in; animation-fill-mode: both; }
+@keyframes crumble {
+  0% { opacity: 1; transform: scale(1) rotate(0); filter: none; }
+  22% { transform: scale(1.03) rotate(-1deg); }
+  100% { opacity: 0; transform: scale(0.55) translateY(12px) rotate(-7deg); filter: grayscale(0.75) brightness(0.55); }
+}
 
 /* per-beat caption — names the cause (e.g. "Cryptling deathrattle"), briefly */
 .beat-caption {
@@ -322,6 +356,32 @@ input {
 .hpbar { height: 5px; background: #0006; border-radius: 3px; overflow: hidden; margin-top: 3px; }
 .hpbar > div { height: 100%; background: var(--good); }
 .pending { background: #2a2410; border: 1px solid var(--accent); border-radius: 2px; padding: 8px 12px; }
+
+/* combat hold: the shop is a frozen, non-live preview behind (or, after Skip, revealed under) the
+   replay. Dim + disable input so it never looks buyable while the server still holds combat (§10). */
+/* prominent lock banner: after Skip the greyed shop alone reads as "broken", so state the reason
+   (shop locked) and show a live countdown to when buying reopens (§10). */
+.shop-wait {
+  background: #2a2410; border: 1px solid var(--accent); border-radius: 3px;
+  padding: 10px 16px; display: flex; align-items: center; gap: 14px;
+  box-shadow: 0 0 0 1px #0006, 0 6px 20px #0007;
+}
+.shop-wait .sw-lock { font-size: 22px; line-height: 1; filter: drop-shadow(0 0 6px var(--accent)); }
+.shop-wait .sw-text { display: flex; flex-direction: column; gap: 2px; line-height: 1.3; }
+.shop-wait .sw-text strong { color: var(--accent); }
+.shop-wait .sw-sub { color: var(--dim); font-size: 12px; }
+.shop-wait .sw-timer { margin-left: auto; display: flex; align-items: baseline; gap: 2px; font-variant-numeric: tabular-nums; }
+.shop-wait .sw-secs { font-family: var(--serif); font-size: 28px; font-weight: 800; color: var(--accent); min-width: 1.4ch; text-align: right; }
+.shop-wait .sw-unit { font-size: 14px; color: var(--dim); }
+.shop-wait .sw-opening { font-size: 16px; font-weight: 700; color: var(--accent); }
+/* frozen shop = non-interactive. Dim the CONTENT (cards, econ controls) rather than the whole zone,
+   so zone headers stay bright and the shop's "🔒 locked" label reads even while everything under it
+   is greyed out — the cue lands where the eye/pointer is, not only in the top banner (§10). */
+.match-main.shop-frozen .econ-bar,
+.match-main.shop-frozen .zone { pointer-events: none; }
+.match-main.shop-frozen .econ-bar > *,
+.match-main.shop-frozen .zone .units-row { opacity: 0.5; filter: grayscale(0.35); }
+.match-main.shop-frozen .zone.shop-zone h4 { color: var(--accent); }
 
 /* shop drag-and-drop (§16.6, decision #28) */
 .dragwrap { cursor: grab; transition: opacity 0.12s; position: relative; }
@@ -360,3 +420,10 @@ input {
 .card-tip .tip-sub .buffed { color: #7ee081; font-weight: 700; }
 .card-tip .tip-sub .tip-base { color: var(--dim); font-weight: 400; }
 .card-tip .tip-text { margin-top: 4px; border-top: 1px solid var(--line); padding-top: 4px; line-height: 1.3; }
+/* keyword names spelled out — the card face is icon-only, so hover is where a keyword reads in words */
+.card-tip .tip-kw { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.card-tip .tip-kwchip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 5px; border: 1px solid var(--line); border-radius: 2px; font-size: 11px; white-space: nowrap; }
+.card-tip .tip-kwchip.added { border-color: #7ee081; color: #7ee081; }
+/* granted-this-game effects (e.g. a poison buff) called out apart from the printed card */
+.card-tip .tip-added { margin-top: 4px; border-top: 1px solid var(--line); padding-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.card-tip .tip-added-hd { flex-basis: 100%; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #7ee081; font-weight: 700; }

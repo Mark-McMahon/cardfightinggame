@@ -52,6 +52,13 @@ export function Shop() {
 
   if (!priv || !pub) return <div className="center dim">Loading shop…</div>;
 
+  // The shop is rendered in two phases (App.tsx): live during 'shop', and as a FROZEN preview behind
+  // the combat replay during 'combat'. When a player hits Skip ✕, the replay closes and reveals this
+  // frozen shop — but the server is still holding the combat window, so inputs aren't live yet and any
+  // buy would bounce with 'not shop phase'. Gate all intents on the real phase and surface the server's
+  // "next shop" countdown (pub.timer during combat) so the reveal is honest, not silently dead (§10).
+  const shopLive = pub.phase === 'shop';
+
   const pending = priv.pendingTarget;
   const legal = new Set(pending?.legalTargets ?? []);
   const myPub = pub.players.find((p) => p.seat === conn.seat);
@@ -65,7 +72,7 @@ export function Shop() {
 
   // ── drag lifecycle ──────────────────────────────────────────────────────────────
   const startDrag = (payload: DragPayload, key: string) => (e: DragEvent) => {
-    if (pending) return;
+    if (pending || !shopLive) return;
     dragRef.current = payload;
     setDragFrom(payload.from);
     setDraggingKey(key);
@@ -102,6 +109,7 @@ export function Shop() {
   };
   const onBoardDrop = (e: DragEvent) => {
     e.preventDefault();
+    if (!shopLive) return endDrag();
     const d = dragRef.current;
     const slot = dropSlot ?? priv.board.length;
     if (d) {
@@ -114,6 +122,7 @@ export function Shop() {
 
   const onBenchDrop = (e: DragEvent) => {
     e.preventDefault();
+    if (!shopLive) return endDrag();
     const d = dragRef.current;
     if (d?.from === 'shop' && d.shopIndex != null && !benchFull) sendIntent({ type: 'buy', shopIndex: d.shopIndex });
     endDrag();
@@ -121,6 +130,7 @@ export function Shop() {
 
   const onShopDrop = (e: DragEvent) => {
     e.preventDefault();
+    if (!shopLive) return endDrag();
     const d = dragRef.current;
     if (d && (d.from === 'board' || d.from === 'bench') && d.uid) sendIntent({ type: 'sell', unitUid: d.uid });
     endDrag();
@@ -130,10 +140,11 @@ export function Shop() {
 
   // ── click fallbacks ─────────────────────────────────────────────────────────────
   const clickOffer = (i: number) => () => {
-    if (pending) return;
+    if (pending || !shopLive) return;
     if (canAfford(economy.buyCost) && !benchFull) sendIntent({ type: 'buy', shopIndex: i });
   };
   const clickBench = (u: ClientUnit) => () => {
+    if (!shopLive) return;
     if (pending) {
       if (legal.has(u.uid)) sendIntent({ type: 'targetChoice', targetUid: u.uid });
       return;
@@ -141,14 +152,40 @@ export function Shop() {
     if (!boardFull) sendIntent({ type: 'playUnit', unitUid: u.uid });
   };
   const clickBoard = (u: ClientUnit) => () => {
-    if (pending && legal.has(u.uid)) sendIntent({ type: 'targetChoice', targetUid: u.uid });
+    if (shopLive && pending && legal.has(u.uid)) sendIntent({ type: 'targetChoice', targetUid: u.uid });
   };
 
-  const intent = (i: Intent) => () => sendIntent(i);
+  const intent = (i: Intent) => () => {
+    if (shopLive) sendIntent(i);
+  };
 
   return (
-    <div className="match-main">
+    <div className={'match-main' + (shopLive ? '' : ' shop-frozen')}>
       <Standings pub={pub} mySeat={conn.seat} opponentSeat={oppSeat} />
+
+      {/* Combat hold: the shop below is a frozen preview, not yet live. The grey-out alone reads as a
+          dead shop (clicks do nothing under pointer-events:none), so make the reason UNMISTAKABLE — a
+          lock banner with a live countdown to when buying reopens. Skipping the replay does NOT shorten
+          the server's combat window; this is why a buy right after Skip bounces with 'not shop phase' (§10). */}
+      {!shopLive && (
+        <div className="shop-wait" role="status" aria-live="polite">
+          <span className="sw-lock" aria-hidden>🔒</span>
+          <div className="sw-text">
+            <strong>Shop locked — combat is still resolving.</strong>
+            <span className="sw-sub">Skipping the replay doesn't reopen the shop early; it opens for everyone at once.</span>
+          </div>
+          <div className="sw-timer" aria-label="time until the next shop opens">
+            {pub.timer > 0 ? (
+              <>
+                <span className="sw-secs">{pub.timer}</span>
+                <span className="sw-unit">s</span>
+              </>
+            ) : (
+              <span className="sw-opening">opening…</span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* economy control bar */}
       <div className="econ-bar panel">
@@ -197,7 +234,7 @@ export function Shop() {
         onDragLeave={() => setSellOver(false)}
         onDrop={onShopDrop}
       >
-        <h4>{sellArmed ? `Drop to sell (+${economy.sellRefund}g)` : 'Shop'}</h4>
+        <h4>{sellArmed ? `Drop to sell (+${economy.sellRefund}g)` : shopLive ? 'Shop' : 'Shop — 🔒 locked'}</h4>
         <div className="units-row">
           {priv.shop.length === 0 && <span className="dim">empty — roll for units</span>}
           {priv.shop.map((o: ShopOffer, i: number) => {
@@ -207,7 +244,7 @@ export function Shop() {
               <div
                 key={key}
                 className={'dragwrap' + (draggingKey === key ? ' dragging' : '')}
-                draggable={!pending}
+                draggable={!pending && shopLive}
                 onDragStart={startDrag({ from: 'shop', shopIndex: i }, key)}
                 onDragEnd={endDrag}
                 onClick={clickOffer(i)}
@@ -240,7 +277,7 @@ export function Shop() {
                   slotRefs.current[i] = el;
                 }}
                 className={'bslot' + (draggingKey === u.uid ? ' dragging' : '')}
-                draggable={!pending}
+                draggable={!pending && shopLive}
                 onDragStart={startDrag({ from: 'board', uid: u.uid }, u.uid)}
                 onDragEnd={endDrag}
                 onClick={clickBoard(u)}
@@ -273,8 +310,8 @@ export function Shop() {
         </div>
       </div>
 
-      {/* DISCOVER modal (triple reward etc.) */}
-      {priv.discover && (
+      {/* DISCOVER modal (triple reward etc.) — a shop-phase reward; never over the combat freeze */}
+      {shopLive && priv.discover && (
         <div className="discover-modal">
           <div className="discover-card">
             <div className="standings-title">Discover — {priv.discover.reason}</div>

@@ -127,7 +127,7 @@ build from functional mechanics only; original names/text/art throughout.
       illegible: you couldn't tell who hit whom, what got buffed or by what, or permanent
       vs temporary, and it ran too fast with no sense of cause→effect. The replay was
       re-architected (see design-spec §16.6) into **causal beats**: attacker↔defender
-      pairing (tracer + reticle + dim the rest), buff `source` + `permanent/temporary`
+      pairing (tracer + reticle + *dim the rest — later reversed, see #31*), buff `source` + `permanent/temporary`
       surfaced (gold/🔒 vs blue/⏳), **impact-weighted pacing** with manual step/scrub +
       speed, and cause→effect ordering. This **reverses #26's "no effect labels"** for the
       source/permanence cues specifically (still clean-room). Required one **additive**
@@ -167,6 +167,88 @@ build from functional mechanics only; original names/text/art throughout.
     text, base-vs-buffed stats) is unchanged. Tokens get their own (plainer) recipes; any
     non-catalog combat summon falls back to a generic tribe face. Deferred tribes reuse the
     generic-blob fallback until they get bespoke recipes.
+
+### Replay legibility & pacing (Round 7) — post-playtest fixes, client + phase-window only
+> Playtesting (Playwright-driven, with live per-frame DOM measurement) surfaced two concrete
+> defects in the causal-beat replay from #26/#16.6. Both fixes touch only presentation (client
+> render) and the server's non-gameplay *phase timing* — **the four engine invariants are
+> untouched** (combat is still the same pure `resolveCombat`; same `CombatEvent[]`).
+
+31. **Replay never grays a card — present or gone (reverses #26's "dim the rest"). (2026-07-01.)**
+    The spotlight approach dimmed every non-participant (~80–90% of the board) each beat, and
+    kept **dead units on the board as grayed corpses** — measured live at `opacity 0.32–0.48`,
+    `grayscale(0.7)`. Verdict: a card is only ever **fully present (opacity 1, full color)** or
+    **removed the instant it dies** — no dimmed/grayed in-between, ever. Legibility now comes from
+    **positive cues only**: attacker/target/source glow, tracer line, damage/buff floats, and a
+    brief green death cue on the exact beat a unit falls (then it's gone). Client-only
+    (`CombatReplay.tsx` + `styles.css`).
+32. **Combat phase window is sized to the fight, never a fixed hold. (2026-07-01.)** The server
+    formerly held `combat` for a fixed **6.5 s**, which truncated any real fight: a 4v4 replay
+    (~18 s) showed ~21% of its beats and a 7v7 (~29 s) ~12% before snapping to the next shop
+    mid-death. The server now holds for **`combatWindowMs(logs)`** — the longest natural replay
+    across the round's *watched* fights (bots don't watch), padded and clamped to
+    `[REPLAY_WINDOW_MIN_MS, REPLAY_WINDOW_CAP_MS]` — so the replay always plays through to the
+    result banner. A fight exceeding the cap is **compressed client-side** (dwell auto-scaled) to
+    finish inside the window. This required moving the render-free beat/pacing logic from the
+    client into the **pure shared engine** (`shared/engine/combatReplay.ts`) so client dwell and
+    server window are computed from one source; pinned by `combatReplay.test.ts`. Replay pacing
+    constants are **presentation, not balance** (they may live beside the logic, single-sourced).
+
+### Combat feel & choreography (Round 8) — post-playtest, presentation/sequencing/timing only
+> A second game-feel pass. Combat was *logically* correct but *read* as simultaneous: beats
+> overlapped, the initiator was unclear, deaths snapped, buffs happened silently, and "deathrattle"
+> mislabelled cards that have none. Root cause: presentation was coupled to the simulation (many
+> things on one frame). Fix = choreograph discrete, non-overlapping beats. **The pure `resolveCombat`
+> and its `CombatEvent[]` are untouched — the four engine invariants hold.** Audited with Playwright
+> (video + timestamped `[beat]` console logs, before/after) via the `#replay-lab` workbench.
+
+33. **Asymmetric strike telegraph — a TARGETED, TRANSIENT dim (revises #31). (2026-07-01.)** #31
+    removed dimming because the old spotlight dimmed ~80–90% of the board **every** beat and left
+    **grayed corpses** — an ambient, always-on gray-out that hurt legibility. This restores dimming
+    but narrowly: only during a **strike** beat, only **non-participants** (never the attacker /
+    target / cleave-splash), at `opacity ~0.42`, and it **fades back** the instant the strike ends.
+    The attacker also glows, scales ~1.05, and **lunges** to the defender; the defender **only
+    reacts** (knockback away + shake) and never lunges. That asymmetry is the clearest "who started
+    it" signal — the direct fix for the playtest complaint that the initiator was unreadable. Cards
+    are still full-present/full-colour except during the swing they are party to. Client-only.
+34. **Choreographed death cadence — 0-HP hold → crumble → removal → deathrattle as its own beat
+    (revises #31's "removed the instant it dies"). (2026-07-01.)** A death now plays as a brief,
+    discrete sequence: damage pops → the **health bar drains** → the card **holds at 0 HP** (~200 ms)
+    → **crumbles** (~380 ms, shrink + tip + desaturate) → is removed and the row reflows → and **only
+    then** does its deathrattle play, as a **separate beat**. The "in-between" #31 forbade was a
+    *persistent grayed corpse*; this is a sub-second animated crumble, not a lingering state. The
+    pure beat engine now segments `death` and (real) `deathrattle` into distinct beats; a deathrattle
+    never fires during the death animation or the next strike. Beat-layer + client only.
+35. **Content-aware deathrattle labelling. (2026-07-01.)** `resolveCombat` emits a `deathrattle`
+    **marker event for every death** (a per-death marker, *not* proof of a deathrattle); the old
+    caption trusted it and printed "X's deathrattle" for cards with none (measured live:
+    Thornbeast / Pale Lich / Pearlguard / Gorehide …). The **pure beat layer** now consults the card
+    catalog (`UNIT_BY_ID`, resolving summoned-token cardIds from their owner best-effort) and gives
+    a labelled beat **only to a real deathrattle**; a marker for a non-deathrattle unit is absorbed
+    silently. **No engine/event change** — the resolver's output is byte-identical; only the
+    (pure, tested) labelling moved. Pinned by `combatBeats.test.ts`.
+36. **rAF beat clock, one TIMING config, health bars + ticking stats + gold buffs, Skip dismisses.
+    (2026-07-01.)** The presenter advances on a single **frame-rate-independent rAF clock**
+    (`useBeatClock`, not a drifting `setTimeout`), one beat at a time, only after the beat's dwell.
+    All sub-beat feel-timing lives in **one `TIMING` config** with a global **`combatSpeed`** — the
+    shared `COMBAT_SPEED`, so the server window stays in lockstep and can't desync. Combat cards gain
+    a **tweened health bar** and **ticking stat numbers**; buffs read **gold** (flash + counting
+    number), slotted as their own beat. Floating text shares **one non-overlapping anchored stack**
+    (red damage / gold buff / green keyword). **Skip now dismisses the whole combat overlay** (the
+    frozen shop shows behind) instead of jumping to the last beat and still waiting on the phase
+    timer. Client + beat-layer only.
+37. **Skip reveals an HONEST frozen shop — inert + "next shop" countdown (refines #36, #32).
+    (2026-07-01.)** #36 let Skip reveal the frozen shop behind the replay, but that shop looked
+    live while the server still held the combat window (#32): clicking a card sent a `buy` that
+    bounced with `not shop phase`, so a player who skipped "couldn't buy anything for a few seconds"
+    with no explanation. Fix, two parts: (a) the client **gates every shop intent on the real public
+    `phase`** (buy/sell/roll/tier/drag/drop are no-ops unless `phase==='shop'`) and dims the frozen
+    zones so they read as not-yet-live; (b) the server **publishes the combat-hold remaining seconds
+    in the public `timer`** (formerly hard-zeroed during `combat`; `MatchRoom` keeps its tick running
+    through the hold), and the frozen shop surfaces it as a **"next shop in Ns"** banner. `timer` now
+    uniformly means "seconds left in the current timed phase." The scheduled `beginShop` still owns
+    the transition; a lone skipper still waits out the shared window (sized to the longest *watched*
+    fight, #32) — this makes the wait **legible**, not shorter. Server + client only; no engine change.
 
 ## Tribe name map (clean-room — never ship the reference names)
 | Reference (do NOT ship) | Original name | Identity |
@@ -220,7 +302,9 @@ build from functional mechanics only; original names/text/art throughout.
 - [x] ~~Project structure~~ — locked (decision 20).
 - [x] ~~Spectate-after-death~~ — defaulted (spec-detail defaults).
 
-**All major branches resolved (30 decisions across 6 rounds; #30 = per-card procedural art).**
+**All major branches resolved (36 decisions across 8 rounds; #30 = per-card procedural art;
+#31–32 = replay never-gray + fight-sized combat window; #33–36 = combat choreography —
+asymmetric strike telegraph, death cadence, honest deathrattle labels, rAF beat clock).**
 
 ✅ **Full spec written → [`design-spec.md`](./design-spec.md)** (16 sections, developer-ready).
 ✅ **v1 implemented** (M0–M6 — see `README.md`).

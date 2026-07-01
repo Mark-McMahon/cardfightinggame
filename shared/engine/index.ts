@@ -66,3 +66,18 @@ export type { OpResult, ShopSession, SessionOpts } from './shop';
 // Match orchestration
 export { Match, computeTimer } from './match';
 export type { SeatConfig } from './match';
+
+// Combat replay pacing (pure) — the client animates these beats; the server sizes the combat
+// phase window from combatWindowMs so no replay is ever cut off mid-fight (spec §10).
+export {
+  beats,
+  totalWeight,
+  combatReplayMs,
+  combatWindowMs,
+  COMBAT_SPEED,
+  REPLAY_BASE_STEP_MS,
+  REPLAY_WINDOW_MIN_MS,
+  REPLAY_WINDOW_CAP_MS,
+  REPLAY_TAIL_PAD_MS,
+} from './combatReplay';
+export type { Beat, BeatKind } from './combatReplay';

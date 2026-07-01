@@ -60,12 +60,14 @@ export const AXIS_LABEL: Record<Axis, string> = {
  * Keyword icons (timing rules live in the engine — these are display only, §6.5).
  * NOTE: taunt is 🧱 (a guard wall), NOT 🛡️ — the shield is reserved for the Endure axis
  * glyph (AXIS_GLYPH.endure), and a card may carry both. Keeping them distinct avoids one
- * emoji meaning two things on the same card.
+ * emoji meaning two things on the same card. Likewise poison is 🧪 (a toxin vial), NOT a
+ * skull: ☠️/💀 read as generic "death" (and collide with the Deaths axis glyph 💀 and the
+ * Revenants crest 🪦), so nothing on a card reads as death except where death is meant.
  */
 export const KW_ICON: Record<Keyword, string> = {
   taunt: '🧱',
   divineShield: '🔆',
-  poison: '☠️',
+  poison: '🧪',
   reborn: '♻️',
   cleave: '🪓',
   magnetic: '🧲',

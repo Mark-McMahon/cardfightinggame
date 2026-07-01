@@ -16,6 +16,8 @@ import {
   Rng,
   computeTimer,
   endOfTurnPhase,
+  combatWindowMs,
+  REPLAY_WINDOW_MIN_MS,
   bots as botsCfg,
   match as matchCfg,
   type BotWeights,
@@ -30,8 +32,9 @@ import { BotAgent, driveBotTurn } from '../bots/BotAgent';
 
 // ── transport-loop timings (not game rules; pacing only) ──────────────────────────
 const START_DELAY_MS = 1200; // lobby → first shop (let clients render the board)
-const COMBAT_REPLAY_MS = 6500; // hold on 'combat' so clients can watch the replay before next shop
 const SHOP_TICK_MS = 1000; // visible countdown cadence
+// The 'combat' hold is sized per round from the actual fights (combatWindowMs, spec §10) so the
+// replay is never cut off mid-combat; REPLAY_WINDOW_MIN_MS is the floor when nobody is watching.
 
 interface SeatMeta {
   name: string;
@@ -62,6 +65,7 @@ export class MatchRoom extends Room<RoomState> {
   private hostSessionId: string | null = null;
 
   private shopEndsAt = 0;
+  private combatEndsAt = 0; // when the current 'combat' hold ends (→ next shop opens); drives the countdown
   private resolving = false;
   private tickHandle?: ReturnType<typeof setInterval>;
   private timeouts = new Set<ReturnType<typeof setTimeout>>();
@@ -257,9 +261,15 @@ export class MatchRoom extends Room<RoomState> {
   }
 
   private onTick(): void {
-    if (this.phaseState !== 'shop') return;
-    this.state.timer = Math.max(0, Math.ceil((this.shopEndsAt - Date.now()) / 1000));
-    if (this.state.timer <= 0) this.endShop();
+    if (this.phaseState === 'shop') {
+      this.state.timer = Math.max(0, Math.ceil((this.shopEndsAt - Date.now()) / 1000));
+      if (this.state.timer <= 0) this.endShop();
+    } else if (this.phaseState === 'combat') {
+      // The scheduled beginShop() owns the phase transition; this tick only refreshes the public
+      // "next shop in Ns" countdown so a client that skipped its replay can see when the (inert)
+      // frozen shop reopens instead of guessing (spec §10).
+      this.state.timer = Math.max(0, Math.ceil((this.combatEndsAt - Date.now()) / 1000));
+    }
   }
 
   private maybeEndShop(): void {
@@ -305,7 +315,20 @@ export class MatchRoom extends Room<RoomState> {
       if (winner) this.broadcastToast({ kind: 'placement', message: `${winner.name} wins the match!`, seat: winner.seat });
       this.stopTick();
     } else {
-      this.schedule(() => this.beginShop(), COMBAT_REPLAY_MS);
+      // Size the 'combat' hold to the longest replay any watching human actually has this round,
+      // so nobody is yanked to the next shop mid-fight (spec §10). Bots don't watch; if no human
+      // is connected the window floors at REPLAY_WINDOW_MIN_MS.
+      const watchedLogs: CombatEvent[][] = [];
+      for (let seat = 0; seat < m.state.players.length; seat++) {
+        if (!this.clientBySeat(seat)) continue;
+        const log = m.sessions[seat].lastCombatLog;
+        if (log) watchedLogs.push(log);
+      }
+      const windowMs = watchedLogs.length ? combatWindowMs(watchedLogs) : REPLAY_WINDOW_MIN_MS;
+      this.combatEndsAt = Date.now() + windowMs;
+      this.startTick(); // endShop() stopped the tick; resume it so the 'next shop' countdown refreshes
+      this.syncPublic(); // publish the initial countdown now, before the first tick fires
+      this.schedule(() => this.beginShop(), windowMs);
     }
   }
 
@@ -396,7 +419,11 @@ export class MatchRoom extends Room<RoomState> {
     this.state.botFill = st.botFill;
     this.state.winnerSeat = st.winnerSeat;
     this.state.timer =
-      this.phaseState === 'shop' ? Math.max(0, Math.ceil((this.shopEndsAt - Date.now()) / 1000)) : 0;
+      this.phaseState === 'shop'
+        ? Math.max(0, Math.ceil((this.shopEndsAt - Date.now()) / 1000))
+        : this.phaseState === 'combat'
+          ? Math.max(0, Math.ceil((this.combatEndsAt - Date.now()) / 1000)) // seconds until the next shop opens
+          : 0;
 
     while (this.state.players.length < st.players.length) this.state.players.push(new PlayerSchema());
     while (this.state.players.length > st.players.length) this.state.players.pop();
