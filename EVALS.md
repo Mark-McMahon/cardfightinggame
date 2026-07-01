@@ -132,7 +132,7 @@ finalized, each citing its `(Dn)`.
 | EV-BP-01 | `wildkin_motherthorn` — tokensThisTurn≥3 → summoned token +2/+2 | SHOP+COMBAT | P |
 | EV-BP-02 | `wildkin_thornwarden` — alliesAtStart≥5 once → self +2/+4 | COMBAT | P |
 | EV-BP-03 | `wildkin_grovelord` — alliesAtStart≥5 → board +2/+2 (+ end-of-turn token trickle ×Grovecaller) | COMBAT | P |
-| EV-BP-04 | `wildkin_packmother` — deaths≥2 everyN → board +2/+3 | COMBAT | P |
+| EV-BP-04 | `wildkin_packmother` — deaths≥2 everyN → board +2/+2 | COMBAT | P |
 | EV-BP-05 | `wildkin_brackentide` — battlecries≥2 → summon 2 Thornpup (base 1 always) | SHOP | P |
 | EV-BP-06 | `revenants_mortarch` — deaths≥3 once → board +3/+3 | COMBAT | P |
 | EV-BP-07 | `revenants_palelich` — revenantDeaths≥3 → ×2 damage amp (capped) | COMBAT | P |

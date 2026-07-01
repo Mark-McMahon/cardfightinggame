@@ -45,7 +45,7 @@ export const breakpoints: BreakpointsConfig = {
     { card: 'wildkin_motherthorn', counter: 'tokensThisTurn', threshold: 3, tokenAtk: 2, tokenHp: 2 },
     { card: 'wildkin_thornwarden', counter: 'alliesAtStart', threshold: 5, once: true, atk: 2, hp: 4 }, // threshold 4→5 (audit Gate 3): a real go-wide commitment, matching Grovelord/Tempest/Titanforge; payoff still pays splashes to compete with mono (§16.7a)
     { card: 'wildkin_grovelord', counter: 'alliesAtStart', threshold: 5, once: true, atk: 2, hp: 2 }, // Prompt-1 Part B rework: a wide-board start-of-combat bomb that survives a full board (was a cap-truncated summon)
-    { card: 'wildkin_packmother', counter: 'deaths', threshold: 2, atk: 2, hp: 3 }, // each-N (existing avenge)
+    { card: 'wildkin_packmother', counter: 'deaths', threshold: 2, atk: 2, hp: 2 }, // each-N (existing avenge); hp aligned to as-shipped card payoff (engines.wildkin.avengePayoff = 2/2)
     { card: 'wildkin_brackentide', counter: 'battlecries', threshold: 2, summonUnitId: 'wildkin_thornpup', summonCount: 2 },
     // ── Revenants / DEATHS ──
     { card: 'revenants_mortarch', counter: 'deaths', threshold: 3, once: true, atk: 3, hp: 3 },
