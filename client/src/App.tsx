@@ -8,7 +8,7 @@ import { usePublicState, usePrivateState, useCombatLog, useRoom } from './net/ho
 import { createRoom, joinRoom } from './net/game';
 import { Lobby } from './scenes/Lobby';
 import { Shop } from './scenes/Shop';
-import { CombatReplay } from './scenes/CombatReplay';
+import { CombatReplay, type CombatHeader } from './scenes/CombatReplay';
 import { Results } from './scenes/Results';
 import { Toasts, resolveOpponent, sideForSeat } from './components';
 
@@ -80,7 +80,21 @@ function CombatScene(): ReactNode {
       </div>
     );
   }
-  return <CombatReplay log={log} myBoard={myBoard} opponentName={oppName} side={mySide} />;
+  // VS command bar data (§10). Identity + HP come from the already-synced public schema — the combat
+  // log is identity-free (invariant #2), so nothing here is plumbed through it. A ghost opponent has no
+  // living player row → its HP is null (the bar shows the name + "Ghost" tag, no HP).
+  const myPub = pub?.players.find((p) => p.seat === conn.seat);
+  const oppPub = opponent?.seat != null ? pub?.players.find((p) => p.seat === opponent.seat) : undefined;
+  const header: CombatHeader = {
+    round: pub?.round ?? null,
+    myName: myPub?.name ?? 'You',
+    myHp: myPub ? Math.max(0, myPub.hp) : null,
+    oppName,
+    oppHp: oppPub ? Math.max(0, oppPub.hp) : null,
+    oppIsBot: !!oppPub?.isBot,
+    oppGhost: !!opponent?.ghost,
+  };
+  return <CombatReplay log={log} myBoard={myBoard} opponentName={oppName} side={mySide} header={header} />;
 }
 
 export function App(): ReactNode {

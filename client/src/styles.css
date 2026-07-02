@@ -1,16 +1,28 @@
 :root {
-  /* Warm Hearth — aged leather/wood + ember gold (replaces the v1 cold navy-charcoal).
-     The whole app reskins off these; card portraits (cardArt.ts) stay tribe-themed. */
-  --bg: #1a1410;       /* warm near-black */
-  --panel: #241c15;    /* aged wood */
-  --panel2: #2f261c;   /* raised leather */
-  --line: #4a3a28;     /* stitched border */
-  --text: #efe6d6;     /* parchment */
-  --dim: #9c8a72;      /* faded ink */
-  --accent: #e0a82e;   /* ember gold */
-  --good: #7f9a3f;     /* moss green */
-  --bad: #b4452f;      /* rust red */
-  --gold: #e8be46;     /* coin gold */
+  /* Dusk Battlefield — a twilight sky over an earthen war-field, lit by ember-gold sunset
+     (replaces the old "Warm Hearth" tavern palette). The whole app reskins off these tokens;
+     card portraits (cardArt.ts) stay tribe-themed. */
+  --bg: #140f1e;       /* deep dusk indigo-black — the page ground under the sky */
+  --panel: #201a2e;    /* twilight panel */
+  --panel2: #2b2440;   /* raised dusk panel */
+  --line: #4a3f5e;     /* dusk border (violet-grey) */
+  --text: #f4ecdd;     /* warm parchment — stays legible over twilight */
+  --dim: #ab9db8;      /* faded dusk ink */
+  --accent: #f0b93e;   /* ember-gold — the sunset made into UI light */
+  --good: #86ac4a;     /* field green */
+  --bad: #d0563a;      /* rust red (shared with the foe hue) */
+  --gold: #f2c14e;     /* sunset gold */
+
+  /* ownership — the semantic "you vs them" pair (design-spec §10), kept SEPARATE from the accent.
+     you = cool steel-teal, foe = rust-crimson; reused for the VS crest, HP bar, and army rim-light
+     so who-is-who reads at a glance without decoding text. */
+  --ally: #46b0b8;  --ally-lo: #1c4a50;  --ally-hi: #8fe0e6;
+  --foe:  #d0563a;  --foe-lo:  #5a2016;  --foe-hi:  #f6997d;
+
+  /* dusk sky + ground — the battlefield scenery gradients, single-sourced here (invariant #4 spirit) */
+  --sky-zenith: #171232;  --sky-mid: #3d2a4e;  --sky-glow: #e0793c;  --sky-core: #ffb257;
+  --ground-far: #2d2536;  --ground-near: #17110b;
+  --ember-hot: #ffd77a;
   /* display face for headings — system serifs only, no web-font dependency */
   --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
   /* material edges — a lit top + shadowed inner reads as carved wood, not flat glass.
@@ -30,9 +42,9 @@
      tavern / hero dock use is single-sourced here, so the whole tabletop reshapes from one place —
      the same discipline as --card-scale). Positional indices (--i/--off/--dist) are supplied per-card
      by the scene; these tokens are what they're multiplied by. ── */
-  --felt: #23180d;                 /* board felt — warm, darker than the surround so it reads as a surface */
-  --felt-lip: #6b5226;             /* the felt's raised wooden lip */
-  --shelf: #2c1e12;                /* tavern shelf recess */
+  --felt: #1b1526;                 /* board felt — dusk earth, darker than the surround so it reads as a surface */
+  --felt-lip: #6b5433;             /* the felt's raised bronze lip (the table's metal edge, warm vs the dusk) */
+  --shelf: #221a30;                /* tavern shelf recess */
   --table-shadow: 0 14px 20px -10px #000c, 0 3px 6px #0008;  /* a token standing on the felt */
   --board-arc-step: 14px;          /* vertical rise per unit of distance-from-centre → the board's arc */
   --hand-fan-step: 4.5deg;         /* rotation per signed-offset-from-centre → the hand's fan */
@@ -44,11 +56,15 @@
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  /* faint horizontal grain + a warm top vignette — gives the surface aged-paper/wood
-     material so it doesn't read as a flat modern fill. Fixed so it doesn't scroll. */
+  /* the whole app sits on a battlefield at dusk: a deep-indigo zenith grades down through a
+     twilight band to a burning ember horizon, then into earthen field. A low sun glow warms the
+     right-of-centre. Fixed so it doesn't scroll with content. */
   background:
-    repeating-linear-gradient(0deg, #0000000a 0 2px, transparent 2px 4px),
-    radial-gradient(125% 80% at 50% 0%, #2a2014 0%, var(--bg) 60%);
+    radial-gradient(46% 34% at 62% 45%, #ffcf8f2e 0%, transparent 58%),
+    radial-gradient(120% 60% at 62% 49%, var(--sky-glow) 0%, transparent 44%),
+    linear-gradient(180deg,
+      var(--sky-zenith) 0%, #241a3d 22%, var(--sky-mid) 40%,
+      #7a3f52 50%, #6a4030 56%, var(--ground-far) 66%, var(--ground-near) 100%);
   background-attachment: fixed;
   background-color: var(--bg);
   color: var(--text);
@@ -131,7 +147,7 @@ input {
 .sname { flex: 1; min-width: 0; font-weight: 600; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stier { font-size: 10px; font-weight: 800; color: var(--dim); background: #2a2a2a; border: 1px solid var(--line); border-radius: 2px; padding: 1px 5px; font-variant-numeric: tabular-nums; }
 .shp { color: #ff8a8a; font-weight: 800; font-variant-numeric: tabular-nums; }
-.srow.me { background: #3a2c14; border-color: var(--accent); }
+.srow.me { background: #33284a; border-color: var(--accent); }
 .srow.me .srank { color: var(--accent); }
 .srow.vs { border-color: var(--accent); border-style: dashed; }
 .srow.dead { opacity: 0.4; }
@@ -236,35 +252,126 @@ input {
 .toast-wrap { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 6px; z-index: 50; }
 .toast { background: var(--panel2); border: 1px solid var(--accent); border-radius: 2px; padding: 8px 12px; max-width: 320px; }
 
-/* combat overlay — single battle line per side, causal beat-based replay (§16.6 rework) */
-.overlay { position: fixed; inset: 0; background: #120d09ee; z-index: 40; display: flex; flex-direction: column; align-items: center; padding: 24px; overflow: auto; }
-.combat-head { display: flex; align-items: center; gap: 12px; width: 100%; max-width: 1200px; }
-.combat-head h2 { margin: 0; font-family: var(--serif); letter-spacing: 0.3px; }
-.ctx-counter { font-size: 16px; font-weight: 800; padding: 2px 10px; border-radius: 2px; background: #2a1530; border: 1px solid #8a5cb0; transition: box-shadow 0.2s, border-color 0.2s; }
+/* combat overlay — the battlefield-at-dusk arena; single battle line per side, causal beat replay (§10) */
+.overlay { position: fixed; inset: 0; background: #0d0a16f2; z-index: 40; display: flex; flex-direction: column; align-items: center; padding: 20px; overflow: auto; }
+
+/* ── VS COMMAND BAR (§10) — you (cool) vs the paired player (warm): seat-coloured crest + name +
+   live HP, a round sigil between. This is the "who am I fighting" read; identity + side are resolved
+   from the synced pairing (resolveOpponent / sideForSeat), never plumbed through the identity-free log. */
+.vs-hud { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; width: 100%; max-width: 1240px; }
+.vs-plate {
+  display: flex; align-items: center; gap: 12px; min-width: 0;
+  padding: 8px 14px; border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff0e, #00000048);
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 #ffffff14, 0 6px 18px -8px #000b;
+}
+.vs-plate.foe { flex-direction: row-reverse; text-align: right; }
+/* size to content and pin to the outer edges — the sigil takes the slack in the middle, so the plates
+   don't stretch into empty bars (they read as two combatant name-tags flanking the VS). */
+.vs-plate.you { justify-self: start; border-color: color-mix(in srgb, var(--ally) 42%, var(--line)); }
+.vs-plate.foe { justify-self: end; border-color: color-mix(in srgb, var(--foe) 42%, var(--line)); }
+.vs-crest {
+  flex: none; width: 50px; height: 50px; border-radius: 50%; position: relative;
+  display: grid; place-items: center;
+  font-family: var(--serif); font-size: 23px; font-weight: 800; color: #fff; text-shadow: 0 1px 3px #000a;
+  box-shadow: inset 0 2px 4px #ffffff33, inset 0 -3px 6px #00000070, 0 3px 8px #0009;
+}
+.vs-plate.you .vs-crest { background: radial-gradient(circle at 34% 28%, var(--ally-hi), var(--ally) 44%, var(--ally-lo) 100%); }
+.vs-plate.foe .vs-crest { background: radial-gradient(circle at 34% 28%, var(--foe-hi), var(--foe) 44%, var(--foe-lo) 100%); }
+.vs-crest::after { content: ''; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid #00000055; box-shadow: inset 0 0 0 1px #ffffff22; }
+.vs-who { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.vs-name { font-family: var(--serif); font-weight: 700; font-size: 20px; line-height: 1; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vs-tag { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); display: flex; align-items: center; gap: 6px; }
+.vs-plate.foe .vs-tag { justify-content: flex-end; }
+.vs-botpin { font-size: 9px; padding: 1px 5px; border-radius: 4px; background: #ffffff16; color: var(--dim); letter-spacing: 0.1em; }
+.vs-hpwrap { display: flex; align-items: center; gap: 8px; margin-top: 1px; }
+.vs-plate.foe .vs-hpwrap { flex-direction: row-reverse; }
+.vs-hpbar { position: relative; width: 116px; height: 8px; border-radius: 5px; background: #0007; overflow: hidden; box-shadow: inset 0 1px 2px #000a, inset 0 0 0 1px #ffffff10; }
+.vs-hpfill { position: absolute; inset: 0; border-radius: 5px; transition: width 0.4s ease; background: linear-gradient(180deg, #ffffff40, #ffffff00 42%), var(--good); }
+.vs-hpnum { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text); min-width: 22px; }
+.vs-hpnum .vs-heart { color: var(--bad); font-size: 11px; margin-right: 2px; }
+
+.vs-sigil { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.vs-round { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); padding: 3px 11px; border-radius: 20px; border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); background: #2a1c0e88; }
+.vs-mark {
+  width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center;
+  font-family: var(--serif); font-weight: 800; font-size: 19px; color: #1a1206;
+  background: radial-gradient(circle at 36% 30%, var(--ember-hot), var(--accent) 46%, #a9741d 100%);
+  box-shadow: 0 0 0 4px #2a1c0e, 0 0 20px -2px var(--accent), inset 0 -3px 6px #00000055;
+}
+/* the contextual deaths counter (decision #27) tucks under the sigil */
+.ctx-counter { font-size: 13px; font-weight: 800; padding: 2px 9px; border-radius: 20px; background: #2a1530; border: 1px solid #8a5cb0; transition: box-shadow 0.2s, border-color 0.2s; }
 /* the deaths counter crossing a payoff threshold = the "why" behind a swing → flares gold */
 .ctx-counter.fired { border-color: var(--gold); box-shadow: 0 0 14px #e8be46aa; background: #3a2a10; }
 
 /* the battlefield is the positioned frame the attacker↔defender / source→target links measure against.
-   Reskinned (§10) as ONE shared felt arena — two armies on the same surface, split by a clash line —
-   rather than two separate bordered boxes. Purely presentational: the beat choreography, the measured
-   slot geometry, and the link overlay are unchanged. */
+   Reskinned (§10) as the DUSK ARENA — a twilight sky over an earthen field, both armies on the one
+   surface split by a lit clash seam (enemy set back near the horizon, you grounded in the foreground).
+   Purely presentational: the beat choreography, the MEASURED slot geometry (getBoundingClientRect of
+   each .bl-slot relative to this frame), and the link overlay are unchanged — the scenery layers below
+   are pointer-events:none and carry NO .bl-slot, so they never perturb the strike vectors. */
 .battlefield {
-  position: relative; display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 1240px; margin-top: 8px;
-  padding: 18px 20px; border-radius: 12px;
+  position: relative; display: flex; flex-direction: column; justify-content: center; gap: 8px;
+  width: 100%; max-width: 1240px; margin-top: 12px;
+  padding: 34px 22px 26px; border-radius: 14px; overflow: hidden; isolation: isolate;
   background:
-    radial-gradient(80% 55% at 50% 0%, #3a2712 0%, transparent 60%),
-    radial-gradient(80% 55% at 50% 100%, #3a2712 0%, transparent 60%),
-    linear-gradient(180deg, #241809 0%, #180f07 50%, #241809 100%);
-  border: 2px solid var(--felt-lip); box-shadow: inset 0 0 60px #0008, 0 12px 34px -14px #000c;
+    radial-gradient(44% 30% at 60% 42%, #ffcf8f38 0%, transparent 62%),
+    radial-gradient(66% 42% at 60% 46%, var(--sky-glow) 0%, transparent 54%),
+    linear-gradient(180deg,
+      var(--sky-zenith) 0%, #241a3d 16%, var(--sky-mid) 30%, #7a3f52 44%,
+      #8a4a30 49%, #3c3030 54%, var(--ground-far) 64%, var(--ground-near) 100%);
+  border: 2px solid var(--felt-lip);
+  box-shadow: inset 0 0 90px #0009, 0 16px 40px -16px #000d;
+}
+/* distant mountain ridge silhouette on the horizon */
+.battlefield::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 33%; height: 17%; z-index: 0; pointer-events: none;
+  background: linear-gradient(180deg, transparent, #120c1e 88%);
+  clip-path: polygon(0 100%,0 60%,9% 46%,16% 64%,25% 40%,34% 60%,42% 34%,53% 58%,61% 30%,70% 56%,79% 42%,89% 62%,97% 46%,100% 64%,100% 100%);
+  opacity: 0.78;
+}
+/* trampled-field furrows on the lower ground, converging for a little perspective */
+.battlefield::after {
+  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: repeating-linear-gradient(94deg, #00000016 0 2px, transparent 2px 48px);
+  -webkit-mask-image: linear-gradient(180deg, transparent 52%, #000 80%);
+          mask-image: linear-gradient(180deg, transparent 52%, #000 80%);
+}
+/* drifting embers rising off the field (decorative; killed under prefers-reduced-motion) */
+.field-embers { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+.field-ember { position: absolute; bottom: -10px; width: 3px; height: 3px; border-radius: 50%; background: var(--ember-hot); box-shadow: 0 0 6px 1px #ffb85788; opacity: 0; animation: emberRise linear infinite; }
+@keyframes emberRise {
+  0% { transform: translateY(0) translateX(0); opacity: 0; }
+  14% { opacity: 0.9; }
+  80% { opacity: 0.45; }
+  100% { transform: translateY(-340px) translateX(18px); opacity: 0; }
 }
 .link-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 6; overflow: visible; }
-.bl-side { display: flex; flex-direction: column; gap: 4px; }
-/* army banner — the side's name reads as a small standard over its ranks */
-.bl-label {
-  font-family: var(--serif); font-weight: 800; font-size: 13px; letter-spacing: 0.4px; color: #e8cf9a;
-  align-self: flex-start; padding: 2px 12px; border-radius: 2px;
-  background: #0004; border: 1px solid #ffffff12;
+/* the two armies + the clash seam ride ABOVE the scenery layers */
+.bl-side { position: relative; z-index: 2; display: flex; flex-direction: column; gap: 4px; }
+/* DEPTH (§10): the enemy army sits set back near the horizon. Achieved with ATMOSPHERE only —
+   a subtle haze veil + slight desaturation — NOT a CSS transform: scaling the side would rescale
+   the .fx lunge's translate space and desync the measured strike geometry (§7 / pinned combat feel).
+   Cards stay full size and fully legible; the sky-behind vs ground-under-you does the "distance". */
+.bl-side.foe { filter: saturate(0.9) brightness(0.93); }
+.bl-side.foe .bl-line { position: relative; }
+.bl-side.foe .bl-line::before {
+  content: ''; position: absolute; inset: -6px -12px; z-index: 5; pointer-events: none; border-radius: 10px;
+  background: linear-gradient(180deg, #e78a4a1f, transparent 55%);
 }
+/* NB: ownership is conveyed by the VS bar, row position, the enemy haze, and the coloured row tags —
+   NOT a per-card rim. A `.bl-side.you .unit` box-shadow (specificity 0-2-1) would override the combat
+   focus glows (`.is-attacker .unit`, 0-1-1) and suppress the "who's striking" highlight, so it's omitted. */
+/* subtle army ownership tag at the row's edge — the VS bar up top is the primary identity, this just
+   anchors "which row is whose" right at the ranks (not the prominent banner treatment). */
+.bl-label {
+  font-family: var(--serif); font-weight: 700; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+  align-self: flex-start; padding: 2px 10px; border-radius: 20px;
+  background: #00000055; border: 1px solid #ffffff12;
+}
+.bl-side.you .bl-label { color: var(--ally-hi); border-color: color-mix(in srgb, var(--ally) 45%, transparent); }
+.bl-side.foe .bl-label { color: var(--foe-hi); border-color: color-mix(in srgb, var(--foe) 45%, transparent); align-self: flex-end; }
 /* each army sits directly on the shared felt — no box of its own */
 .bl-line {
   display: flex; gap: calc(12px * var(--card-scale)); flex-wrap: nowrap; align-items: flex-end; min-height: calc(150px * var(--card-scale));
@@ -286,17 +393,18 @@ input {
    tooltip reads clearly even mid-beat (§16.6). */
 .bl-slot:hover { z-index: 30; }
 .bl-empty { padding: 0 8px; }
-/* the clash line — a lit seam down the middle where the two armies meet, with the VS medallion on it */
-.bl-divider { display: flex; align-items: center; justify-content: center; height: 3px; position: relative; margin: 4px 0;
-  background: linear-gradient(90deg, transparent, #e0a82e00 4%, #e0a82e66 50%, #e0a82e00 96%, transparent);
-  box-shadow: 0 0 12px #e0a82e33; }
-.vs-badge { position: absolute; font-family: var(--serif); font-size: 15px; font-weight: 800; color: var(--accent);
-  background: radial-gradient(circle, #2a1c0d 0%, #1a1108 100%); border: 1px solid var(--felt-lip); border-radius: 50%;
-  width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px #0009; }
+/* the clash seam — a lit ember line down no-man's-land where the two armies meet, with a small
+   crossed-swords marker on it (the "VS" identity now lives in the command bar up top). */
+.bl-divider { position: relative; z-index: 2; display: flex; align-items: center; justify-content: center; height: 2px; margin: 6px 0;
+  background: linear-gradient(90deg, transparent, #ff9a4a00 6%, #ff9a4a88 50%, #ff9a4a00 94%, transparent);
+  box-shadow: 0 0 14px #ff8a3a44; }
+.vs-badge { position: absolute; font-size: 14px; color: #ffce8f;
+  background: radial-gradient(circle, #17101f 0%, #0d0a16 100%); border: 1px solid #ffab5a55; border-radius: 50%;
+  width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px #0009, 0 0 10px #ff8a3a33; }
 
 /* focus system: the active participants light up, and during a STRIKE the rest of the board dims —
    the asymmetry (only the initiator is spotlit + lunges) is the clearest "who started it" signal. */
-.bl-slot .unit { transition: box-shadow 0.2s, border-color 0.2s, opacity 0.22s; border-color: #6b5330; border-radius: 7px; background: linear-gradient(180deg, #34281a 0%, var(--panel2) 72%); box-shadow: var(--bevel), var(--table-shadow); }
+.bl-slot .unit { transition: box-shadow 0.2s, border-color 0.2s, opacity 0.22s; border-color: #574b6b; border-radius: 7px; background: linear-gradient(180deg, #37304e 0%, var(--panel2) 72%); box-shadow: var(--bevel), var(--table-shadow); }
 .is-attacker .unit { border-color: var(--accent); box-shadow: 0 0 18px var(--accent); z-index: 4; }
 .is-target .unit { border-color: #ff5a52; box-shadow: 0 0 16px #ff5a52; }
 .is-source .unit { border-color: var(--gold); box-shadow: 0 0 12px #e8be4688; }
@@ -507,7 +615,7 @@ input {
   padding: 16px 18px 18px; border-radius: 10px;
   border: 2px solid var(--felt-lip);
   background:
-    radial-gradient(120% 90% at 50% 8%, #34240f 0%, var(--felt) 55%, #180f07 100%);
+    radial-gradient(120% 90% at 50% 8%, #2c2440 0%, var(--felt) 52%, #100c1a 100%);
   box-shadow: inset 0 2px 0 #ffffff10, inset 0 0 60px #0007, 0 10px 30px -12px #000a;
   min-height: calc(100vh - 40px);
 }
@@ -515,8 +623,8 @@ input {
 /* ── TAVERN SHELF — the shop counter; drag a minion DOWN to buy. Doubles as the sell target. ── */
 .tavern {
   border-radius: 8px; padding: 8px 12px 12px;
-  background: linear-gradient(180deg, #3a2917 0%, var(--shelf) 100%);
-  border: 1px solid #573f22; border-top: 2px solid #6d5030;
+  background: linear-gradient(180deg, #2f2547 0%, var(--shelf) 100%);
+  border: 1px solid #4a3f5e; border-top: 2px solid var(--felt-lip);
   box-shadow: inset 0 1px 0 #ffffff14, inset 0 -10px 20px -12px #000, 0 4px 10px -6px #000a;
   transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
 }
@@ -526,7 +634,7 @@ input {
 .shelf {
   display: flex; gap: calc(10px * var(--card-scale)); flex-wrap: wrap; align-items: flex-end;
   min-height: var(--card-h); padding: 10px 8px 6px;
-  border-radius: 6px; background: linear-gradient(180deg, #1c1309, #241811);
+  border-radius: 6px; background: linear-gradient(180deg, #141021, #1e1730);
   box-shadow: inset 0 3px 8px #000a, inset 0 -1px 0 #ffffff0a;
 }
 .shelf-empty, .board-empty, .hand-empty { align-self: center; }
@@ -546,9 +654,9 @@ input {
   border-radius: 8px; padding: 26px 16px 22px;
   display: flex; align-items: flex-end; justify-content: center;
   background:
-    radial-gradient(70% 60% at 50% 100%, #4a3616 0%, transparent 62%),
-    radial-gradient(120% 120% at 50% 0%, #2a1c0d 0%, #1d1409 100%);
-  border: 1px solid #5a4322;
+    radial-gradient(70% 60% at 50% 100%, #3a2f4e 0%, transparent 62%),
+    radial-gradient(120% 120% at 50% 0%, #241c34 0%, #14101f 100%);
+  border: 1px solid #4a3f5e;
   box-shadow: inset 0 2px 10px #000a, inset 0 0 0 1px #ffffff08;
 }
 .board-tag {
@@ -583,8 +691,8 @@ input {
 
 /* on the felt, the card token warms up + rounds slightly so it reads as a standee, not a UI box */
 .shelf .unit, .board-row .unit, .hand-fan .unit {
-  border-color: #6b5330; border-radius: 7px;
-  background: linear-gradient(180deg, #34281a 0%, var(--panel2) 72%);
+  border-color: #574b6b; border-radius: 7px;
+  background: linear-gradient(180deg, #37304e 0%, var(--panel2) 72%);
 }
 
 /* ── DOCK — hero zone (left) + fanned hand (right) ── */
@@ -595,8 +703,8 @@ input {
   display: grid; grid-template-columns: auto auto 1fr; grid-template-rows: auto auto; gap: 8px 12px;
   align-items: center; align-content: center;
   padding: 12px 16px; border-radius: 10px; flex: 0 0 auto; min-width: 330px;
-  background: linear-gradient(180deg, #2c2013, #1f1710);
-  border: 1px solid #574121;
+  background: linear-gradient(180deg, #2a2340, #1c1628);
+  border: 1px solid #4a3f5e;
   box-shadow: var(--plaque), 0 6px 16px -8px #000a;
 }
 .hero-crest {
@@ -662,4 +770,17 @@ input {
 @media (max-width: 900px) { :root { --card-scale: 0.82; } }
 @media (max-width: 860px) {
   .match-main.tabletop > .table { min-height: 0; }
+}
+@media (max-width: 720px) {
+  .vs-name { font-size: 16px; }
+  .vs-hpbar { width: 72px; }
+  .vs-plate { padding: 6px 10px; gap: 9px; }
+  .vs-crest, .vs-mark { width: 42px; height: 42px; }
+}
+
+/* respect reduced-motion: drop the purely-decorative ambient motion (the battlefield embers and the
+   Ready-button pulse). The combat replay's own beat choreography is the game's core read, so it stays. */
+@media (prefers-reduced-motion: reduce) {
+  .field-ember { animation: none; opacity: 0; }
+  .hero .ctl-btn.ready { animation: none; }
 }

@@ -880,6 +880,32 @@ build from functional mechanics only; original names/text/art throughout.
     combat-outcome change** (client-only); the side↔pairing mapping stays pinned by
     `client/src/components.test.ts`, and the required prop is enforced by `pnpm typecheck`.
 
+### Client visual redesign (Round 13) — "Dusk Battlefield" + combat VS command bar
+
+67. **The client is reskinned "Warm Hearth" (tavern) → "Dusk Battlefield", and combat gains a VS
+    command bar naming the opponent (2026-07-02, spec §10; client-only, no engine change).** The user
+    asked for a *complete* visual overhaul — "a completely different background where the cards are on
+    a battlefield" — and to "see the name of the player you're fighting against" in combat.
+    **Chosen direction (confirmed with the user before building): mythic battlefield at dusk, whole app
+    reskinned, opponent shown as a VS header with crests + HP.** Three parts: **(a)** the `styles.css`
+    `:root` palette is retuned from warm leather/ember to a **Dusk Battlefield** token set (twilight
+    sky, ember horizon, earthen ground) that the *whole* app — shop, lobby, results, combat — reskins
+    off, so it reads as one world; **(b)** the combat overlay becomes a full **dusk arena** (sky →
+    ember horizon → field, ridge silhouette, ambient embers), enemy army set back near the horizon;
+    **(c)** a new **VS command bar** leads the overlay — you (teal) vs the paired player (rust), each a
+    seat-coloured crest + name + live HP, resolved from the already-synced public schema (same
+    `resolveOpponent`/`sideForSeat` helpers, no new server data), passed via a new **optional `header`
+    prop** on `CombatReplay` (absent ⇒ the dev `ReplayLab` fallback "You vs \<opponent\>", no HP).
+    **Rationale / key constraint:** the enemy-row "set back" depth is **atmosphere only (haze +
+    desaturation), never `transform: scale`** — the strike choreography measures each `.bl-slot`'s rect
+    relative to the field and lunges via an inner `.fx` translate, so rescaling a side would desync the
+    lunge from the sprite (the same correctness class as a beat-start HP drain). Ownership colour
+    (you=teal/foe=rust) is a semantic pair kept **separate** from the ember-gold accent. **No engine /
+    combat-outcome / intent change**; all e2e selectors (`.board-felt`, `.tavern`, `.hero .ctl-btn.ready`,
+    `.hand-fan`, the `Skip` button) and the pinned combat semantics are preserved; verified by
+    `pnpm -r typecheck`, the client unit tests, a production build, and driving a real match to shop +
+    combat (Playwright) — the VS bar shows the live opponent name + HP (e.g. "Mark ♥30 vs Bot 8 ♥30").
+
 ## Tribe name map (clean-room — never ship the reference names)
 | Reference (do NOT ship) | Original name | Identity |
 |---|---|---|

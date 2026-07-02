@@ -23,9 +23,10 @@
 // Plus the contextual deaths counter (decision #27): shown only when you own a deaths-consuming card.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { motion, AnimatePresence, useAnimationControls } from 'framer-motion';
 import type { CombatEvent, Keyword, TribeId } from '@cardgame/shared';
-import { getCard, breakpoints, totalWeight, REPLAY_WINDOW_CAP_MS, REPLAY_TAIL_PAD_MS } from '@cardgame/shared';
+import { getCard, breakpoints, totalWeight, match, REPLAY_WINDOW_CAP_MS, REPLAY_TAIL_PAD_MS } from '@cardgame/shared';
 import { Card, type CardModel, type CombatCardProps } from '../components';
 import { KW_ICON, KW_LABEL } from '../icons';
 import { beats, type Beat } from './combatBeats';
@@ -184,7 +185,23 @@ function useBeatClock(durationMs: number, playing: boolean, resetKey: number, on
   }, [durationMs, playing, resetKey]);
 }
 
-export function CombatReplay({ log, myBoard, opponentName, side }: { log: CombatEvent[]; myBoard: { uid: string; cardId: string }[]; opponentName: string; side: 'a' | 'b' }) {
+// The VS command bar's data (§10). Identity + HP come from the already-synced public schema (resolved
+// once in App.CombatScene via resolveOpponent / players), NOT from the identity-free combat log. All
+// fields are optional-friendly: `round`/HP may be null (the dev ReplayLab has no match context; a ghost
+// opponent has no living HP row), and the bar renders what it has.
+export interface CombatHeader {
+  round: number | null;
+  myName: string;
+  myHp: number | null;
+  oppName: string;
+  oppHp: number | null;
+  oppIsBot: boolean;
+  oppGhost: boolean;
+}
+
+export function CombatReplay({ log, myBoard, opponentName, side, header }: { log: CombatEvent[]; myBoard: { uid: string; cardId: string }[]; opponentName: string; side: 'a' | 'b'; header?: CombatHeader }) {
+  // Fallback for callers without match context (ReplayLab): show "You vs <opponent>", no round/HP.
+  const hud: CombatHeader = header ?? { round: null, myName: 'You', myHp: null, oppName: opponentName, oppHp: null, oppIsBot: false, oppGhost: false };
   const bs = useMemo(() => beats(log), [log]);
   // Auto-fit: the server holds the 'combat' phase for combatWindowMs (capped). If this fight's
   // natural playback would overrun that cap, compress the dwell just enough to finish inside it,
@@ -374,17 +391,25 @@ export function CombatReplay({ log, myBoard, opponentName, side }: { log: Combat
 
   return (
     <div className="overlay">
-      <div className="combat-head">
-        <h2>Combat — Round replay</h2>
-        {showDeaths && (
-          <span className={'ctx-counter' + (deathsFired ? ' fired' : '')} title="friendly deaths this combat">
-            Deaths {runningDeaths}
-            {deathsThreshold != null ? ` / ${deathsThreshold}` : ''}
-          </span>
-        )}
+      {/* VS command bar (§10): who you're fighting — you (cool) vs the paired player (warm), each with
+          a seat-coloured crest, name, and live HP; the round sigil + deaths counter sit between. */}
+      <div className="vs-hud">
+        <PlayerPlate side="you" name={hud.myName} hp={hud.myHp} />
+        <div className="vs-sigil">
+          {hud.round != null && <div className="vs-round">Round {hud.round}</div>}
+          <div className="vs-mark">VS</div>
+          {showDeaths && (
+            <span className={'ctx-counter' + (deathsFired ? ' fired' : '')} title="friendly deaths this combat">
+              Deaths {runningDeaths}
+              {deathsThreshold != null ? ` / ${deathsThreshold}` : ''}
+            </span>
+          )}
+        </div>
+        <PlayerPlate side="foe" name={hud.oppName} hp={hud.oppHp} isBot={hud.oppIsBot} ghost={hud.oppGhost} />
       </div>
 
       <motion.div className={'battlefield' + (beat?.kind === 'strike' ? ' striking' : '')} ref={fieldRef} animate={fieldShake}>
+        <FieldEmbers />
         <svg className="link-overlay">
           {/* buff/source links: a soft dashed line from source → recipient, faded in each beat. */}
           {links.map((l, i) => (
@@ -405,11 +430,11 @@ export function CombatReplay({ log, myBoard, opponentName, side }: { log: Combat
           ))}
         </svg>
 
-        <BattleLine label={topSide === mySide ? 'You' : opponentName} units={cur[topSide]} {...lineProps} />
+        <BattleLine owner={topSide === mySide ? 'you' : 'foe'} label={topSide === mySide ? 'You' : opponentName} units={cur[topSide]} {...lineProps} />
         <div className="bl-divider">
-          <span className="vs-badge">VS</span>
+          <span className="vs-badge">⚔</span>
         </div>
-        <BattleLine label={bottomSide === mySide ? 'You' : opponentName} units={cur[bottomSide]} {...lineProps} />
+        <BattleLine owner={bottomSide === mySide ? 'you' : 'foe'} label={bottomSide === mySide ? 'You' : opponentName} units={cur[bottomSide]} {...lineProps} />
       </motion.div>
 
       <div className={'beat-caption' + (deathsFired && beat?.kind === 'deathrattle' ? ' breakpoint' : '')}>
@@ -499,6 +524,7 @@ function computeFocus(beat: Beat | undefined, cur: { a: RUnit[]; b: RUnit[] }, p
 }
 
 interface LineProps {
+  owner: 'you' | 'foe'; // ownership side → tints the row tag + haze (identity read; §10)
   label: string;
   units: RUnit[];
   focus: Focus;
@@ -515,12 +541,12 @@ interface LineProps {
   onImpact: () => void; // the attacker's fx calls this at full lunge extension
 }
 
-function BattleLine({ label, units, focus, strikeGeom, sFit, dFit, corpsesCleared, beatIdx, changeDelayMs, hpDrainMs, tickMs, isStrike, impactReached, onImpact }: LineProps) {
+function BattleLine({ owner, label, units, focus, strikeGeom, sFit, dFit, corpsesCleared, beatIdx, changeDelayMs, hpDrainMs, tickMs, isStrike, impactReached, onImpact }: LineProps) {
   // A unit dying THIS beat stays on the board (showing 0 HP, then crumbling) UNTIL `corpsesCleared`,
   // so its death cue reads fully before AnimatePresence collapses it out and the row reflows.
   const shown = units.filter((u) => !u.dead || (focus.doomed.has(u.uid) && !corpsesCleared));
   return (
-    <div className="bl-side">
+    <div className={'bl-side ' + owner}>
       <div className="bl-label">{label}</div>
       <div className="bl-line">
         {shown.length === 0 && <span className="bl-empty dim">— wiped —</span>}
@@ -646,6 +672,56 @@ function BattleLine({ label, units, focus, strikeGeom, sFit, dFit, corpsesCleare
           })}
         </AnimatePresence>
       </div>
+    </div>
+  );
+}
+
+/** One side of the VS command bar: a seat-coloured crest medallion (the player's initial), their
+ *  display name, an ownership tag, and a live HP bar (green→amber→red by fraction of starting health).
+ *  The crest colour comes from the `.vs-plate.you`/`.foe` CSS (ally teal / foe rust), not a prop. */
+function PlayerPlate({ side, name, hp, isBot, ghost }: { side: 'you' | 'foe'; name: string; hp: number | null; isBot?: boolean; ghost?: boolean }): ReactNode {
+  const initial = (name || '?').trim().slice(0, 1).toUpperCase() || '?';
+  const frac = hp == null ? 0 : Math.max(0, Math.min(1, hp / match.startingHealth));
+  const hpColor = frac > 0.5 ? 'var(--good)' : frac > 0.25 ? 'var(--accent)' : 'var(--bad)';
+  return (
+    <div className={'vs-plate ' + side}>
+      <div className="vs-crest" aria-hidden>{initial}</div>
+      <div className="vs-who">
+        <div className="vs-name">{name}</div>
+        <div className="vs-tag">
+          {side === 'you' ? 'You' : ghost ? 'Ghost' : (
+            <>
+              {isBot && <span className="vs-botpin">BOT</span>}
+              Opponent
+            </>
+          )}
+        </div>
+        {hp != null && (
+          <div className="vs-hpwrap">
+            <div className="vs-hpbar">
+              <div className="vs-hpfill" style={{ width: `${frac * 100}%`, background: `linear-gradient(180deg,#ffffff40,#ffffff00 42%), ${hpColor}` }} />
+            </div>
+            <div className="vs-hpnum"><span className="vs-heart">♥</span>{hp}</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Ambient embers rising off the field — purely decorative (disabled under prefers-reduced-motion via
+ *  CSS). Deterministic seeds (no Math.random) so the scatter is stable across re-renders. */
+function FieldEmbers(): ReactNode {
+  const seeds = [7, 19, 31, 43, 58, 66, 72, 81, 88, 12, 27, 39];
+  return (
+    <div className="field-embers" aria-hidden>
+      {seeds.map((s, i) => (
+        <span
+          key={i}
+          className="field-ember"
+          style={{ left: `${s}%`, width: `${2 + (s % 3)}px`, height: `${2 + (s % 3)}px`, animationDuration: `${6 + (s % 5)}s`, animationDelay: `${(s % 7) * 0.6}s` }}
+        />
+      ))}
     </div>
   );
 }

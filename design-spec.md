@@ -1174,7 +1174,8 @@ full ability text, and base-vs-buffed stats. Triggers (battlecry/deathrattle) st
 (no face icon): they read in the ability text, not as another death-adjacent glyph.
 
 **Shop scene — a tabletop, not stacked panels (game-feel).** The shop phase renders as one
-continuous felt/wood **table** (`client/src/scenes/Shop.tsx` + `styles.css`), not a column of
+continuous **table** (`client/src/scenes/Shop.tsx` + `styles.css`) — a **dusk-toned war-camp
+surface** in the shared Dusk Battlefield palette (the "Battlefield" reskin below), not a column of
 bordered `SHOP`/`BOARD`/`BENCH` zones: a **tavern shelf** across the top you drag a minion *down*
 from (it doubles as the sell target), the **board as the focal felt** in the middle, and a **hero
 dock + fanned hand** along the bottom. The board is laid on a shallow **arc** (each slot lifted by
@@ -1192,22 +1193,43 @@ off `--card-scale` at narrower widths so a full 7-wide board never wraps or over
 tooltips use `display:none` (not `visibility:hidden`) so a right-edge card's tip can't silently widen
 the page into a horizontal scrollbar; the hand's tips open leftward for the same reason.
 
-**Battlefield.** One clean **left→right battle line per side, no wrapping**, both armies on **one
-shared felt arena** split by a lit **clash line** (the `VS` medallion sits on it) — not two separate
-bordered boxes — with the same ground shadows as the shop so each side "stands on" the field. This is
-a presentation reskin of `CombatReplay.tsx`/`styles.css` only: the segmented causal beats, the
-measured strike geometry (the lunge rides an inner `.fx` layer while the ground shadow stays on the
-static slot), and the link overlay are unchanged. Leftmost =
-next-to-act and first-targeted; adjacency is visually obvious (matters for cleave +
-Bonepiper). The engine is already single-line — this is client-only. Each line is
-**labelled**: your board reads "You"; the far line reads the **opponent's display name** —
-the paired seat's player name, or (on a ghost bye) the eliminated player's `ghostName`.
-The combat log is identity-free (invariant #2, §7.3), so the name is resolved client-side
-from the already-synced public schema (`pairings` + `players`), not plumbed through the log.
-This resolution is a **single shared helper** (`resolveOpponent` in `client/src/components.tsx`,
-returning `{seat, name, ghost}`) used by **both** the shop-phase "vs" preview (§4.4) and this
-combat label, so the two screens never disagree — a ghost bye shows the same `ghostName` in
-the shop ("vs \<name\> · ghost", no living row highlighted) as in the fight.
+**Battlefield — the dusk arena (§10 reskin).** The combat overlay renders as a **battlefield at
+dusk**: a full twilight sky (deep-indigo zenith grading down through a violet band to a burning
+**ember horizon**), a distant ridge silhouette, and an earthen field with drifting ambient embers —
+a complete visual departure from the between-rounds shop, though **both reskin off the one "Dusk
+Battlefield" token set** (the single-sourced `styles.css` `:root`), so the whole app reads as a
+single world. Both armies share the one
+field, split by a lit **clash seam** with a small **⚔ marker** on it (the player-vs-player identity
+now lives in the command bar, below, not on the seam). One clean **left→right battle line per side,
+no wrapping**; **leftmost = next-to-act and first-targeted** (adjacency matters for cleave +
+Bonepiper), so the ordering stays semantically meaningful and the line is deliberately **not**
+centred. The **enemy army sits set back near the horizon and the viewer's army is grounded in the
+foreground** — but that depth is **atmosphere only** (a haze veil + slight desaturation on the far
+line), **never a CSS `transform: scale`**: the strike choreography measures each `.bl-slot`'s rect
+*relative to the field* and applies the lunge as a translate on an inner `.fx` layer, so rescaling a
+side's coordinate space would desync the measured lunge from the sprite (a **correctness** constraint,
+not just feel — the same class of bug as a beat-start drain). The segmented causal beats, the measured
+strike geometry, and the link overlay are otherwise unchanged; the scenery layers are
+`pointer-events:none` and carry no `.bl-slot`, so they never perturb the vectors.
+
+**Who you're fighting — the VS command bar.** The player identity now leads with a **VS command bar**
+across the top of the overlay: **you** on the left in cool **steel-teal**, the **paired player** on
+the right in **rust-crimson**, each a seat-coloured **crest medallion** (the display-name initial),
+the **display name**, an ownership tag (a `BOT` pin for bots, `Ghost` for a ghost fight), and a
+**live HP bar** (fraction of `startingHealth`, green→amber→red), with a round sigil + the contextual
+deaths counter between them. This is the direct answer to "see the name of the player you're fighting"
+— it surfaces the opponent's name and standing that were previously only a small row label. The
+ownership pair (**you = teal / foe = rust**) is a **semantic colour kept separate from the ember-gold
+accent** and is reused on a small per-row tag so each line's owner also reads at the ranks (a
+secondary cue, not the old prominent banner). The combat log is identity-free (invariant #2, §7.3),
+so **name, HP, side, and bot/ghost flags are all resolved client-side from the already-synced public
+schema** — nothing new is plumbed through the log. Resolution stays a **single shared helper**
+(`resolveOpponent` in `client/src/components.tsx`, returning `{seat, name, ghost}`) used by **both**
+the shop-phase "vs" preview (§4.4) and this bar, so the two screens never disagree; HP/`isBot` come
+from `players[]` by seat, assembled in `App.CombatScene` into the presenter's **optional `header`
+prop** (the dev `ReplayLab`, which has no match context, omits it and the bar falls back to
+"You vs \<opponent\>", no HP). A ghost bye shows the same `ghostName` in the shop
+("vs \<name\> · ghost", no living row highlighted) as in the fight.
 **Which line is "You" is likewise read from the pairing, not from the board** (`sideForSeat`,
 same module, decision #65): `resolveCombatPhase` always resolves `aSeat`'s board as side `a` and
 `bSeat`'s as side `b` (and the live player is side `a` in a ghost fight), so the viewer's side is
