@@ -906,6 +906,36 @@ build from functional mechanics only; original names/text/art throughout.
     `pnpm -r typecheck`, the client unit tests, a production build, and driving a real match to shop +
     combat (Playwright) — the VS bar shows the live opponent name + HP (e.g. "Mark ♥30 vs Bot 8 ♥30").
 
+### Endgame-scaling pass (Round 14) — board-wide magnetic + high-ceiling comps
+
+68. **Magnetic gains a BOARD-WIDE scaling axis: the T6 `boardMerges` capstone Magnaforge + two smaller
+    merge-fodder units (2026-07-02, Phase 6; spec §6.3/§6.6/§8/§16.5; content `constructs_magnaforge`,
+    `constructs_rivetling`, `constructs_coilcore`).** The user wants every tribe to have a *scalable, fun*
+    comp reaching very high stat totals (hundreds→thousands) through **many earned, capped steps**, staying
+    balanced and counterable. Constructs was the first target: magnetic was **single-carry only** (merge into
+    one tower, go-tall, per-unit cap 5; #54), with no board-wide payoff and no T6 that rewarded a magnetic
+    build. **Chosen:** a new **derived per-board scalar `boardMerges`** (Σ of every instance's `mergeCount`,
+    computed in `toCombatBoard`, carried on `CombatBoard.boardMerges` — the Ossuary Titan/lifetimeDeaths
+    plumbing pattern, invariant 1b) + a new `boardMergesAtLeast` LIVE condition. **Magnaforge (T6, 6/8 taunt)**
+    is a TIERED breakpoint on it (3/6/9 → +3/+3, +5/+5, +8/+8 to your *Constructs* this combat, escalating
+    ≥1.5× — a step, not a line), so assembled merges pump the WHOLE board, not one tower. It is itself the
+    ideal merge target, so the tall-tower and wide-payoff lines share one body. **Rivetling (T1 2/1)** and
+    **Coilcore (T3 4/3)** are pure magnetic fodder filling the merge ladder (T1–T5) so the archetype is
+    reachable earlier and the higher tiers (9 needs ≥2 towers) become attainable. **Why this respects the
+    binding constraints:** the high ceiling comes from MANY BOUGHT+CONSUMED merge steps, **never** by lifting
+    the ×2 `multiplyFactorCap` (magnetic is additive, not a multiply) or the per-unit cap (kept at 5 — a taller
+    tower is *more* poison-vulnerable, and EV-MAG-07 stays valid). All payoff numbers live in
+    `config/breakpoints.ts.tiers`; the capstone buff is `permanent:false` (re-earned each combat; the §7.5
+    writeback must not fold it). **Counterability (validated):** a single merged tower still folds to *any*
+    poison (EV-MAG-07, EV-MGF-04); the WIDE buffed board folds to **poison that connects** (shielded/taunt
+    poison → 100% loss in a 200-seed micro), cleave, and Nullforge (strips the permanent towers beneath the
+    buff). **Gate (binding, macro 200×8):** single-axis margin **−9.5pp** (limit 8; mono-Constructs stacks do
+    *worse* than multi-axis), reachability **58.1%** (target 50), Magnaforge assembles in **18.2%** of its
+    owners' games via the bots' real `bestMerge` policy (a live, measured payoff — not a harness credit), and
+    **no new OP/dead flag** on any Construct card. Pinned by EV-MAG-09 + EV-MGF-01..04 and the existing EV-MAG
+    goldens; the `magnetic` keyword rulesText (was "(Deferred.)") is corrected. **This is the template for
+    rolling the same rigor across the other eight tribes (paused here for review).**
+
 ## Tribe name map (clean-room — never ship the reference names)
 | Reference (do NOT ship) | Original name | Identity |
 |---|---|---|

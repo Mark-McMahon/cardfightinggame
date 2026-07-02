@@ -31,6 +31,6 @@ export const KEYWORDS: Record<Keyword, KeywordDef> = {
   magnetic: {
     id: 'magnetic',
     name: 'Magnetic',
-    rulesText: 'Can be merged onto another unit, combining stats. (Deferred.)',
+    rulesText: 'Shop: merge onto a friendly Construct to hand over its stats and keywords (consumed). Or play it standalone.',
   },
 };

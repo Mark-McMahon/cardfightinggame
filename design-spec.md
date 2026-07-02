@@ -121,7 +121,7 @@ hardcoded in logic. §7.6 records where the current code falls short of (2) and 
 **Goals**
 - One 8-seat room, joinable by short code, fillable with bots.
 - Full shop → combat → placement loop with freeze and triple/upgrade.
-- **Nine original tribes; 107 unit definitions** (101 purchasable + 6 tokens) across tiers
+- **Nine original tribes; 110 unit definitions** (104 purchasable + 6 tokens) across tiers
   1–6, exercising all **6 live keywords** (`taunt`/`divineShield`/`poison`/`reborn`/`cleave`/
   `magnetic` — the last un-deferred by the Phase-5 Constructs merge, decision #54) and the
   breakpoint content model (§6.6). The design law of "breakpoints over linear stacking"
@@ -143,7 +143,11 @@ hardcoded in logic. §7.6 records where the current code falls short of (2) and 
 - **No mobile-native client.** Web (React + Vite) only.
 - ~~**`magnetic` keyword is reserved**~~ **RESOLVED (Phase 5, decision #54):** the Constructs
   MERGE system is live — a Magnetic minion may merge into a friendly Construct in the shop (§4.2,
-  §5, §8). Constructs also still ship death/assembly breakpoints; merge is an additional go-tall line.
+  §5, §8). Constructs also still ship death/assembly breakpoints; merge is an additional go-tall line —
+  and, since **Phase 6 (decision #68)**, a BOARD-WIDE one too: **Magnaforge** (T6) reads the total merges
+  across your board (`boardMerges`) as a TIERED breakpoint (3/6/9) that pumps your whole Construct board,
+  turning single-carry consolidation into a wide scaler. Two smaller magnetic FODDER units (Rivetling T1,
+  Coilcore T3) fill the merge ladder so the archetype is reachable earlier (§8, §16.5).
 
 ---
 
@@ -485,15 +489,17 @@ contributes its doubled stats; keywords are NOT transferred). Gorgemaw pairs the
 ```ts
 kind: 'countAllies' | 'gemsThisTurnAtLeast'                                    // [live] (gemsThisTurnAtLeast: engine+eval live, 0 card consumers since #39 — see §6.9)
     | 'battlecriesThisTurnAtLeast' | 'tokensSummonedThisTurnAtLeast' | 'deathsThisCombatAtLeast' // [live] manufactured-event breaks
-    | 'alliesAtMost' | 'lifetimeDeathsAtLeast'                                                    // [live] Phase 3: go-tall gate (Cindermarshal) + persistent-death breakpoint (Ossuary Titan)
+    | 'alliesAtMost' | 'lifetimeDeathsAtLeast' | 'boardMergesAtLeast'                             // [live] Phase 3: go-tall gate (Cindermarshal) + persistent-death breakpoint (Ossuary Titan); Phase 6: board-wide magnetic breakpoint (Magnaforge)
     | 'hasTribe' | 'hasKeyword' | 'goldAtLeast' | 'tierAtLeast' | 'isGolden' | 'isToken';        // [reserved]
 value?; tribe?; keyword?;
 ```
 **Phase-scoping (engine rule):** combat context populates `deathsThisCombat`, `countAllies`
-(start-of-combat count) and `lifetimeDeaths` (the fixed per-board scalar carried in on
-`CombatBoard.lifetimeDeaths`, §7.5); shop context populates `battlecries/tokens/gems` and
-`countAllies`. `alliesAtMost` is a ≤ gate (`countAllies ≤ value`); `lifetimeDeathsAtLeast`
-gates on the persistent friendly-death total. A condition evaluated in the wrong phase reads
+(start-of-combat count), `lifetimeDeaths` (the fixed per-board scalar carried in on
+`CombatBoard.lifetimeDeaths`, §7.5) and `boardMerges` (the derived per-board scalar — Σ of each
+instance's `mergeCount` — carried in on `CombatBoard.boardMerges`); shop context populates
+`battlecries/tokens/gems` and `countAllies`. `alliesAtMost` is a ≤ gate (`countAllies ≤ value`);
+`lifetimeDeathsAtLeast` gates on the persistent friendly-death total; `boardMergesAtLeast` gates on
+the total magnetic merges assembled across the controller's board (a board-state read, like `countAllies`). A condition evaluated in the wrong phase reads
 0/false silently. A missing or unknown condition evaluates **true**.
 
 ### 6.4 Aura (passive modifier) — the multipliers
@@ -582,7 +588,8 @@ type BreakpointCounter =
   | 'tokensThisTurn' | 'battlecries' | 'gemsThisTurn'  // shop: this-turn manufactured events
   | 'alliesAtStart'                      // minions controlled at start of combat
   | 'shieldBreak'                        // this unit's own shield broke
-  | 'lifetimeDeaths';                    // Phase 3: PERSISTENT per-player friendly-death total (Ossuary Titan — TIERED)
+  | 'lifetimeDeaths'                     // Phase 3: PERSISTENT per-player friendly-death total (Ossuary Titan — TIERED)
+  | 'boardMerges';                       // Phase 6: total MAGNETIC merges across the board (Magnaforge — TIERED, board-wide)
 ```
 
 A breakpoint row may carry a `tiers?: {threshold, atk, hp}[]` array for a **tiered** payoff:
@@ -591,7 +598,14 @@ step, not a line). **Ossuary Titan** (Phase 3) is the first tiered row — thres
 on `lifetimeDeaths`, payoffs +2/+2 → +3/+3 → +5/+5, firing one cumulative this-combat buff
 per crossed tier. The persistent counter accrues slowly across a whole game (every fight +
 every Gorgemaw sacrifice), so the tiers are a long-horizon investment rather than a per-fight
-ramp; the rising steps keep the non-linear shape (decision #45).
+ramp; the rising steps keep the non-linear shape (decision #45). **Magnaforge** (Phase 6,
+decision #68) is the second tiered row and the first BOARD-WIDE one — thresholds 3/6/9 on
+`boardMerges`, payoffs +3/+3 → +5/+5 → +8/+8 to your *Constructs* (not self), firing one
+cumulative this-combat buff per crossed merge-milestone. It turns the magnetic MERGE line
+(previously single-carry go-tall only, §8) into a whole-board scaler: the high ceiling comes
+from MANY EARNED STEPS (every merge is a bought + consumed body), never one multiply, and it
+still folds to poison-that-connects (shielded/taunt poison one-shots each pumped body,
+stat-agnostic), cleave, and Nullforge (which strips the permanent merged towers beneath the buff).
 
 **Lint (decision #22, §11.3c):** a test asserts every primary payoff is expressible as a
 discrete breakpoint and flags any per-unit scaling that lacks a threshold. The lint now has
@@ -1044,17 +1058,19 @@ data + engine vocabulary.
 | Tuskers | gem greed → PURCHASED exponential doubler + gem sinks (#39) | `giveGem` wallet + activated abilities (§6.6a): escalating `multiplyStats` doubles (capped), `gainGold` bridge, `refreshShop`, chosenAlly shield |
 | Primordials | play-count → wide cleave splash | `battlecries`/`alliesAtStart` breakpoints → `buffStats` / grant `cleave` |
 | Sirens | poison home + start-of-combat burst | `startOfCombat`→`dealDamage`, `battlecries` breakpoints, board `poison` |
-| Constructs | assembly / reassemble + **MAGNETIC merge** | `deaths`/`alliesAtStart` breakpoints → `summon`; **`merge` intent** (magnetic bench unit → Construct tower, #54); **Forgemaster** `yourSentinels` persistent Sentinel-stack (#55) |
+| Constructs | assembly / reassemble + **MAGNETIC merge** (single-carry *and* board-wide) | `deaths`/`alliesAtStart` breakpoints → `summon`; **`merge` intent** (magnetic bench unit → Construct tower, #54); **Magnaforge** `boardMerges` TIERED board-wide breakpoint (#68); **Forgemaster** `yourSentinels` persistent Sentinel-stack (#55) |
 | Corsairs | on-buy tempo, sticky reborn/shield width, positional front-buff, **gold economy** | `alliesAtStart` breakpoints, reborn/divine-shield width, `leftmost` positional aura (Vanguard Pennant); **gold cards** (#56): `gainGoldNextTurn` (Bursar) + `yourEconomy` auras (Fence/Moneylender/Vault Keeper) |
 
 Marquee ⭐ breakpoint cards per tribe live in `config/breakpoints.ts` (e.g. Mortarch
 `deaths≥3 once`, Pale Lich `revenantDeaths≥3 amp`, Chorus Tide `battlecries≥2`); the Tusker
 doublers are **spend-gated** rows in the same file's `spendGated` registry (#39, §6.6a).
-The full **107-row** roster is `shared/content/units.ts`;
-per-tribe counts (verified against the catalog): Revenants 16, **Corsairs 15**, **Constructs 14**,
-Reefkin 12, **Tuskers 12**, Wildkin 11, Infernals 10, Sirens 9, Primordials 8 (= 107; 101
-purchasable + 6 tokens). The **+8 over the Phase-4 slice are the Phase-5 cards:** Constructs
-**Boltfitter (T2), Alloy Rig (T4), Omega Chassis (T5)** (magnetic merge sources, #54) +
+The full **110-row** roster is `shared/content/units.ts`;
+per-tribe counts (verified against the catalog): **Constructs 17**, Revenants 16, **Corsairs 15**,
+Reefkin 12, **Tuskers 12**, Wildkin 11, Infernals 10, Sirens 9, Primordials 8 (= 110; 104
+purchasable + 6 tokens). The **+3 over the Phase-5 catalog are the Phase-6 magnetic-scaling cards
+(decision #68):** Constructs **Rivetling (T1)** + **Coilcore (T3)** (magnetic merge fodder) +
+**Magnaforge (T6)** (the board-wide `boardMerges` capstone). The +8 before those were the Phase-5
+cards: Constructs **Boltfitter (T2), Alloy Rig (T4), Omega Chassis (T5)** (magnetic merge sources, #54) +
 **Forgemaster (T4)** (#55); Corsairs **Bursar (T2), Fence (T3), Moneylender (T3), Vault Keeper
 (T4)** (gold economy, #56). The +2 before those were the Phase-4 POSITIONAL cards:
 Corsairs **Vanguard Pennant (T2, `leftmost` aura)** + Revenants **Last Rites Drummer (T3,
@@ -1339,6 +1355,16 @@ first persistent scaler card.
 > lazy-loaded so it is code-split out of the shipped bundle) renders `CombatReplay` against real
 > `resolveCombat` logs for a set of canned matchups (cleave / shields / deaths-and-reborn / brawl),
 > so this game-feel layer can be audited in isolation without driving a full match to reach combat.
+
+> A shipped, browsable **card catalog** (`client/src/scenes/CardCatalog.tsx`, gated behind the
+> `#cards` URL hash, lazy-loaded/code-split, linked from the Landing screen) is a **read-only** view
+> of the whole pool: it imports the same `PURCHASABLE_UNITS`/`UNITS` (+ `TRIBES`/`KEYWORDS`) the
+> engine plays from and renders each entry with the same `<Card>` token used in the shop, plus that
+> card's config-interpolated rules `text`, so it **cannot drift** from live content/tuning — there is
+> no separately-maintained list. Filters (tribe / tier / keyword / text search / show-tokens) are
+> pure client state; no room connection is needed to view it. Routing is a minimal hash switch in
+> `client/src/main.tsx` (`Root` re-renders on `hashchange`), so the game `<App>` and the hash pages
+> (`#cards`, `#replay-lab`) navigate without a full reload.
 
 **Replay window sized to the fight (never truncated).** The server holds the `combat` phase
 for `combatWindowMs(logs)` — the longest natural replay across the round's *watched* fights

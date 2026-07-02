@@ -153,6 +153,9 @@ export interface ConditionCounts {
   /** Phase 3: the controller's persistent friendly-death total (combat carries it in on the
    *  CombatBoard snapshot; shop reads the live session counter). */
   lifetimeDeaths?: number;
+  /** Phase 6: total MAGNETIC merges across the controller's board (combat carries it in on the
+   *  CombatBoard snapshot as a derived scalar; a board-state read like countAllies). */
+  boardMerges?: number;
 }
 
 /** Evaluate an optional condition. Missing/unknown → true; wrong-phase counter reads 0 (§6.3). */
@@ -175,6 +178,8 @@ export function evaluateCondition(cond: ConditionSpec | undefined, counts: Condi
       return (counts.countAllies ?? 0) <= v;
     case 'lifetimeDeathsAtLeast':
       return (counts.lifetimeDeaths ?? 0) >= v;
+    case 'boardMergesAtLeast':
+      return (counts.boardMerges ?? 0) >= v;
     default:
       // [reserved] kinds (hasTribe/hasKeyword/goldAtLeast/tierAtLeast/isGolden/isToken):
       // no live consumer → treated as unknown → true (spec §6.3 default).

@@ -1305,6 +1305,66 @@ export const UNITS: UnitCard[] = [
     effects: [],
   },
   {
+    // Phase 6 (#68) — smallest magnetic FODDER. Fills the T1 rung of the magnetic ladder so a magnetic
+    // build is reachable EARLY and every shop offers more merge fuel: a cheap body to merge for raw stats
+    // (or play standalone). More sources → the boardMerges tiers (Magnaforge 3/6/9) become reachable. It
+    // grants no keyword — pure stat fodder; the Magnaforge payoff, not the tower height, is the scaling.
+    id: 'constructs_rivetling',
+    name: 'Rivetling',
+    tribe: 'constructs',
+    tier: 1,
+    atk: 2,
+    hp: 1,
+    keywords: ['magnetic'],
+    axis: ['assembly'],
+    text: 'Magnetic. (Play it, or merge it into a friendly Construct for its stats.)',
+    effects: [],
+  },
+  {
+    // Phase 6 (#68) — mid-tier magnetic FODDER, filling the T3 rung (between Boltfitter T2 and Alloy Rig
+    // T4). A bigger raw-stat merge body for the mid-game; no extra keyword (raw stats), so it feeds the
+    // boardMerges count + tower height without duplicating Alloy Rig's Divine-Shield niche.
+    id: 'constructs_coilcore',
+    name: 'Coilcore',
+    tribe: 'constructs',
+    tier: 3,
+    atk: 4,
+    hp: 3,
+    keywords: ['magnetic'],
+    axis: ['assembly'],
+    text: 'Magnetic. (Play it, or merge it into a friendly Construct for its stats.)',
+    effects: [],
+  },
+  {
+    // ⭐ NEW (Phase 6, decision #68) — the BOARD-WIDE MAGNETIC capstone (Constructs T6). Magnetic used to
+    // be single-carry ONLY (merge into one tower, go-tall). Magnaforge turns assembled merges into a
+    // WHOLE-BOARD payoff: a TIERED breakpoint on `boardMerges` (total merges across your board, carried in
+    // on the CombatBoard scalar — Ossuary Titan pattern) fires one cumulative +Atk/+Health to your
+    // Constructs per crossed milestone (3/6/9), THIS COMBAT (permanent:false — the §7.5 writeback must NOT
+    // fold it; re-earned each fight). Numbers live in breakpoints.ts.tiers (escalating 3/3→5/5→8/8, ≥1.5×).
+    // It is itself the ideal merge TARGET (a big Taunt base), so the tall-tower line and the wide-payoff
+    // line share one body. High ceiling by MANY EARNED STEPS (each merge is a bought+consumed body), never
+    // a single multiply. Folds to POISON (one-shots any pumped body), CLEAVE (mows the board), Nullforge
+    // (strips the permanent merged towers beneath the buff), and WIDTH (a this-combat buff still dies).
+    id: 'constructs_magnaforge',
+    name: 'Magnaforge',
+    tribe: 'constructs',
+    tier: 6,
+    atk: 6,
+    hp: 8,
+    keywords: ['taunt'],
+    axis: ['assembly'],
+    text: `Taunt. Start of combat: for every magnetic-merge milestone across your board (${bp('constructs_magnaforge').tiers!.map((t) => t.threshold).join('/')}), give your Constructs an escalating +Atk/+Health this combat. MAGNETIC capstone.`,
+    effects: bp('constructs_magnaforge').tiers!.map(
+      (tier): Effect => ({
+        trigger: { type: 'startOfCombat' },
+        condition: { kind: 'boardMergesAtLeast', value: tier.threshold },
+        target: { selector: 'allAllies', filterTribe: 'constructs' },
+        actions: [{ type: 'buffStats', atk: tier.atk, hp: tier.hp, permanent: false }],
+      }),
+    ),
+  },
+  {
     // ⭐ NEW (Phase 5, decision #55) — the persistent Sentinel modifier. Each Forgemaster you PLAY adds a
     // GAME-LONG +1/+1 stack to every FUTURE Sentinel at its combat creation (Foundry/Titanforge/Aegis).
     // The stack SURVIVES this Forgemaster's sale/death (a lifetime per-copy-played counter). Modeled as a

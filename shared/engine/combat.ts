@@ -71,6 +71,7 @@ interface Side {
   tokenDeaths: number;
   lifetimeDeaths: number; // Phase 3: persistent friendly-death total carried IN on the CombatBoard (fixed all fight)
   forgemastersPlayed: number; // Phase 5: persistent Forgemasters-played count carried IN (buffs summoned Sentinels)
+  boardMerges: number; // Phase 6: total magnetic merges across the board carried IN (fixed all fight; gates Magnaforge)
   primedDouble: boolean; // Pallbearer: next friendly dier's deathrattle fires twice
 }
 
@@ -138,6 +139,7 @@ function makeSide(id: 'a' | 'b', board: CombatBoard): Side {
     tokenDeaths: 0,
     lifetimeDeaths: board.lifetimeDeaths ?? 0,
     forgemastersPlayed: board.forgemastersPlayed ?? 0,
+    boardMerges: board.boardMerges ?? 0,
     primedDouble: false,
   };
 }
@@ -529,6 +531,7 @@ function resolveCombatEffect(
     deathsThisCombat: side.deaths,
     countAllies: ctx.startCount[side.id], // "minions controlled at start of combat"
     lifetimeDeaths: side.lifetimeDeaths, // Phase 3: fixed per-board scalar carried in (Ossuary Titan)
+    boardMerges: side.boardMerges, // Phase 6: fixed per-board scalar carried in (Magnaforge)
   };
   if (!evaluateCondition(effect.condition, counts)) return;
 

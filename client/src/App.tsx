@@ -37,6 +37,10 @@ function Landing(): ReactNode {
         {conn.connecting && <div className="dim">Connecting…</div>}
         {conn.error && <div style={{ color: 'var(--bad)' }}>{conn.error}</div>}
       </div>
+      {/* #cards is a standalone hash-routed page (main.tsx) — browsable without connecting to a room. */}
+      <a className="dim" style={{ textDecoration: 'none', borderBottom: '1px dotted var(--dim)' }} href="#cards">
+        Browse the full card list →
+      </a>
     </div>
   );
 }

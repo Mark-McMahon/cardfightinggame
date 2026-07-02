@@ -71,5 +71,9 @@ export function toCombatBoard(
     // Phase 5: the controller's persistent Forgemasters-played count rides in on the snapshot (Ossuary
     // Titan pattern) so combat can buff summoned Sentinels without any ambient state (invariant 1b).
     forgemastersPlayed,
+    // Phase 6 (#68): total MAGNETIC merges across the board rides in as a derived scalar (summed from
+    // each instance's mergeCount — single-sourced, always in sync) so combat can gate Magnaforge's
+    // tiered board-wide payoff (`boardMergesAtLeast`) without ambient state (invariant 1b).
+    boardMerges: board.reduce((n, u) => n + (u.mergeCount ?? 0), 0),
   };
 }

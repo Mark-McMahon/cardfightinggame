@@ -177,7 +177,8 @@ export interface ConditionSpec {
     | 'tokensSummonedThisTurnAtLeast' // shop counter; SWARM (Mother Thorn)
     | 'deathsThisCombatAtLeast' // combat counter; DEATHS (Bone Colossus)
     | 'alliesAtMost' // Phase 3: true iff the controller has ≤ value minions (Lone Vanguard — a go-tall gate)
-    | 'lifetimeDeathsAtLeast'; // Phase 3: persistent per-player friendly-death total (Ossuary Titan; combat reads the CombatBoard scalar)
+    | 'lifetimeDeathsAtLeast' // Phase 3: persistent per-player friendly-death total (Ossuary Titan; combat reads the CombatBoard scalar)
+    | 'boardMergesAtLeast'; // Phase 6: total MAGNETIC merges assembled across the controller's board (Magnaforge; combat reads the CombatBoard scalar)
   value?: number;
   tribe?: TribeId;
   keyword?: Keyword;
@@ -355,6 +356,15 @@ export interface CombatBoard {
    * +`engines.constructs.forgemasterSentinelBuff` × this scalar. Defaults to 0. Determinism holds.
    */
   forgemastersPlayed?: number;
+  /**
+   * Phase 6 (decision #68, Magnaforge): the SUM of MAGNETIC merges (`UnitInstance.mergeCount`) across
+   * the controller's board at snapshot time, carried IN on the board snapshot (never ambient —
+   * invariant 1b). A board-state read (like `alliesAtStart`), not a lifetime counter: it drops if a
+   * merged tower dies/sells. Combat reads it for `boardMergesAtLeast` gates (Magnaforge's tiered
+   * board-wide payoff). Defaults to 0. Determinism holds: same (boards, seed) — including this scalar —
+   * → identical log.
+   */
+  boardMerges?: number;
 }
 
 export interface BoardSnapshot {

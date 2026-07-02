@@ -579,6 +579,10 @@ const RECIPES: Record<string, () => string> = {
   constructs_alloyrig: () => con({ shape: 'wide', skin: 'steel', head: 'box', eyes: 'visor', mouth: 'grid', rivets: 1, shield: 1 }),
   constructs_omegachassis: () => con({ shape: 'big', skin: 'iron', head: 'box', eyes: 'dual', mouth: 'grid', antenna: 'twin', rivets: 1 }),
   constructs_forgemaster: () => con({ shape: 'round', skin: 'steel', head: 'dome', eyes: 'visor', mouth: 'grille', antenna: 'twin', cog: 1 }),
+  // Phase 6 (#68) MAGNETIC scaling — two smaller merge-fodder rungs + the board-wide capstone.
+  constructs_rivetling: () => con({ shape: 'sm', skin: 'rust', head: 'box', eyes: 'bolts', mouth: 'grid', rivets: 1 }),
+  constructs_coilcore: () => con({ shape: 'round', skin: 'bronze', head: 'dome', eyes: 'dual', mouth: 'grid', antenna: 'rod', cog: 1 }),
+  constructs_magnaforge: () => glowMotes('#c8b0ff') + con({ shape: 'big', skin: 'iron', head: 'box', eyes: 'dual', mouth: 'grid', antenna: 'dish', rivets: 1, cog: 1, shield: 1 }),
   // TUSKERS — spoils / exponential doubler
   tuskers_gemsnout: () => tsk({ shape: 'sm', skin: 'boar', tusk: 'small', eyes: 'greedy', gem: 1, gemCol: '#4fb36a' }),
   tuskers_tuskhoarder: () => tsk({ shape: 'round', skin: 'hide', tusk: 'small', eyes: 'greedy', gem: 1, hoard: 1 }),

@@ -13,6 +13,7 @@ import {
   boardToCombat,
   resolveCombat,
   getCard,
+  getBreakpoint,
   engines,
   Match,
   type ShopSession,
@@ -167,5 +168,71 @@ describe('EV-MAG — magnetic merge system (#54)', () => {
     expect(m.applyIntent(0, { type: 'merge', unitUid: mag.uid, targetUid: tgt.uid }).ok).toBe(true);
     expect([tgt.atk, tgt.hp]).toEqual([4, 4]);
     expect(m.applyIntent(0, { type: 'merge', unitUid: 'gone', targetUid: tgt.uid }).ok).toBe(false);
+  });
+
+  it('EV-MAG-09: boardToCombat carries boardMerges = Σ mergeCount across the board (incl. the new T1/T3 fodder)', () => {
+    const s = session();
+    const t1 = onBoard(s, 'constructs_cogling');
+    const t2 = onBoard(s, 'constructs_reclaimer');
+    expect(boardToCombat(s).boardMerges).toBe(0);
+    expect(mergeUnit(s, onBench(s, 'constructs_boltfitter').uid, t1.uid).ok).toBe(true); // t1 → 1 merge
+    expect(mergeUnit(s, onBench(s, 'constructs_rivetling').uid, t1.uid).ok).toBe(true); // T1 fodder is magnetic → t1 → 2
+    expect(mergeUnit(s, onBench(s, 'constructs_coilcore').uid, t2.uid).ok).toBe(true); // T3 fodder is magnetic → t2 → 1
+    expect([t1.mergeCount, t2.mergeCount]).toEqual([2, 1]);
+    expect(boardToCombat(s).boardMerges).toBe(3); // 2 + 1 — a board-wide read, summed from every tower
+  });
+});
+
+// ── EV-MGF: Magnaforge — the BOARD-WIDE magnetic capstone (Phase 6, decision #68) ───────────────
+// A TIERED breakpoint on `boardMerges` (total merges across the board) fires one cumulative this-combat
+// buff to your Constructs per crossed milestone (3/6/9) — a step, not a line, mirroring Ossuary Titan but
+// board-wide. Proves: below tier → silent; N crossed tiers → N cumulative buffs on a *witness* Construct
+// ally (board-wide, not self-only); escalating payoffs; this-combat only; and the counters still bite.
+describe('EV-MGF — Magnaforge tiered board-wide merge payoff (#68)', () => {
+  const bpM = getBreakpoint('constructs_magnaforge');
+  const statsFor = (log: CombatEvent[], id: string) =>
+    byType(log, 'stats').filter((e) => e.unitId === id);
+
+  // resolve a fight with a fixed `boardMerges` scalar; return the buff `stats` events on a WITNESS Construct
+  // ally (a plain Reclaimer with no start-of-combat effect of its own → its only stats events are Magnaforge's
+  // board-wide buffs), proving the payoff is board-wide (not self-only).
+  const witnessBuffs = (boardMerges: number) => {
+    const forge = cu('constructs_magnaforge', { hp: 100000 });
+    const ally = cu('constructs_reclaimer', { hp: 100000 });
+    const a: CombatBoard = { units: [forge, ally], playerTier: 6, boardMerges };
+    const b: CombatBoard = { units: [cu('corsairs_ironclad', { keywords: [], atk: 0, hp: 1 })], playerTier: 6 };
+    return statsFor(resolveCombat(a, b, `mgf:${boardMerges}`), ally.uid);
+  };
+
+  it('EV-MGF-01: below the first merge-tier → NO board buff fires', () => {
+    expect(witnessBuffs(bpM.tiers![0].threshold - 1)).toHaveLength(0);
+  });
+
+  it('EV-MGF-02: each crossed merge-tier fires one cumulative BOARD-WIDE Construct buff; payoffs ESCALATE', () => {
+    const tiers = bpM.tiers!;
+    expect(witnessBuffs(tiers[0].threshold).length).toBe(1); // 3 merges → 1 buff on the ally (board-wide)
+    expect(witnessBuffs(tiers[1].threshold).length).toBe(2); // 6 merges → 2
+    expect(witnessBuffs(tiers[2].threshold).length).toBe(3); // 9 merges → 3
+    // step-not-line: strictly increasing per-tier payoffs, top ≥1.5× the first (EV-BAL-D shape)
+    expect(tiers[1].atk).toBeGreaterThan(tiers[0].atk);
+    expect(tiers[2].atk).toBeGreaterThan(tiers[1].atk);
+    expect(tiers[2].atk / tiers[0].atk).toBeGreaterThanOrEqual(1.5);
+  });
+
+  it('EV-MGF-03: the tier buffs are THIS-COMBAT ONLY (never a permanent writeback)', () => {
+    for (const e of witnessBuffs(bpM.tiers![2].threshold)) expect(e.permanent).toBeUndefined();
+  });
+
+  it('EV-MGF-04: poison one-shots a Magnaforge-buffed tower regardless of the board-wide buff (stat-agnostic)', () => {
+    // the capstone inflates the whole board, but poison ignores stat size (P1): a merged tower that ALSO
+    // caught the top-tier board buff still dies to a single poison touch. (Magnaforge's taunt is stripped
+    // here so the poison reaches the tower, not the capstone body — the point is the buffed tower's fate.)
+    const tower = cu('constructs_cogling', { atk: 40, hp: 40 }); // stand-in for a heavily merged tower, front slot
+    const forge = cu('constructs_magnaforge', { hp: 100000, keywords: [] });
+    const a: CombatBoard = { units: [tower, forge], playerTier: 6, boardMerges: bpM.tiers![2].threshold };
+    const b: CombatBoard = { units: [cu('sirens_lurefish', { atk: 2, hp: 2 })], playerTier: 1 }; // poison
+    const evs = resolveCombat(a, b, 'mgf-psn');
+    expect(byType(evs, 'stats').some((e) => e.unitId === tower.uid)).toBe(true); // the board-wide buff landed on the tower
+    expect(byType(evs, 'death').some((e) => e.unitId === tower.uid)).toBe(true); // …and poison one-shots it anyway
   });
 });

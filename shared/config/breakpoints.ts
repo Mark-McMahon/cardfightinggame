@@ -11,7 +11,8 @@ export type BreakpointCounter =
   | 'alliesAtStart' // minions controlled at start of combat (Thornwarden)
   | 'shieldBreak' // this unit's own divine shield broke (Pearlguard; degenerate threshold 1)
   | 'gemsThisTurn' // gems generated this shop turn (Round-6 Tuskers — the compounding doubler)
-  | 'lifetimeDeaths'; // Phase 3: PERSISTENT per-player friendly-death total (Ossuary Titan — tiered breakpoints)
+  | 'lifetimeDeaths' // Phase 3: PERSISTENT per-player friendly-death total (Ossuary Titan — tiered breakpoints)
+  | 'boardMerges'; // Phase 6: total MAGNETIC merges assembled across the board (Magnaforge — tiered board-wide payoff)
 
 export interface Breakpoint {
   card: string; // catalog id — the lint cross-checks against the catalog
@@ -95,6 +96,23 @@ export const breakpoints: BreakpointsConfig = {
     // each friendly death pumps the surviving Constructs (combat-only); the assembly loop IS the fuel.
     // Registered as a breakpoint so the anti-linear lint bounds it. Folds to poison + tall.
     { card: 'constructs_aegisprime', counter: 'deaths', threshold: 1, atk: 1, hp: 1 },
+    // Magnaforge (Phase 6, decision #68 — the BOARD-WIDE magnetic capstone). The old magnetic identity was
+    // single-carry ONLY (merge into one tower, go-tall). This turns assembled merges into a WHOLE-BOARD
+    // payoff: a TIERED breakpoint on `boardMerges` (total merges across the board), mirroring Ossuary Titan
+    // but targeting your Constructs instead of self. A step, not a line — one cumulative this-combat buff
+    // per crossed tier (permanent:false; the §7.5 writeback must NOT fold it). Thresholds 3/6/9 are a real
+    // magnetic investment (9 needs ≥2 towers, since the per-unit cap is 5) fed by the T1/T3/T2/T4/T5 magnetic
+    // ladder; step payoffs 3/3 → 5/5 → 8/8 ESCALATE (≥1.5× the first → non-linear, EV-BAL-D shape). High
+    // ceiling by MANY EARNED STEPS (each merge is a bought+consumed body), never one giant multiply — and it
+    // still folds to POISON (one-shots any pumped body, stat-agnostic), CLEAVE (mows the clustered board),
+    // and Nullforge (strips the permanent merged towers underneath the buff).
+    { card: 'constructs_magnaforge', counter: 'boardMerges', threshold: 3, atk: 3, hp: 3,
+      tiers: [
+        { threshold: 3, atk: 3, hp: 3 },
+        { threshold: 6, atk: 5, hp: 5 },
+        { threshold: 9, atk: 8, hp: 8 },
+      ],
+    },
 
     // ═══ Round-6 replayability expansion — four tribes, each with a distinct keyword strength ═══
     // ── Tuskers / SPOILS: the EXPONENTIAL engine — reworked by decision #39. The doublers are no
