@@ -84,23 +84,32 @@ describe('EV-AUR — trigger multipliers at the SHOP interface', () => {
     expect(thornpups(s2).length).toBe(engines.wildkin.tokensPerTurn * engines.wildkin.endOfTurnTriggerMultiplierCap);
   });
 
-  it('EV-AUR-05: Echo Choir increments battlecriesThisTurn by the multiplier up front → a battlecries≥2 break sees doubled progress', () => {
+  it('EV-AUR-05 (Phase 4 rebalance, decision #50): Echo Choir amplifies battlecry OUTPUT but no longer counts the ECHOED battlecry toward breakpoints', () => {
     const mult = engines.reefkin.battlecryTriggerMultiplier; // 2
     const cbp = getBreakpoint('reefkin_chorustide'); // battlecries≥2 → board +atk/+hp
-    // With Echo Choir, ONE real battlecry (Chorus Tide) reaches battlecries≥2 from a single play.
+
+    // (A) COUNTER: with Echo Choir on board, ONE Chorus Tide play increments battlecriesThisTurn by
+    // exactly 1 (the real play) — NOT by the multiplier. So it does NOT reach its own ≥2 gate from
+    // the echoed copy: the board buff does NOT fire (the closed double-dip).
     const s = createShopSession(0, { pool: createPool(), seed: 'aur05a' });
     s.round = 1;
     put(s, 'reefkin_echochoir', 'board');
-    const witness = put(s, 'wildkin_brambleling', 'board'); // 1/3 — buffed by Chorus Tide's board buff
+    const witness = put(s, 'wildkin_brambleling', 'board'); // 1/3 witness
     const [wa, wh] = [witness.atk, witness.hp];
-    const chorus = put(s, 'reefkin_chorustide', 'bench');
-    playUnit(s, chorus.uid);
-    expect(s.battlecriesThisTurn).toBe(mult); // += multiplier up front (2 from one play)
-    // the breakpoint fired from a single (doubled) play, and its effect ran `multiplier` times
-    expect(witness.atk).toBe(wa + cbp.atk! * mult);
+    playUnit(s, put(s, 'reefkin_chorustide', 'bench').uid);
+    expect(s.battlecriesThisTurn).toBe(1); // echoed copy does NOT inflate the count (was 2 pre-#50)
+    expect(witness.atk).toBe(wa); // gate ≥2 not reached from the echo → no buff
+    expect(witness.hp).toBe(wh);
+
+    // (B) OUTPUT still doubles: a SECOND real battlecry crosses the ≥2 gate (count 1→2), and the
+    // gated payoff then resolves `multiplier` times — the ×2 amplifies the buff MAGNITUDE, proving
+    // the doubler still works, only the COUNT that gates OTHER payoffs stopped double-counting.
+    playUnit(s, put(s, 'reefkin_chorustide', 'bench').uid);
+    expect(s.battlecriesThisTurn).toBe(2); // two real plays, +1 each
+    expect(witness.atk).toBe(wa + cbp.atk! * mult); // ×2 OUTPUT preserved
     expect(witness.hp).toBe(wh + cbp.hp! * mult);
 
-    // Contrast without Echo Choir: one Chorus Tide play → battlecries == 1 < 2 → no buff.
+    // Contrast without Echo Choir: one Chorus Tide play → battlecries == 1 < 2 → no buff (unchanged).
     const s2 = createShopSession(1, { pool: createPool(), seed: 'aur05b' });
     s2.round = 1;
     const w2 = put(s2, 'wildkin_brambleling', 'board');

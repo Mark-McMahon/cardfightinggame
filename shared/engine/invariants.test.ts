@@ -11,20 +11,22 @@ import { UNITS } from '@cardgame/shared';
 // ── §6.9 vocabulary partition (authoritative) ─────────────────────────────────────
 const LIVE = {
   triggers: new Set(['battlecry', 'deathrattle', 'startOfCombat', 'endOfCombat', 'endOfTurn', 'afterFriendlyDeaths', 'onSell', 'onAttack', 'onShieldBreak', 'onSummon', 'afterFriendlyBattlecry']),
-  selectors: new Set(['self', 'allAllies', 'chosenAlly', 'leftmostAlly', 'randomAlly', 'lowestStatAlly', 'highestStatAlly', 'frontEnemy', 'highestStatEnemy', 'triggerSource']),
+  // Phase 4: `adjacentAllies` promoted to LIVE (Last Rites Drummer, §6.3/§7.3).
+  selectors: new Set(['self', 'allAllies', 'chosenAlly', 'leftmostAlly', 'adjacentAllies', 'randomAlly', 'lowestStatAlly', 'highestStatAlly', 'frontEnemy', 'highestStatEnemy', 'triggerSource']),
   actions: new Set(['buffStats', 'grantKeyword', 'summon', 'dealDamage', 'giveGem', 'multiplyStats', 'plantDeathrattle', 'resetToBase', 'custom', 'destroy', 'destroyAlly', 'absorbStats', 'gainGold', 'refreshShop']),
   // `gemsThisTurnAtLeast` stays LIVE as engine vocabulary (EV-CND-01/03) though #39 left it
   // with 0 card consumers (the doublers became purchased activations) — see §6.9.
   conditions: new Set(['countAllies', 'battlecriesThisTurnAtLeast', 'gemsThisTurnAtLeast', 'deathsThisCombatAtLeast', 'tokensSummonedThisTurnAtLeast', 'alliesAtMost', 'lifetimeDeathsAtLeast']),
-  auraScopes: new Set(['selfTribeAllies', 'yourBattlecries', 'yourEndOfTurn']),
-  auraModifiers: new Set(['damageMultiplier', 'triggerMultiplier']),
+  // Phase 4: `leftmost` scope + `attackBuff` modifier promoted to LIVE (Vanguard Pennant, §6.4).
+  auraScopes: new Set(['selfTribeAllies', 'yourBattlecries', 'yourEndOfTurn', 'leftmost']),
+  auraModifiers: new Set(['damageMultiplier', 'triggerMultiplier', 'attackBuff']),
 };
 // #39: gainGold/refreshShop are live ONLY inside `activated.actions` (the activated-ability
 // resolver); no triggered Effect may use them — asserted below.
 const ACTIVATED_ONLY_ACTIONS = new Set(['gainGold', 'refreshShop']);
 const RESERVED = {
   triggers: new Set(['onPurchase', 'onDamaged', 'onPlayTribe', 'onRefresh', 'onCast', 'onSacrifice', 'onSpend', 'onTripleCreated']),
-  selectors: new Set(['leftNeighbor', 'rightNeighbor', 'adjacentAllies', 'newestAlly', 'oldestAlly', 'nAllies', 'randomEnemy', 'neighborsOfTarget']),
+  selectors: new Set(['leftNeighbor', 'rightNeighbor', 'newestAlly', 'oldestAlly', 'nAllies', 'randomEnemy', 'neighborsOfTarget']),
   actions: new Set(['setStats', 'makeSpell', 'discover', 'sacrifice']),
   conditions: new Set(['hasTribe', 'hasKeyword', 'goldAtLeast', 'tierAtLeast', 'isGolden', 'isToken']),
   auraScopes: new Set(['allAllies', 'yourGems', 'yourSpells', 'shopCostTribe']),

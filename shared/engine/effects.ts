@@ -29,6 +29,13 @@ export interface SelectContext<T extends Targetable> {
   allies: T[];
   /** Living enemies in board order (combat only; empty in shop). */
   enemies: T[];
+  /**
+   * Phase 4 (§6.3, §7.3): pre-computed board-index ±1 neighbor uids of the source for the positional
+   * `adjacentAllies` selector. Combat supplies it (it knows the settled board + the source's slot,
+   * incl. the D1 deathrattle case where the source is already removed); the shop has no positional
+   * deathrattle so it stays undefined → `adjacentAllies` resolves to nothing there.
+   */
+  adjacentUids?: string[];
   rng: Rng;
 }
 
@@ -111,9 +118,15 @@ export function selectTargets<T extends Targetable>(spec: TargetSpec, ctx: Selec
       const u = pickExtreme(applyFilters(enemies, spec, source), stat, true);
       return u ? [u] : [];
     }
+    case 'adjacentAllies': {
+      // POSITIONAL board-index ±1 friendlies of the source (Phase 4, §6.3/§7.3, Last Rites Drummer).
+      // The caller pre-computes the neighbor uids (it owns board position, incl. the D1 deathrattle
+      // case where the source is already removed); we filter `allies` to that set, then apply filters.
+      const set = new Set(ctx.adjacentUids ?? []);
+      return applyFilters(allies.filter((u) => set.has(u.uid)), spec, source);
+    }
     case 'leftNeighbor':
     case 'rightNeighbor':
-    case 'adjacentAllies':
     case 'neighborsOfTarget':
       // [reserved] — cleave neighbors are computed directly in combat, not via a selector.
       return [];

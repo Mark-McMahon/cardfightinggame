@@ -132,6 +132,19 @@ const goldens: Record<string, () => { a: CombatBoard; b: CombatBoard; seed: stri
     b: board([vanilla(0, 100000)]),
     seed: 'gld-12',
   }),
+  // Phase 4 combat-visible mechanics — pin each new engine path byte-stably.
+  // Vanguard Pennant: leftmost +2 attack, recomputed when the front (hp 1) dies mid-fight.
+  'EV-GLD-13 vanguard pennant positional aura (leftmost + recompute on death)': () => ({
+    a: board([vanilla(3, 1), vanilla(4, 100000), cu('corsairs_pennant', { hp: 100000 })]),
+    b: board([vanilla(5, 100000)]),
+    seed: 'gld-13',
+  }),
+  // Last Rites Drummer: taunt drummer dies → adjacentAllies (±1) gain Reborn (settled board, D1).
+  'EV-GLD-14 last rites drummer adjacentAllies reborn': () => ({
+    a: board([vanilla(0, 100000), cu('revenants_lastrites', { keywords: ['taunt'], atk: 0, hp: 1 }), vanilla(0, 100000), vanilla(0, 100000)]),
+    b: board([vanilla(50, 100000)]),
+    seed: 'gld-14',
+  }),
 };
 
 describe('EV-GLD — intra-impl determinism goldens (D4)', () => {

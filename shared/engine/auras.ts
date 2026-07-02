@@ -53,6 +53,24 @@ export function endOfTurnSummonMultiplier(board: AuraBearer[]): number {
   return combine(vals, engines.wildkin.endOfTurnTriggerMultiplierCap);
 }
 
+/**
+ * Vanguard Pennant (Phase 4, §6.4): the total flat +ATTACK the LEFTMOST friendly (board index 0)
+ * receives from `leftmost` positional auras on its side. The query returns the side-wide bonus; the
+ * CALLER (combat) decides whether a given fighter is currently the leftmost, so a reposition/death
+ * moves the bonus for free (query-at-read-time). Stacked pennants sum, capped at leftmostAttackBuffCap.
+ */
+export function leftmostAttackBonus(side: AuraBearer[]): number {
+  let sum = 0;
+  for (const b of side) {
+    for (const a of b.auras) {
+      if (a.scope !== 'leftmost') continue;
+      if (a.modifier.kind !== 'attackBuff') continue;
+      sum += a.modifier.value;
+    }
+  }
+  return Math.min(sum, engines.corsairs.leftmostAttackBuffCap);
+}
+
 export interface SideCounters {
   deaths: number;
   revenantDeaths: number;

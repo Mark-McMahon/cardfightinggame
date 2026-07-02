@@ -85,6 +85,7 @@ spendable gems + purchased doublers; EV-ECO-14 was rewritten and Group M / EV-AB
 | EV-SEL-04 | `randomAlly` payoff; 2 seeds (`nAllies` shares this draw method but is reserved — 0 consumers) | random targets drawn via `rng.shuffle(pool).slice(count)`; deterministic per seed | P | §6.8 RNG |
 | EV-SEL-05 | Nullforge vs enemy with a buffed giant + smaller units | `highestStatEnemy` picks the biggest enemy by `stat=atk` | P | §6.3 |
 | EV-SEL-06 | Sirenling vs multi-unit enemy | `frontEnemy` = enemy at the front slot | P | Sirens burst |
+| EV-ADJ-01 | Last Rites Drummer (taunt, dies) flanked by two allies + a far one | **(Phase 4)** `adjacentAllies` deathrattle grants Reborn to EXACTLY the board-index ±1 neighbors, computed against the SETTLED board (D1 — source already removed, its slot's flanks); a unit two slots away does NOT gain it | P | §6.3/§7.3 positional selector |
 
 ### Actions (WHAT)
 | id | fixture | asserted property | layer | covers |
@@ -116,7 +117,8 @@ spendable gems + purchased doublers; EV-ECO-14 was rewritten and Group M / EV-AB
 | EV-AUR-02 | Pale Lich; side at 2 then 3 revenant deaths | `activeWhen` inert below `threshold`(3); active at/after; amp then applies | P | §6.4, breakpoint |
 | EV-AUR-03 | 2 Grovecallers / 2 Echo Choirs (non-stacking, capped) | effective multiplier never exceeds `endOfTurnTriggerMultiplierCap`/`battlecryTriggerMultiplierCap`(2) | P | §6.4 caps |
 | EV-AUR-04 | Grovecaller + Gemsnout + Ivorytusk in one end-of-turn | multiplier applies **only to `summon`** end-of-turn actions, **not** `giveGem`/`multiplyStats` | P | §6.8, §16 fix |
-| EV-AUR-05 | Echo Choir + a `battlecries≥2` breakpoint card, one real battlecry doubled | doubling increments `battlecriesThisTurn` by the multiplier up front, so the breakpoint sees the doubled progress | P | §6.8 |
+| EV-AUR-05 | Echo Choir + a `battlecries≥2` breakpoint card, one echoed play then a second real one | **(#50 rebalance)** a played battlecry counts as EXACTLY ONE toward `battlecriesThisTurn` regardless of the doubler — one echoed Chorus Tide does NOT reach its own ≥2 gate (no buff); a SECOND real play crosses it and the payoff resolves ×multiplier (OUTPUT still doubles) | P | §6.8, #50 |
+| EV-AUR-06 | Vanguard Pennant + a leftmost friendly; then the leftmost dies mid-fight | the LEFTMOST friendly strikes for +`leftmostAttackBuff` (query-at-read-time); a non-leftmost does not; on the leftmost's death the bonus MOVES to the new front unit; stacked pennants sum capped at `leftmostAttackBuffCap` | P | §6.4 positional aura |
 
 ## E. Custom handlers — COMBAT (+ determinism)
 
@@ -141,7 +143,7 @@ spendable gems + purchased doublers; EV-ECO-14 was rewritten and Group M / EV-AB
 | EV-BP-09 | `revenants_boncolossus` — deaths≥4 once → summon 2 Reborn Wraith (deathrattle) | COMBAT | P |
 | EV-BP-10 | `reefkin_pearlguard` — shieldBreak≥1 once → board +1/+3 | COMBAT | P |
 | EV-BP-11 | `reefkin_chorustide` — battlecries≥2 → board +3/+3 | SHOP | P |
-| EV-BP-12 | `reefkin_leviathan` — battlecries≥3 → grant board Divine Shield | SHOP | P |
+| EV-BP-12 | `reefkin_leviathan` — battlecries≥3 → grant **your Reefkin** Divine Shield (#51: `filterTribe`-scoped, not whole board — a non-Reefkin ally is NOT shielded) | SHOP | P |
 | EV-BP-13 | `infernals_bloodcaller` — deaths≥3 once → self +5/+3 | COMBAT | P |
 | EV-BP-14 | `infernals_abysslord` — deaths≥4 once → self +8/+6 + Cleave | COMBAT | P |
 | EV-BP-15 | `infernals_carrionsovereign` — deaths≥1 everyN → Infernals +2/+1 (this combat) | COMBAT | P |
@@ -183,6 +185,10 @@ stat-growing activated ability is registered SPEND-GATED with real positive cost
 | EV-ECO-14 | Gemsnout across turns; `gemCarryOver` | `gems` accumulates and persists as the **SPENDABLE wallet (#39 — knowingly rewrote the D10 "cosmetic" pin)**; `gemsThisTurn` resets each shop turn; the wallet never changes any GOLD price (tier-up/reroll) and is uncapped (hoarding = sim diagnostic, not an engine cap); spending is only via `activateAbility` (Group M) | SHOP | gems |
 | EV-ECO-15 | `chosenAlly` battlecry played with no legal target; Discover from an empty tier+offset pool; `onSell` on a token | **(D5)** chosenAlly fizzles (resolves to nothing) but **still counts as a battlecry** and increments `battlecriesThisTurn`; empty Discover pool fills from the next lower tier then skips; `onSell` fires only on a **purchasable body**, not a token | SHOP/INTENT | D5 edge rules |
 | EV-ECO-16 | Tidebinder on board, play a 2nd battlecry; Tuskmonger / Quartermaster on board, sell a friendly body | `afterFriendlyBattlecry` fires on each subsequent friendly battlecry (Tidebinder → Reefkin +1/+1 permanent); `onSell` fires per friendly body sold (Tuskmonger → +2 gems; Quartermaster → highest-Attack Corsair +2/+2) | SHOP/INTENT | afterFriendlyBattlecry, onSell (audit Patterns A/B) |
+| EV-TCH-01 | many fresh rolls at round ≥ `techInjection.fromRound`, tier ≥2 | **(Phase 4, #49)** 100% of post-round-5 rolls contain ≥1 tech card (tier permitting) — the injection guarantee holds across seeds/tiers | SHOP | §5 tech injection |
+| EV-TCH-02 | same seed+state, two sessions; `rollShop` too | injection is deterministic (identical shops); `rollShop` (a fresh-roll path) also injects | SHOP | determinism 2b |
+| EV-TCH-03 | fresh rolls that force the inject branch | pool accounting balances (`poolTotal + shop.length` conserved; no count negative/over-cap); shop stays exactly `shopSlotsByTier` wide (replace, not add); injected tech ≤ tier | SHOP | pool accounting |
+| EV-TCH-04 | a round-4 draw; a frozen shop advanced a turn | pre-`fromRound` is NOT injected; a FROZEN shop persists byte-for-byte and is never re-rolled/injected | SHOP | scope guards |
 
 ## H. Match loop & outcome — MATCH / STATE
 
@@ -226,6 +232,7 @@ stat-growing activated ability is registered SPEND-GATED with real positive cost
 |---|---|---|---|
 | EV-GLD-01..09 | one fixed (boards, seed) each spanning: swarm mirror; poison-vs-shield; reborn chain; Pale-Lich amp crossing; Tusker doubler across turns; cleave with neighbors; Bonepiper replay; Pallbearer double; a combat-fired **permanent** buff (writeback seam — pins the `permanent`/`dAtk`/`dHp` + `survivorsA/B` payload) | byte-identical `CombatEvent[]` (the reference log). **Regenerated from the chosen-intent engine; the log is a lock, never the spec.** | G |
 | EV-GLD-10/11/12 (Phase 3) | Cindermarshal leftmost buff; Ossuary Titan tiered lifetime buff (`CombatBoard.lifetimeDeaths=12`); Gravemonarch survive-a-near-wipe double (5 start-of-combat destroys → `endOfCombat` permanent multiply) | byte-identical `CombatEvent[]` — pins the `leftmostAlly`/`lifetimeDeaths`/`endOfCombat` + `permanentFactor`/`deathsA/B` payloads | G |
+| EV-GLD-13/14 (Phase 4) | Vanguard Pennant positional aura (leftmost +atk, recompute on the front's death); Last Rites Drummer `adjacentAllies` deathrattle → Reborn on ±1 neighbors | byte-identical `CombatEvent[]` — pins the `leftmost`/`attackBuff` strike-read + `adjacentAllies` settled-board payloads | G |
 
 ## L. Combat→board writeback fold (§7.5, decision #38) — COMBAT + MATCH (`shared/engine/combatWriteback.test.ts`)
 
@@ -298,7 +305,7 @@ Every card / keyword / breakpoint counter / economy rule / invariant → the eva
 | taunt | EV-KW-TAUNT |
 | divineShield | EV-KW-DS-01, EV-KW-DS-02 |
 | poison | EV-KW-PSN-01, EV-KW-PSN-02, EV-KW-DS-02 |
-| reborn | EV-KW-RBN |
+| reborn | EV-KW-RBN, EV-ADJ-01 (granted by Last Rites Drummer's `adjacentAllies` deathrattle) |
 | cleave | EV-KW-CLV, EV-BP-24 (grant) |
 | magnetic (reserved) | EV-KW-MAG |
 
@@ -314,7 +321,10 @@ Every card / keyword / breakpoint counter / economy rule / invariant → the eva
 | shieldBreak | EV-BP-10, EV-KW-DS-01 |
 | lifetimeDeaths (Phase 3) | EV-OSS-01..03, EV-LFT-01..03, EV-GLD-11 |
 
-## Cards (97) — by coverage mechanism
+## Cards (99) — by coverage mechanism
+- **2 Phase-4 POSITIONAL cards** → Vanguard Pennant (Corsair T2, `leftmost` aura) → EV-AUR-06 +
+  golden EV-GLD-13; Last Rites Drummer (Revenant T3, `adjacentAllies` deathrattle) → EV-ADJ-01 +
+  golden EV-GLD-14.
 - **26 ⭐ breakpoint cards** → their `EV-BP-*` rows (1:1; 19–21 retired by #39).
 - **6 spend-gated activated cards (#39)** — Ivorytusk/Ivorylord/Gemtitan (purchased doubles) →
   EV-ABL-01..05/10 + sim Part A; Facetguard → EV-ABL-06; Gemwright → EV-ABL-07;
@@ -348,7 +358,8 @@ Every card / keyword / breakpoint counter / economy rule / invariant → the eva
 income EV-ECO-01 · buy EV-ECO-02 · sell/onSell EV-ECO-03 · roll EV-ECO-04 · freeze EV-ECO-05 ·
 tierUp+discount EV-ECO-06 · slots EV-ECO-07 · pool EV-ECO-08 · caps EV-ECO-09 · triple/golden/
 discover EV-ECO-10/13 · positioning EV-ECO-12 · gems/wallet EV-ECO-14 + EV-ABL-01 · activated
-abilities (#39) EV-ABL-01..10 · gem→gold bridge EV-ABL-07 · timer EV-MTC-07 · loss damage
+abilities (#39) EV-ABL-01..10 · gem→gold bridge EV-ABL-07 · tech injection (#49) EV-TCH-01..04 ·
+timer EV-MTC-07 · loss damage
 EV-MTC-01 · placement EV-MTC-03/04 · maxRounds EV-MTC-05 · pairing/ghost EV-MTC-06.
 
 ## Invariants (4)

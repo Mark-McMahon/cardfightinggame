@@ -102,6 +102,11 @@ export interface EnginesConfig {
     onBuyBuffAtk: number;
     onBuyBuffHp: number;
     costReductionAmount: number;
+    // Phase 4 POSITIONAL aura (Vanguard Pennant, §6.4): flat +attack the LEFTMOST friendly gets.
+    // `Cap` bounds the stacked total so multiple pennants stay a fixed positional utility buff, not
+    // an unbounded per-unit scaler (breakpoint law #22 — not a primary scaling counter).
+    leftmostAttackBuff: number;
+    leftmostAttackBuffCap: number;
   };
 }
 
@@ -208,5 +213,7 @@ export const engines: EnginesConfig = {
     onBuyBuffAtk: 1,
     onBuyBuffHp: 1,
     costReductionAmount: 1,
+    leftmostAttackBuff: 2, // Vanguard Pennant: your leftmost minion has +2 attack (positional)
+    leftmostAttackBuffCap: 4, // two pennants max out here — a fixed slot buff, never a runaway lever
   },
 };

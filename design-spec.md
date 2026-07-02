@@ -309,6 +309,23 @@ macro-sim, §11).
 selling returns it; rolls draw from what's left at/below your tier. Contesting a tribe
 thins it for everyone. Token and golden units are pool-exempt.
 
+**Tech-pool injection guarantee (decision #49).** From round `systems.techInjection.fromRound`
+(=5) onward, every **fresh** roll is guaranteed to offer at least one interaction-tech card
+so a developed board can always find an ANSWER (poison / a stat-neutralizer) even under a bad
+roll — this is what keeps scaling lines context-sensitive (the §16 floor). Algorithm: after a
+fresh shop is drawn, if it contains no card from `systems.techInjection.cardIds`
+(`{reefkin_spinefish, sirens_lurefish, reefkin_brineling, sirens_reefwitch, sirens_venomsong,
+constructs_nullforge}`), replace ONE slot with a copy-weighted pool draw restricted to those
+ids **at/below the shop tier**. The replaced slot is chosen **deterministically from the shop
+RNG** (there is no "relevance" heuristic — none exists in this engine). **Pool accounting** is
+identical to any offer: the injected copy is taken from the pool and the replaced offer
+returned — net-zero, never a phantom copy; if no tech copy is available at/below tier the roll
+is left as-is and logged. Applies to every fresh-roll path (`startShopPhase` non-frozen draw,
+`rollShop`, Oreseeker `refreshShop`) via one `drawFreshShop` helper, so all three stay
+byte-identical for the same seed+state. A **frozen** shop is not re-rolled, so it is never
+injected. Deterministic (fixed draw order: tech draw, then slot pick), so it stays inside the
+§9.7 pinned reducer contract (invariant 2b). Numbers live in `shared/config/systems.ts`.
+
 **Gems — the second currency (decision #39, supersedes D10).** `gems` is a per-player,
 **private-channel**, persistent, **uncapped** wallet fed only by `giveGem` effects (Tusker
 generators/battlecries/onSell). It is spent only through **activated abilities** (§6.6a):
@@ -387,10 +404,12 @@ interface TriggerSpec { type: TriggerType; tribe?: TribeId; threshold?: number; 
 **Selector** (WHO). [live]: `self`, `allAllies`, `randomAlly`,
 `highestStatAlly`, `lowestStatAlly`, `chosenAlly` (shop-resolved), `leftmostAlly`
 (POSITIONAL board-index-0 friendly — Phase 3 Cindermarshal; distinct from bornTurn
-`oldestAlly`), `triggerSource`, `frontEnemy`, `highestStatEnemy` (biggest enemy by `stat` —
-Nullforge anti-tall neutralize). [reserved]: `nAllies`, `leftNeighbor`, `rightNeighbor`,
-`adjacentAllies`, `newestAlly`, `oldestAlly`, `randomEnemy`, `neighborsOfTarget` (cleave is
-handled directly in combat, not via this selector). `TargetSpec` = `{ selector, count?,
+`oldestAlly`), `adjacentAllies` (POSITIONAL board-index ±1 friendlies — Phase 4 Last Rites
+Drummer; computed against the SETTLED board at deathrattle time, §7.3), `triggerSource`,
+`frontEnemy`, `highestStatEnemy` (biggest enemy by `stat` — Nullforge anti-tall neutralize).
+[reserved]: `nAllies`, `leftNeighbor`, `rightNeighbor`, `newestAlly`, `oldestAlly`,
+`randomEnemy`, `neighborsOfTarget` (cleave is handled directly in combat, not via a
+selector). `TargetSpec` = `{ selector, count?,
 filterTribe?, filterKeyword?, stat?, excludeSelf? }`. **Tie-break/default rules that are
 engine logic, not data** (§6.8).
 
@@ -453,9 +472,9 @@ change how *other* effects resolve, queried by the resolver:
 
 ```ts
 interface AuraSpec {
-  scope: 'selfTribeAllies' | 'yourEndOfTurn' | 'yourBattlecries'          // [live]
+  scope: 'selfTribeAllies' | 'yourEndOfTurn' | 'yourBattlecries' | 'leftmost' // [live]
        | 'allAllies' | 'yourGems' | 'yourSpells' | 'shopCostTribe';       // [reserved]
-  modifier: { kind: 'triggerMultiplier' | 'damageMultiplier'              // [live]
+  modifier: { kind: 'triggerMultiplier' | 'damageMultiplier' | 'attackBuff' // [live]
                   | 'costReduction' | 'gemValueAdd' | 'spellPowerAdd' | 'statBuffOnEvent'; // [reserved]
               value: number; tribe?: TribeId; };
   stacks?: boolean;                                    // stacking → multiply; non-stacking → max
@@ -464,7 +483,14 @@ interface AuraSpec {
 ```
 `activeWhen` converts an always-on multiplier into a **breakpoint** — the aura is inert
 until the bearer's side reaches `threshold` of `counter`. This is how Pale Lich's damage
-amp is contained (§6.6). All multiplier values are additionally **capped** in `engines.ts`
+amp is contained (§6.6). **POSITIONAL aura (`leftmost` + `attackBuff`, decision #52).** A
+`leftmost`-scoped `attackBuff` aura (Vanguard Pennant) grants +`value` ATTACK to the LEFTMOST
+friendly (board index 0) on the bearer's side. It is **query-at-read-time in combat**
+(`leftmostAttackBonus`, folded into the fighter's striking attack), so a reposition or the
+leftmost's death moves the bonus to the new front unit with no bookkeeping. Stacked pennants
+sum, capped at `engines.corsairs.leftmostAttackBuffCap`, so it is a fixed positional utility
+buff, never an unbounded per-unit scaler (breakpoint law #22). All multiplier values are
+additionally **capped** in `engines.ts`
 (`endOfTurnTriggerMultiplierCap`, `battlecryTriggerMultiplierCap`, `undeadDamageAmpCap`) —
 no uncapped multiplier enters the sim (decision #25).
 
@@ -623,7 +649,7 @@ interface KeywordDef { id; name; rulesText; }        // engine reads keyword *ti
 // DEFERRED stub: TavernSpell { id; name; cost; tier; effects; permanent; }
 ```
 Keyword *timing* lives in the combat engine (§7), not in data — data only tags which units
-carry a keyword. Canonical content: `shared/content/units.ts` (the 97 rows),
+carry a keyword. Canonical content: `shared/content/units.ts` (the 99 rows),
 `tribes.ts`, `keywords.ts`.
 
 ### 6.8 Code-only semantics (not derivable from the data rows)
@@ -642,8 +668,15 @@ data row states them. An agent regenerating from `units.ts` alone would not repr
 - **Counter/breakpoint math:** death counters increment **before** the dead unit's
   deathrattle/avenge fire, so death-gated conditions (Bone Colossus) and the Pale Lich amp
   see the death. Avenge `everyN` defaults true (`deathCount % threshold === 0`) vs once
-  (`=== threshold`). Echo Choir's doubling increments `battlecriesThisTurn` by the
-  multiplier up front so BATTLECRY breaks see the doubled progress.
+  (`=== threshold`). **Echo Choir counting (decision #50):** a played battlecry counts as
+  EXACTLY ONE toward `battlecriesThisTurn`, regardless of the doubler. Echo Choir amplifies
+  OUTPUT — every battlecry EFFECT and `afterFriendlyBattlecry` resolves `multiplier` times —
+  but the ECHOED copy does NOT increment the counter that gates OTHER battlecry payoffs (so a
+  single play can never reach a ≥2 gate from the echo alone; closes the double-dip).
+- **POSITIONAL attack read (decision #52):** a fighter that is CURRENTLY the leftmost of its
+  side adds the side's `leftmost`-aura `attackBuff` total (capped) to its striking attack,
+  recomputed live at every strike — so the bonus tracks the front slot through repositions and
+  the leftmost's death (Vanguard Pennant, §6.4).
 - **Aura combination:** stacking auras multiply, non-stacking take the max; trigger counts
   are rounded, `Math.max(1, …)`, then hard-capped.
 - **`yourEndOfTurn` trigger multiplier is summon-scoped (audit §16).** Grovecaller's
@@ -656,7 +689,7 @@ data row states them. An agent regenerating from `units.ts` alone would not repr
 
 ### 6.9 Live vocabulary catalog — the regeneration surface (authoritative)
 
-The regenerable contract is **not the 93 cards** — it is the finite set of primitives they
+The regenerable contract is **not the 99 cards** — it is the finite set of primitives they
 compose. A fresh engine that implements every **live** primitive below (with §6.8 semantics)
 reproduces all declarative content for free; it needs card-specific code only for the 2
 handlers (§6.5). This is why "the agent doesn't need to know the cards" is true — *provided*
@@ -678,12 +711,13 @@ it silently became reserved; a card needing something not listed means *stop and
   `onSummon`(1) · `afterFriendlyBattlecry`(1) · `endOfCombat`(1 — Phase 3 Gravemonarch, fires
   for LIVING units at fight end). *Reserved (0):* `onPurchase`, `onDamaged`, `onPlayTribe`,
   `onRefresh`, `onCast`, `onSacrifice`, `onSpend`, `onTripleCreated`.
-- **Selectors — live (10), triggered effects:** `self`(33) · `allAllies`(29) · `chosenAlly`(12) ·
+- **Selectors — live (11), triggered effects:** `self`(33) · `allAllies`(29) · `chosenAlly`(12) ·
   `randomAlly`(5) · `lowestStatAlly`(4) · `highestStatAlly`(2) · `frontEnemy`(2) ·
-  `leftmostAlly`(1 — Phase 3 positional index-0) · `highestStatEnemy`(1) · `triggerSource`(1).
-  **Activated surface (§6.6a):** `self`(5) · `chosenAlly`(1). *Reserved:* `leftNeighbor`,
-  `rightNeighbor`, `adjacentAllies`, `newestAlly`, `oldestAlly`, `nAllies`, `randomEnemy`,
-  `neighborsOfTarget` (cleave neighbors are computed in combat, not via a selector).
+  `leftmostAlly`(1 — Phase 3 positional index-0) · `adjacentAllies`(1 — Phase 4 positional ±1,
+  Last Rites Drummer) · `highestStatEnemy`(1) · `triggerSource`(1). **Activated surface (§6.6a):**
+  `self`(5) · `chosenAlly`(1). *Reserved:* `leftNeighbor`, `rightNeighbor`, `newestAlly`,
+  `oldestAlly`, `nAllies`, `randomEnemy`, `neighborsOfTarget` (cleave neighbors are computed in
+  combat, not via a selector).
 - **Actions — live, triggered effects:** `buffStats`(45) · `grantKeyword`(17) · `summon`(13) ·
   `giveGem`(7) · `destroy`(4) · `dealDamage`(3) · `custom`(2) · `plantDeathrattle`(1) ·
   `resetToBase`(1) · `multiplyStats`(1 — Phase 3 Gravemonarch's `permanent:true` double, §7.5)
@@ -700,11 +734,12 @@ it silently became reserved; a card needing something not listed means *stop and
   activations, so the card count is 0; kept LIVE deliberately because the `gemsThisTurn` counter
   + condition remain implemented and pinned by EV-CND-01/03).
   *Reserved:* `hasTribe`, `hasKeyword`, `goldAtLeast`, `tierAtLeast`, `isGolden`, `isToken`.
-- **Auras — live (exactly 3 (scope,modifier) shapes):** `(selfTribeAllies, damageMultiplier)`
+- **Auras — live (exactly 4 (scope,modifier) shapes):** `(selfTribeAllies, damageMultiplier)`
   +`activeWhen` (Pale Lich) · `(yourBattlecries, triggerMultiplier)` (Echo Choir) ·
-  `(yourEndOfTurn, triggerMultiplier)` summon-scoped §6.8 (Grovecaller). *Reserved scopes:*
-  `allAllies`, `yourGems`, `yourSpells`, `shopCostTribe`. *Reserved modifiers:* `costReduction`,
-  `gemValueAdd`, `spellPowerAdd`, `statBuffOnEvent`.
+  `(yourEndOfTurn, triggerMultiplier)` summon-scoped §6.8 (Grovecaller) · `(leftmost, attackBuff)`
+  POSITIONAL, Phase 4 (Vanguard Pennant — leftmost friendly +atk, query-at-read-time, capped).
+  *Reserved scopes:* `allAllies`, `yourGems`, `yourSpells`, `shopCostTribe`. *Reserved modifiers:*
+  `costReduction`, `gemValueAdd`, `spellPowerAdd`, `statBuffOnEvent`.
 
 **`destroy` (the one promotion in current content — pins the load-bearing semantics the
 `dealDamage: 999` idiom hid; D11):** removes the target; **counts as a friendly death and fires
@@ -767,6 +802,10 @@ Deaths are **simultaneous (D1)**. On each resolution pass:
 3. **Resolve deathrattles** against that settled board, in the **D2 order** — attacker's side
    first (side A first at start of combat), board left→right within a side. If Pallbearer
    primed the double, that dier's deathrattle fires twice, then the flag clears.
+   - **`adjacentAllies` (positional, Phase 4 Last Rites Drummer):** because the batch is
+     already removed, the dier's ±1 neighbors are the units flanking its **settled slot** (its
+     anchor index against the post-removal board) — i.e. the living units that closed the gap.
+     Last Rites Drummer grants them Reborn; a unit two slots away is not adjacent.
 4. **Reborn:** a unit with reborn returns once, in its own slot, with **1 HP** and reborn
    stripped, at **base card attack** (×2 if golden) — buffs dropped — *after* its deathrattle.
 5. **Avenge** (`afterFriendlyDeaths`, non-token) and the **token-death floor** (token deaths
@@ -944,21 +983,23 @@ data + engine vocabulary.
 |---|---|---|
 | Wildkin | token gen + amplifier, avenge, cleave, mid-combat deathrattle replay | `endOfTurn`→`summon`, `onSummon`+cond→`buffStats`, `afterFriendlyDeaths`, keyword `cleave`, **H** `replayAdjacentDeathrattle` |
 | Reefkin | battlecry chain/doubler, poison+shield carriers, single-target megabuff, plant | `battlecry`→`buffStats` (`chosenAlly`), aura `triggerMultiplier`, `grantKeyword`, `plantDeathrattle` |
-| Revenants | reborn stacking, death payoffs, tribe damage amp, deathrattle-double | keyword `reborn` + `deathrattle`, aura `damageMultiplier`+`activeWhen`, **H** `primeNextDeathrattleDouble` |
+| Revenants | reborn stacking, death payoffs, tribe damage amp, deathrattle-double, positional reborn | keyword `reborn` + `deathrattle`, aura `damageMultiplier`+`activeWhen`, `adjacentAllies` deathrattle (Last Rites Drummer), **H** `primeNextDeathrattleDouble` |
 | Infernals | self-damage / sacrifice for burst | `startOfCombat`→`dealDamage(self)`+`buffStats`, deaths breakpoints |
 | Tuskers | gem greed → PURCHASED exponential doubler + gem sinks (#39) | `giveGem` wallet + activated abilities (§6.6a): escalating `multiplyStats` doubles (capped), `gainGold` bridge, `refreshShop`, chosenAlly shield |
 | Primordials | play-count → wide cleave splash | `battlecries`/`alliesAtStart` breakpoints → `buffStats` / grant `cleave` |
 | Sirens | poison home + start-of-combat burst | `startOfCombat`→`dealDamage`, `battlecries` breakpoints, board `poison` |
 | Constructs | assembly / reassemble | `deaths`/`alliesAtStart` breakpoints → `summon` (magnetic reserved) |
-| Corsairs | on-buy tempo, sticky reborn/shield width | `alliesAtStart` breakpoints, reborn/divine-shield width |
+| Corsairs | on-buy tempo, sticky reborn/shield width, positional front-buff | `alliesAtStart` breakpoints, reborn/divine-shield width, `leftmost` positional aura (Vanguard Pennant) |
 
 Marquee ⭐ breakpoint cards per tribe live in `config/breakpoints.ts` (e.g. Mortarch
 `deaths≥3 once`, Pale Lich `revenantDeaths≥3 amp`, Chorus Tide `battlecries≥2`); the Tusker
 doublers are **spend-gated** rows in the same file's `spendGated` registry (#39, §6.6a).
-The full **97-row** roster is `shared/content/units.ts`;
-per-tribe counts (verified against the catalog): Revenants 15, Reefkin 12, **Tuskers 12**,
-Wildkin 11, Corsairs 10, Constructs 10, Infernals 10, Sirens 9, Primordials 8 (= 97; 91
-purchasable + 6 tokens). The +4 over the pre-Phase-3 slice are the consumption/lifetime
+The full **99-row** roster is `shared/content/units.ts`;
+per-tribe counts (verified against the catalog): Revenants 16, Reefkin 12, **Tuskers 12**,
+Corsairs 11, Wildkin 11, Constructs 10, Infernals 10, Sirens 9, Primordials 8 (= 99; 93
+purchasable + 6 tokens). The +2 over the Phase-3 slice are the Phase-4 POSITIONAL cards:
+Corsairs **Vanguard Pennant (T2, `leftmost` aura)** + Revenants **Last Rites Drummer (T3,
+`adjacentAllies` deathrattle)**. The +4 before those were the consumption/lifetime
 cards: Infernals **Gorgemaw (T4)** + **Cindermarshal (T4)** and Revenants **Ossuary Titan
 (T5)** + **Gravemonarch (T6)**. The +7 before those were the §16 cards: Reefkin Tidebinder,
 Infernals Carrion Sovereign (T6), Constructs Nullforge + Aegis Prime (T6), Tuskers Tuskmonger,
@@ -1229,7 +1270,11 @@ to repair.
   with the buff raised). Its EFFECT is validated by the deterministic EV-CON evals and its 4/5
   body is measured normally; making the narrow line a *winning* choice depends on the Phase-4
   board-shape / anti-wide tech, so the go-tall line is deferred there rather than exercised by
-  a speculative (inert) bot heuristic today.
+  a speculative (inert) bot heuristic today. **Phase-4 status:** the board-shape work shipped
+  (the `alliesAtStart` 5/6/7 gate-spread, decision #48) diversified WIDTH but did NOT change the
+  bot's fill-to-`boardCap` policy, so `alliesAtMost≤4` is still unreached in the macro sim — the
+  #47(b) deferral **persists** into a later phase (an anti-wide tech / a narrow-restraint bot line
+  is still the prerequisite, and neither shipped here).
 
 **11.3 Breakpoint balance-gate metrics (decision #29).** Thresholds in
 `shared/config/sim.ts`; the macro-sim asserts:
@@ -1293,7 +1338,9 @@ values** (that is what drifted before). Read the files for current numbers.
   decision-#39 activated-ability price knobs (Tuskers `doubleBaseCost`, `doubleCostStep`,
   `goldgrinGems`, `gemwrightCost`, `gemwrightGold`, `facetguardCost`, `oreseekerCost`), and
   the Phase-3 knobs (Infernals `loneVanguardBuffAtk`/`Hp`/`loneVanguardAllyThreshold`;
-  Revenants `graveEmperorDeathThreshold`/`graveEmperorFactor`).
+  Revenants `graveEmperorDeathThreshold`/`graveEmperorFactor`), and the Phase-4 POSITIONAL
+  knobs (Corsairs `leftmostAttackBuff`/`leftmostAttackBuffCap` — Vanguard Pennant's `leftmost`
+  aura, decision #52).
 - **`breakpoints.ts`** — the `{ card, counter, threshold, once?, tiers?, ...payoff }` list;
   the authoritative source for every ⭐ payoff's numbers (§6.6; `tiers?` = Ossuary Titan's
   escalating steps). Also the **`spendGated` registry** (`{ card, currency, costKnobs[] }`,
@@ -1301,8 +1348,9 @@ values** (that is what drifted before). Read the files for current numbers.
   thresholdKnobs[] }`, decision #46, §6.6b) — the second and third legal primary-payoff
   classes the §11.3c lint accepts.
 - **`sim.ts`** — the balance-gate thresholds for §11.3 (a)/(b)/(d).
-- **`systems.ts`** — `freezeIsFree` (active); **DEFERRED stubs**: trinket*, tavernSpell*,
-  heroPower*.
+- **`systems.ts`** — `freezeIsFree` (active); **`techInjection` `{ fromRound, cardIds[] }`**
+  (Phase-4 tech-pool injection guarantee, decision #49, §5); **DEFERRED stubs**: trinket*,
+  tavernSpell*, heroPower*.
 - **`bots.ts`** — difficulty presets (`easy/medium/hard`) as `BotWeights` bundles
   (`greed, rollAggression, tribeCommitTurn, synergyValue, rerollThreshold, tierUpEagerness`
   + axis/bridge/breakpoint awareness: `axisValue, bridgeValue, breakpointValue,
@@ -1320,7 +1368,7 @@ cardfightinggame/
 ├─ shared/                      # imported by server, client, AND sim
 │  ├─ types/index.ts            # UnitCard, Effect, AuraSpec, CombatEvent, state, intents
 │  ├─ config/                   # economy match combat triples engines breakpoints sim systems bots
-│  ├─ content/                  # units.ts (97 rows), tribes.ts, keywords.ts  ← new units = new rows
+│  ├─ content/                  # units.ts (99 rows), tribes.ts, keywords.ts  ← new units = new rows
 │  └─ engine/                   # PURE, no IO:
 │     ├─ rng.ts                 #   seeded PRNG (mulberry32/FNV-1a, Fisher–Yates)
 │     ├─ combat.ts              #   resolveCombat(boardA,boardB,seed) -> CombatEvent[]
@@ -1436,6 +1484,29 @@ content / declarative-engine; the balance gate (`sim/web.test.ts` anti-degenerac
   minion down to its printed stats — neutralize-by-deleting-size vs. poison's kill-on-any-hit.
 - **Thornwarden** `alliesAtStart` **4→5** (Gate 3 — a real go-wide commitment, matching the
   other density rewards).
+- **`alliesAtStart` gate-SPREAD — board-shape diversification (Phase 4, decision #48).** The seven
+  `alliesAtStart` breakpoints, all threshold 5 after Gate 3, are spread into a **discrete 5/6/7
+  ladder** so builds want different widths: **5** = Thornwarden, Reaver; **6** = Marauder, Tempest,
+  Titanforge; **7** (full board) = Grovelord, Worldspark. Config-only (`breakpoints.ts` thresholds);
+  the gate evals read `getBreakpoint(...).threshold` so they re-pin automatically. **Balance risk
+  LISTED, uncompensated (rework rule):** pushing Grovelord + Worldspark to 7 nerfs two already-weak
+  tribes (post-change sim: primordials/wildkin a touch worse). All §11.3 gates still PASS, but the
+  gate-spread also **materially reduced the EV-BAL-B reachability headroom**: second-breakpoint
+  reachability on the canonical `run` seed fell **~56% (post-Phase-3) → 50.2% (Phase-4)** — passing the
+  load-bearing ≥50% floor by only **0.2pp**. The pass is robust across seeds (run 50.2 / macro 53.2 /
+  alpha 53.9 / beta 51.1 / gamma 53.0% — 5/5 pass) and `run` is now the WORST-CASE default. **Flagged
+  for final-validation / a future numbers pass (decision #48, #53):** any further content that tightens
+  breakpoint gates could tip the `run` seed under 50% and fail the gate — this thin margin must be
+  restored (loosen a 7-gate back toward 6, or add a reachability-boosting line) before shipping content
+  that raises gates again. Deliberately uncompensated here per the rework "no retune" rule.
+- **Reef Leviathan Divine-Shield scoped to Reefkin (Phase 4, decision #51).** The T6 capstone's
+  battlecries≥3 shield grant is now `filterTribe:'reefkin'`, not whole-board — a committed-line reward.
+- **Two POSITIONAL cards (Phase 4, decision #52).** Vanguard Pennant (Corsair T2): a `leftmost`
+  positional aura (+atk to the front friendly, query-at-read-time). Last Rites Drummer (Revenant T3):
+  the `adjacentAllies` deathrattle grants Reborn to its ±1 neighbors (settled-board timing, §7.3).
+- **Tech-pool injection guarantee (Phase 4, decision #49; §5).** From round 5, a fresh roll with no
+  interaction-tech card gets one slot swapped for a copy-weighted tech draw at/below tier — so the
+  §16 counter-web floor stays reachable even under an unlucky shop.
 - **Cap consistency (Gate 4).** Ruling: hard numeric caps are permitted **only** on
   multiplicative effects (no organic ceiling exists) **and** the token thin-floor (in-combat
   token summoning makes its organic bound unreliable, so the cap keeps it "never dominant").

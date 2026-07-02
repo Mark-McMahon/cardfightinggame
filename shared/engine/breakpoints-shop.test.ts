@@ -92,25 +92,27 @@ describe('EV-BP — battlecry breakpoints (SHOP)', () => {
     expect(rebornWisps(sA)).toBe(bp.summonCount ?? 1);
   });
 
-  it('EV-BP-12: Reef Leviathan — battlecries≥threshold → grant the whole board Divine Shield', () => {
+  it('EV-BP-12 (Phase 4, decision #51): Reef Leviathan — battlecries≥threshold → grant your REEFKIN Divine Shield (not the whole board)', () => {
     const bp = getBreakpoint('reefkin_leviathan');
     expect(bp.grantKeyword).toBe('divineShield');
     const hasShield = (s: ShopSession, uid0: string) =>
       s.board.find((u) => u.uid === uid0)!.keywords.includes('divineShield');
-    // below: threshold−1 total battlecries → no grant
+    // below: threshold−1 total battlecries → no grant (reefkin witness)
     const sB = fresh('bp12b');
     sB.round = 1;
-    const wB = put(sB, 'wildkin_brambleling', 'board');
+    const wB = put(sB, 'reefkin_spinefish', 'board');
     for (let i = 0; i < Math.max(0, bp.threshold - 2); i++) playCard(sB, FILLER);
     playCard(sB, 'reefkin_leviathan');
     expect(hasShield(sB, wB.uid)).toBe(false);
-    // at threshold
+    // at threshold: a REEFKIN ally is shielded; a NON-Reefkin ally is NOT (tribe-scoped grant).
     const sA = fresh('bp12a');
     sA.round = 1;
-    const wA = put(sA, 'wildkin_brambleling', 'board');
+    const reef = put(sA, 'reefkin_spinefish', 'board'); // reefkin → gets the shield
+    const nonReef = put(sA, 'wildkin_brambleling', 'board'); // wildkin → does NOT
     for (let i = 0; i < bp.threshold - 1; i++) playCard(sA, FILLER);
     playCard(sA, 'reefkin_leviathan');
-    expect(hasShield(sA, wA.uid)).toBe(true);
+    expect(hasShield(sA, reef.uid)).toBe(true);
+    expect(hasShield(sA, nonReef.uid)).toBe(false); // scoped to Reefkin (decision #51)
   });
 
   it('EV-BP-25: Deepchanter — battlecries≥threshold → a friendly minion gains Poison and +atk/+hp', () => {

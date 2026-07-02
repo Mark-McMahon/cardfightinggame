@@ -33,7 +33,7 @@ import {
   selectTargets,
   type ConditionCounts,
 } from './effects';
-import { damageMultiplier } from './auras';
+import { damageMultiplier, leftmostAttackBonus } from './auras';
 import { runHandler } from './handlers';
 
 // ── Live combat unit (Fighter) ─────────────────────────────────────────────────
@@ -191,6 +191,16 @@ function clampIndex(i: number, len: number): number {
   return i;
 }
 
+/** Effective striking attack: a fighter that is CURRENTLY the leftmost of its side (board index 0)
+ *  gains the side's positional `leftmost` aura bonus (Vanguard Pennant, §6.4). Read live at every
+ *  strike, so a reposition or the leftmost's death moves the bonus to the new front unit for free. */
+function strikeAtk(side: Side, fighter: Fighter): number {
+  if (side.units.length > 0 && side.units[0] === fighter) {
+    return fighter.atk + leftmostAttackBonus(side.units);
+  }
+  return fighter.atk;
+}
+
 // ── loss damage (D6: WINNER's tier) ──────────────────────────────────────────────
 
 export function lossDamage(winnerTier: number, survivorTierSum: number): number {
@@ -279,12 +289,15 @@ function attackStep(ctx: Ctx, sideId: 'a' | 'b'): void {
   side.pointer = side.pointer + 1;
 
   const attackerPoison = hasKw(attacker, 'poison');
-  // main hit — may break the defender's shield and (via onShieldBreak) insert a unit.
-  dealDamageInstance(ctx, side, attacker, enemy, defender, attacker.atk, attackerPoison);
+  // main hit — may break the defender's shield and (via onShieldBreak) insert a unit. `strikeAtk`
+  // folds in the leftmost positional aura live (§6.4). Cache it: the attacker's slot can change mid-
+  // step (a shield-break insert), and both the main hit and cleave use the attacker's striking atk.
+  const attackerStrike = strikeAtk(side, attacker);
+  dealDamageInstance(ctx, side, attacker, enemy, defender, attackerStrike, attackerPoison);
 
   // cleave: recompute neighbor positions against the CURRENT enemy line (D3ii).
   if (hasKw(attacker, 'cleave')) {
-    const cleaveRaw = attacker.atk * combatCfg.cleaveDefault;
+    const cleaveRaw = attackerStrike * combatCfg.cleaveDefault;
     const di = enemy.units.indexOf(defender);
     if (di >= 0) {
       const left = enemy.units[di - 1];
@@ -296,9 +309,9 @@ function attackStep(ctx: Ctx, sideId: 'a' | 'b'): void {
     }
   }
 
-  // retaliation — the defender (still in the line) hits back.
+  // retaliation — the defender (still in the line) hits back (its own leftmost bonus, if front).
   if (enemy.units.some((u) => u.uid === defender.uid)) {
-    dealDamageInstance(ctx, enemy, defender, side, attacker, defender.atk, hasKw(defender, 'poison'));
+    dealDamageInstance(ctx, enemy, defender, side, attacker, strikeAtk(enemy, defender), hasKw(defender, 'poison'));
   }
 
   resolveDeaths(ctx, sideId);
@@ -517,11 +530,31 @@ function resolveCombatEffect(
   };
   if (!evaluateCondition(effect.condition, counts)) return;
 
+  // Positional neighbors for `adjacentAllies` (§7.3, Last Rites Drummer). A LIVING source uses its
+  // true board slot; a REMOVED source (D1 deathrattle — the batch was removed before deathrattles
+  // fired) uses its settled anchor slot, so the neighbors are the units now flanking the gap.
+  let adjacentUids: string[] | undefined;
+  if (effect.target.selector === 'adjacentAllies') {
+    const srcIdx = side.units.indexOf(source);
+    let leftN: Fighter | undefined;
+    let rightN: Fighter | undefined;
+    if (srcIdx >= 0) {
+      leftN = side.units[srcIdx - 1];
+      rightN = side.units[srcIdx + 1];
+    } else {
+      const slot = clampIndex(anchorIndex, side.units.length);
+      leftN = side.units[slot - 1];
+      rightN = side.units[slot];
+    }
+    adjacentUids = [leftN, rightN].filter((u): u is Fighter => !!u).map((u) => u.uid);
+  }
+
   const targets = selectTargets(effect.target, {
     source,
     triggerSource,
     allies: living(side.units),
     enemies: living(enemy.units),
+    adjacentUids,
     rng: ctx.rng,
   });
 

@@ -14,7 +14,7 @@ export type { MakeInstanceOpts } from './instances';
 export { makePublicPlayer, makePublicState, toClientUnit, toShopOffer, baseIncomeForRound } from './state';
 
 // Shared pool
-export { createPool, drawOne, draw, returnCopy, takeCopy, discoverOptions } from './pool';
+export { createPool, drawOne, drawOneFrom, draw, returnCopy, takeCopy, discoverOptions } from './pool';
 export type { PoolState } from './pool';
 
 // Breakpoint lint helper (getBreakpoint/hasBreakpoint/Breakpoint come from config)
@@ -33,7 +33,7 @@ export {
 export type { Targetable, SelectContext, ConditionCounts, Stats } from './effects';
 
 // Passive-modifier queries
-export { battlecryMultiplier, endOfTurnSummonMultiplier, damageMultiplier } from './auras';
+export { battlecryMultiplier, endOfTurnSummonMultiplier, damageMultiplier, leftmostAttackBonus } from './auras';
 export type { AuraBearer, SideCounters } from './auras';
 
 // Custom handler registry

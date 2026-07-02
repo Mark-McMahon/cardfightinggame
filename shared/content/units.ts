@@ -425,6 +425,28 @@ export const UNITS: UnitCard[] = [
     ],
   },
   {
+    // Phase 4 POSITIONAL card (decision #52; clean-room §0 — "Last Rites Drummer" is original). A
+    // deathrattle that grants REBORN to its board-index ±1 neighbors (the `adjacentAllies` selector,
+    // §6.3/§7.3), computed against the SETTLED board at deathrattle time (D1). Rewards clustering it
+    // between two carries so its death re-arms the flanks; folds to poison (kills each reborn twice).
+    id: 'revenants_lastrites',
+    name: 'Last Rites Drummer',
+    tribe: 'revenants',
+    tier: 3,
+    atk: 2,
+    hp: 3,
+    keywords: [],
+    axis: ['deaths', 'endure'],
+    text: 'Deathrattle: your adjacent minions gain Reborn.',
+    effects: [
+      {
+        trigger: { type: 'deathrattle' },
+        target: { selector: 'adjacentAllies' },
+        actions: [{ type: 'grantKeyword', keyword: 'reborn' }],
+      },
+    ],
+  },
+  {
     // 🔶 bridge → Reefkin: a battlecry on a DEATHS body.
     id: 'revenants_tideclaimer',
     name: 'Tideclaimer',
@@ -761,12 +783,14 @@ export const UNITS: UnitCard[] = [
     hp: 6,
     keywords: ['divineShield', 'taunt'],
     axis: ['battlecries', 'endure'],
-    text: `Divine Shield. Taunt. Battlecry: if you've played ${bp('reefkin_leviathan').threshold}+ battlecries this turn, give your whole board Divine Shield.`,
+    text: `Divine Shield. Taunt. Battlecry: if you've played ${bp('reefkin_leviathan').threshold}+ battlecries this turn, give your Reefkin Divine Shield.`,
     effects: [
       {
+        // Phase 4 rebalance (decision #51): the Divine Shield grant is scoped to REEFKIN (filterTribe),
+        // no longer the whole board — the capstone rewards a committed Reefkin line, not any splash body.
         trigger: { type: 'battlecry' },
         condition: { kind: 'battlecriesThisTurnAtLeast', value: bp('reefkin_leviathan').threshold },
-        target: { selector: 'allAllies' },
+        target: { selector: 'allAllies', filterTribe: 'reefkin' },
         actions: [{ type: 'grantKeyword', keyword: bp('reefkin_leviathan').grantKeyword }],
       },
     ],
@@ -1876,6 +1900,23 @@ export const UNITS: UnitCard[] = [
     axis: ['tempo', 'endure'],
     text: 'Divine Shield. Taunt.',
     effects: [],
+  },
+  {
+    // Phase 4 POSITIONAL card (decision #52; clean-room §0 — "Vanguard Pennant" is original, no
+    // reference-game card of this name). A cheap standard-bearer whose `leftmost` aura (§6.4) hands
+    // the FRONT minion +C.leftmostAttackBuff attack. Query-at-read-time, so it rewards positioning
+    // your biggest body left / benefits whoever inherits the front when the leftmost dies mid-fight.
+    id: 'corsairs_pennant',
+    name: 'Vanguard Pennant',
+    tribe: 'corsairs',
+    tier: 2,
+    atk: 1,
+    hp: 4,
+    keywords: [],
+    axis: ['tempo'],
+    text: `Your leftmost minion has +${C.leftmostAttackBuff} Attack.`,
+    effects: [],
+    auras: [{ scope: 'leftmost', modifier: { kind: 'attackBuff', value: C.leftmostAttackBuff } }],
   },
   {
     id: 'corsairs_cutthroat',

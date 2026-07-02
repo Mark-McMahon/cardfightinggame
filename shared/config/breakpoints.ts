@@ -51,8 +51,8 @@ export const breakpoints: BreakpointsConfig = {
     // per-token buff remains, and its threshold is raised 2→3 so it costs a real over-summon (a second
     // generator / a summon-battlecry), not one autopilot Brambleling. tokenAtk/tokenHp only.
     { card: 'wildkin_motherthorn', counter: 'tokensThisTurn', threshold: 3, tokenAtk: 2, tokenHp: 2 },
-    { card: 'wildkin_thornwarden', counter: 'alliesAtStart', threshold: 5, once: true, atk: 2, hp: 4 }, // threshold 4→5 (audit Gate 3): a real go-wide commitment, matching Grovelord/Tempest/Titanforge; payoff still pays splashes to compete with mono (§16.7a)
-    { card: 'wildkin_grovelord', counter: 'alliesAtStart', threshold: 5, once: true, atk: 2, hp: 2 }, // Prompt-1 Part B rework: a wide-board start-of-combat bomb that survives a full board (was a cap-truncated summon)
+    { card: 'wildkin_thornwarden', counter: 'alliesAtStart', threshold: 5, once: true, atk: 2, hp: 4 }, // Phase 4 gate-spread: STAYS at 5 (the low-width anchor of the diversified alliesAtStart ladder 5/6/7, decision #48)
+    { card: 'wildkin_grovelord', counter: 'alliesAtStart', threshold: 7, once: true, atk: 2, hp: 2 }, // Phase 4 gate-spread: 5→7 — a FULL-BOARD payoff (decision #48). Balance-risk noted: nerfs an already-weak line; no compensating tuning this PR (rework rule)
     { card: 'wildkin_packmother', counter: 'deaths', threshold: 2, atk: 2, hp: 2 }, // each-N (existing avenge); hp aligned to as-shipped card payoff (engines.wildkin.avengePayoff = 2/2)
     { card: 'wildkin_brackentide', counter: 'battlecries', threshold: 2, summonUnitId: 'wildkin_thornpup', summonCount: 2 },
     // ── Revenants / DEATHS ──
@@ -90,7 +90,7 @@ export const breakpoints: BreakpointsConfig = {
     // ── Prompt-2: Constructs / ASSEMBLY (reuse `deaths` + `alliesAtStart`). Rebuild payoffs —
     //    summon a guardian; countered by poison/tall (the refill can't out-attrition a chip). ──
     { card: 'constructs_foundry', counter: 'deaths', threshold: 4, once: true, summonUnitId: 'constructs_sentinel', summonCount: 1 },
-    { card: 'constructs_titanforge', counter: 'alliesAtStart', threshold: 5, once: true, summonUnitId: 'constructs_sentinel', summonCount: 1 },
+    { card: 'constructs_titanforge', counter: 'alliesAtStart', threshold: 6, once: true, summonUnitId: 'constructs_sentinel', summonCount: 1 }, // Phase 4 gate-spread: 5→6 (mid-width, decision #48)
     // Aegis Prime (audit: Constructs T6 capstone + Pattern-A redeploy scalar). everyN at threshold 1 →
     // each friendly death pumps the surviving Constructs (combat-only); the assembly loop IS the fuel.
     // Registered as a breakpoint so the anti-linear lint bounds it. Folds to poison + tall.
@@ -105,8 +105,8 @@ export const breakpoints: BreakpointsConfig = {
     // ── Primordials / ELEMENTS: play-count → WIDE cleave splash. Counter: TALL (few targets waste
     //    cleave) + poison. Reuses `battlecries` (each play) and `alliesAtStart` (went wide). ──
     { card: 'primordials_stormcaller', counter: 'battlecries', threshold: 2, atk: 2, hp: 1 },
-    { card: 'primordials_tempest', counter: 'alliesAtStart', threshold: 5, once: true, atk: 2 },
-    { card: 'primordials_worldspark', counter: 'alliesAtStart', threshold: 5, once: true, grantKeyword: 'cleave' },
+    { card: 'primordials_tempest', counter: 'alliesAtStart', threshold: 6, once: true, atk: 2 }, // Phase 4 gate-spread: 5→6 (mid-width, decision #48)
+    { card: 'primordials_worldspark', counter: 'alliesAtStart', threshold: 7, once: true, grantKeyword: 'cleave' }, // Phase 4 gate-spread: 5→7 — FULL-BOARD cleave grant (decision #48). Balance-risk noted (see Grovelord); no compensating tuning this PR
     // ── Sirens / SPELLCRAFT: a second POISON home + start-of-combat burst. Counter: divine-shield
     //    walls (blank the poison instance) + being out-tempo'd. Reuses `battlecries`. ──
     { card: 'sirens_deepchanter', counter: 'battlecries', threshold: 2, atk: 2, hp: 2 },
@@ -114,8 +114,8 @@ export const breakpoints: BreakpointsConfig = {
     { card: 'sirens_leviathansong', counter: 'battlecries', threshold: 3, atk: 2, hp: 2 },
     // ── Corsairs / TEMPO: on-buy aggression → sticky REBORN / divine-shield width. Counter: poison
     //    (kills each reborn body twice over) + cleave (mows the width). Reuses `alliesAtStart`. ──
-    { card: 'corsairs_reaver', counter: 'alliesAtStart', threshold: 5, once: true, atk: 1 }, // 4→5 threshold + 2→1 atk: a real go-wide commitment, not trivially-on (macro OP watch)
-    { card: 'corsairs_marauder', counter: 'alliesAtStart', threshold: 5, once: true, atk: 2, hp: 1 },
+    { card: 'corsairs_reaver', counter: 'alliesAtStart', threshold: 5, once: true, atk: 1 }, // Phase 4 gate-spread: STAYS at 5 (low-width anchor, decision #48)
+    { card: 'corsairs_marauder', counter: 'alliesAtStart', threshold: 6, once: true, atk: 2, hp: 1 }, // Phase 4 gate-spread: 5→6 (mid-width, decision #48)
   ],
 };
 

@@ -218,6 +218,8 @@ export interface AuraSpec {
     | 'allAllies'
     | 'yourBattlecries'
     | 'yourEndOfTurn'
+    | 'leftmost' // Phase 4 POSITIONAL aura (§6.4): the LEFTMOST friendly (board index 0) on the
+    // bearer's side. Query-at-read-time in combat, so a reposition/death moves the bonus for free.
     | 'yourGems'
     | 'yourSpells'
     | 'shopCostTribe';
@@ -225,6 +227,8 @@ export interface AuraSpec {
     kind:
       | 'triggerMultiplier'
       | 'damageMultiplier'
+      | 'attackBuff' // Phase 4 (§6.4): flat +`value` ATTACK applied by a positional aura (Vanguard
+      // Pennant). Combat-only, read live at strike time; capped by a config knob (engines.corsairs).
       | 'costReduction'
       | 'gemValueAdd'
       | 'spellPowerAdd'

@@ -50,9 +50,11 @@ function scalingNodes(): WebNode[] {
     {
       name: 'deaths-revenants',
       role: 'scaling',
-      note: 'Reborn/death payoffs; Pale Lich amp + Mortarch fire live in combat.',
+      // Phase 4: Last Rites Drummer (adjacentAllies deathrattle → Reborn) exercised live between carries.
+      note: 'Reborn/death payoffs; Pale Lich amp + Mortarch + Last Rites Drummer (adjacency Reborn) fire live.',
       board: buildBoard([
-        { cardId: 'revenants_cryptling', count: 2 },
+        { cardId: 'revenants_cryptling' },
+        { cardId: 'revenants_lastrites' },
         { cardId: 'revenants_tombspawn' },
         { cardId: 'revenants_mortarch' },
         { cardId: 'revenants_palelich' },
@@ -100,9 +102,11 @@ function scalingNodes(): WebNode[] {
     {
       name: 'corsair-aggro', // Quartermaster build-around (§16 Pattern B) committed
       role: 'scaling',
-      note: 'Wide reborn/shield tempo; Reaver/Marauder start-of-combat arm the wide board live.',
+      // Phase 4: Vanguard Pennant (leftmost +2 attack) exercised live on the wide front body.
+      note: 'Wide reborn/shield tempo; Reaver (≥5)/Marauder (≥6) arm the wide board live; Pennant buffs the front.',
       board: buildBoard([
-        { cardId: 'corsairs_swab', count: 2 },
+        { cardId: 'corsairs_swab' },
+        { cardId: 'corsairs_pennant' },
         { cardId: 'corsairs_cutthroat' },
         { cardId: 'corsairs_reaver' },
         { cardId: 'corsairs_marauder' },
@@ -113,12 +117,15 @@ function scalingNodes(): WebNode[] {
     {
       name: 'primordial-cleave',
       role: 'scaling',
-      note: 'Wide cleavers; Tempest/Worldspark arm + spread cleave live at alliesAtStart≥5.',
+      // Phase 4 gate-spread (decision #48): Tempest now arms at alliesAtStart≥6 and Worldspark at ≥7,
+      // so the committed cleave line goes FULL-BOARD (7) to reach both — the wider board its payoffs now want.
+      note: 'Full-board cleavers; Tempest (≥6) arms + Worldspark (≥7) spreads cleave live on a 7-wide board.',
       board: buildBoard([
         { cardId: 'primordials_gustling', count: 2 },
         { cardId: 'primordials_cinderwing' },
         { cardId: 'primordials_tempest' },
         { cardId: 'primordials_thunderhead' },
+        { cardId: 'primordials_sparkling' },
         { cardId: 'primordials_worldspark' },
       ]),
     },

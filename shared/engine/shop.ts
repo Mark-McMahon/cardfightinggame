@@ -14,7 +14,7 @@ import type {
   UnitCard,
   UnitInstance,
 } from '../types';
-import { economy, engines, triples as triplesCfg } from '../config';
+import { economy, engines, systems, triples as triplesCfg } from '../config';
 import { getCard } from '../content';
 import { Rng } from './rng';
 import {
@@ -29,7 +29,7 @@ import {
 import { battlecryMultiplier, endOfTurnSummonMultiplier, type AuraBearer } from './auras';
 import { toCombatBoard, makeInstance } from './instances';
 import { baseIncomeForRound, toClientUnit, toShopOffer } from './state';
-import { createPool, draw, discoverOptions, returnCopy, takeCopy, type PoolState } from './pool';
+import { createPool, draw, drawOneFrom, discoverOptions, returnCopy, takeCopy, type PoolState } from './pool';
 
 /** Engine-level result shape for every shop op + Match.applyIntent (spec §9.7). Not a frozen type. */
 export interface OpResult {
@@ -338,8 +338,12 @@ function fireBattlecry(s: ShopSession, source: UnitInstance): void {
   const card = getCard(source.cardId);
   if (!hasBattlecry(card.id)) return;
   const multiplier = battlecryMultiplier(auraBearers(s));
-  // Echo Choir increments the counter by the multiplier UP FRONT (EV-AUR-05).
-  s.battlecriesThisTurn += multiplier;
+  // Phase 4 Echo Choir rebalance (decision #50): a played battlecry counts as EXACTLY ONE toward
+  // `battlecriesThisTurn`, regardless of the Echo Choir doubler. The doubler still amplifies OUTPUT
+  // (each battlecry EFFECT and afterFriendlyBattlecry resolves `multiplier` times, below), but the
+  // ECHOED copy no longer inflates the counter that GATES other battlecry breakpoints — closing the
+  // double-dip where a single play could reach a ≥2 gate from the echo alone (EV-AUR-05).
+  s.battlecriesThisTurn += 1;
 
   for (const e of card.effects) {
     if (e.trigger.type !== 'battlecry') continue;
@@ -386,6 +390,45 @@ function fireOnSell(s: ShopSession): void {
   }
 }
 
+// ── tech-pool injection guarantee (spec §5, decision #49) ───────────────────────────
+
+/**
+ * After a FRESH roll is drawn, guarantee the shop offers at least one interaction-tech card from
+ * `systems.techInjection.cardIds` — from `fromRound` onward. If the roll already contains a tech
+ * card (or the round is too early), it is a no-op. Otherwise ONE slot is replaced by a copy-weighted
+ * pool draw restricted to the tech ids AT OR BELOW the shop tier; the replaced slot is chosen
+ * DETERMINISTICALLY from the shop RNG. Pool accounting mirrors any other offer: the injected copy is
+ * TAKEN from the pool (drawOneFrom) and the replaced offer RETURNED to it — net-zero, no phantom
+ * copies. If no tech copy is available at/below tier, the roll is left as-is and logged (never a crash).
+ *
+ * Draw order is fixed (tech draw, THEN the slot pick) so the session RNG stays deterministic:
+ * same seed + state → same injection.
+ */
+function maybeInjectTech(s: ShopSession): void {
+  const cfg = systems.techInjection;
+  if (s.round < cfg.fromRound) return;
+  if (s.shop.length === 0) return;
+  if (s.shop.some((id) => cfg.cardIds.includes(id))) return; // already has a tech card
+  const techId = drawOneFrom(s.pool, s.tier, s.rng, cfg.cardIds);
+  if (!techId) {
+    s.log.push('tech injection skipped (no tech copy at/below tier)');
+    return;
+  }
+  const slot = s.rng.int(s.shop.length);
+  const replaced = s.shop[slot];
+  returnCopy(s.pool, replaced);
+  s.shop[slot] = techId;
+  s.log.push(`tech injected: ${replaced} → ${techId} (slot ${slot})`);
+}
+
+/** Draw a fresh shop into `s.shop` (all prior offers already returned by the caller) and apply the
+ *  Phase 4 tech-injection guarantee. The single fresh-roll path shared by startShopPhase / rollShop /
+ *  Oreseeker refresh, so all three stay byte-identical for the same seed+state (EV-ABL-08). */
+function drawFreshShop(s: ShopSession): void {
+  s.shop = draw(s.pool, s.tier, economy.shopSlotsByTier[s.tier - 1] ?? 0, s.rng);
+  maybeInjectTech(s);
+}
+
 // ── ops ──────────────────────────────────────────────────────────────────────────
 
 export function startShopPhase(s: ShopSession): OpResult {
@@ -399,11 +442,12 @@ export function startShopPhase(s: ShopSession): OpResult {
   s.pendingTarget = null;
   s.discover = null;
   if (s.frozen) {
-    // frozen offers persist into this shop; the freeze then clears (EV-ECO-05).
+    // frozen offers persist into this shop; the freeze then clears (EV-ECO-05). A frozen shop is NOT
+    // re-rolled, so the tech-injection guarantee does not apply to it (decision #49).
     s.frozen = false;
   } else {
     for (const id of s.shop) returnCopy(s.pool, id);
-    s.shop = draw(s.pool, s.tier, economy.shopSlotsByTier[s.tier - 1] ?? 0, s.rng);
+    drawFreshShop(s);
   }
   return { ok: true };
 }
@@ -461,7 +505,7 @@ export function rollShop(s: ShopSession): OpResult {
   s.gold -= economy.rerollCost;
   for (const id of s.shop) returnCopy(s.pool, id);
   s.frozen = false;
-  s.shop = draw(s.pool, s.tier, economy.shopSlotsByTier[s.tier - 1] ?? 0, s.rng);
+  drawFreshShop(s);
   return { ok: true };
 }
 
@@ -630,11 +674,11 @@ export function activateAbility(s: ShopSession, uid: string): OpResult {
         s.gold = Math.min(economy.goldCap, s.gold + (action.amount ?? 0));
         break;
       case 'refreshShop': {
-        // free reroll: identical draw path to rollShop (same seeded session Rng), no gold
-        // charge; clears a freeze exactly like a paid roll does (spec §6.6a).
+        // free reroll: identical draw path to rollShop (same seeded session Rng + tech injection),
+        // no gold charge; clears a freeze exactly like a paid roll does (spec §6.6a).
         for (const id of s.shop) returnCopy(s.pool, id);
         s.frozen = false;
-        s.shop = draw(s.pool, s.tier, economy.shopSlotsByTier[s.tier - 1] ?? 0, s.rng);
+        drawFreshShop(s);
         break;
       }
       case 'giveGem':

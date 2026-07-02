@@ -518,6 +518,81 @@ build from functional mechanics only; original names/text/art throughout.
     bottom-two and remain the explicit Phase 4/5 rebalance targets. All §11.3 gates still PASS and no
     Phase-3 card flags OP/DEAD.
 
+48. **alliesAtStart gate-spread — board-shape diversification (2026-07-02; Phase 4).** The seven
+    `alliesAtStart` breakpoints were all threshold 5 (a single "go 5-wide" shape). They are spread into a
+    **discrete 5/6/7 ladder** (still config rows, breakpoint law #22 intact) so different builds want
+    different widths: **5 (low-width anchor):** `wildkin_thornwarden`, `corsairs_reaver`; **6 (mid):**
+    `corsairs_marauder`, `primordials_tempest`, `constructs_titanforge`; **7 (full board):**
+    `wildkin_grovelord`, `primordials_worldspark`. Config-ONLY change to `breakpoints.ts` thresholds — no
+    logic touched; the combat/shop gate evals read `getBreakpoint(...).threshold` so they re-pin
+    automatically, and the sim web nodes were widened to the shape each payoff now wants (primordial-cleave
+    → 7). **Balance risk (LISTED, not fixed — per the rework "no compensating tuning" rule):** pushing
+    `wildkin_grovelord` and `primordials_worldspark` to 7 nerfs two already-bottom tribes. Post-change sim
+    (seed `run`, 200 matches): primordials avgP 4.87→5.30 and wildkin 5.47→5.62 (report run) — both a touch
+    WORSE, as predicted. All seven §11.3 gates still PASS (reachability held at 50.2% run / 53.2% macro).
+    Flagged for a future numbers pass; deliberately uncompensated here. **See #53 — the same gate-spread
+    also halved the EV-BAL-B reachability HEADROOM (razor-thin on the default seed).**
+53. **EV-BAL-B reachability headroom halved by the #48 gate-spread — FLAGGED for final validation
+    (2026-07-02; Phase 4).** Raising the `alliesAtStart` gates to 6/7 makes the second-breakpoint payoffs
+    rarer, which directly shrinks the sim's reachability metric. Measured: second-breakpoint reachability
+    on the canonical `run` seed fell **~56% (committed baseline a0d64bf, post-Phase-3) → 50.2% (Phase-4
+    tree)** — i.e. it now clears the load-bearing ≥50% EV-BAL-B floor by only **0.2pp**. The pass is
+    ROBUST (5/5 seeds verified: run 50.2 / macro 53.2 / alpha 53.9 / beta 51.1 / gamma 53.0%) and `run` is
+    now the WORST-CASE default seed. **Not blocking** — every gate is green — but the margin on the
+    reported default seed is essentially gone. **Consequence recorded for the Phase-7 final-validation
+    pass:** any future content that tightens breakpoint gates further could tip the `run` seed under 50%
+    and fail EV-BAL-B; before shipping any such content the margin must be restored (e.g. relax one 7-gate
+    toward 6, or add a reachability-boosting line). Per the rework "no compensating tuning this PR" rule
+    the gates are left as-is here; this entry is the explicit DOCUMENTED flag (not a silent gap), paired
+    with the design-spec §16 audit note.
+49. **Tech-pool injection guarantee (2026-07-02; Phase 4).** From round `systems.techInjection.fromRound`
+    (=5) onward, a **fresh** roll that offers NO interaction-tech card has ONE slot replaced by a
+    copy-weighted pool draw restricted to the tech ids AT/BELOW the shop tier
+    (`{reefkin_spinefish, sirens_lurefish, reefkin_brineling, sirens_reefwitch, sirens_venomsong,
+    constructs_nullforge}`). The replaced slot is chosen **deterministically from the shop RNG** (no
+    "relevance" concept — none exists in this engine, and none was invented). **Pool accounting** mirrors
+    any offer: the injected copy is TAKEN (`drawOneFrom`) and the replaced offer RETURNED (`returnCopy`) —
+    net-zero, never a phantom copy; if no tech copy is available at/below tier the roll is left as-is and
+    logged (never a crash). Hooks EVERY fresh-roll path through one `drawFreshShop` helper —
+    `startShopPhase` (non-frozen), `rollShop`, and Oreseeker's `refreshShop` — so all three stay
+    byte-identical for the same seed+state (preserves EV-ABL-08). A **frozen** shop is NOT re-rolled, so it
+    is never injected. Draw order is fixed (tech draw, then slot pick) → deterministic (invariant 2b). This
+    changes the pinned §9.7 shop reducer; goldens/tests updated (EV-TCH-01..04). Motive: guarantee a
+    developed board always has access to an ANSWER (poison / stat-neutralizer), so scaling lines stay
+    context-sensitive (the §16 floor) even under bad rolls.
+50. **Echo Choir counting rebalance — amplify OUTPUT, not the gate COUNT (2026-07-02; Phase 4; refines
+    #—/EV-AUR-05).** Previously a played battlecry incremented `battlecriesThisTurn` by the Echo Choir
+    MULTIPLIER up front, so one play could reach a ≥2 gate from the echoed copy alone (a double-dip:
+    Chorus Tide echoed at 0 prior battlecries fired its own ≥2 payoff). Now a played battlecry counts as
+    **exactly one** toward `battlecriesThisTurn`, regardless of the doubler. The doubler STILL amplifies
+    OUTPUT — each battlecry EFFECT and every `afterFriendlyBattlecry` still resolves `multiplier` times
+    (the ×2 cap + non-stacking are unchanged) — but the echoed copy no longer inflates the counter that
+    GATES OTHER battlecry payoffs. **Knowingly rewrote the pinning golden:** EV-AUR-05 (auras-shop) asserted
+    `battlecriesThisTurn===2` from one echoed play; it now asserts `===1` (no buff from the echo) AND that a
+    second real battlecry crosses the gate with the ×2 OUTPUT intact. Intent: the doubler is an output
+    amplifier, not a battlecry-count inflator.
+51. **Reef Leviathan Divine-Shield grant scoped to Reefkin (2026-07-02; Phase 4).** The T6 capstone's
+    battlecry (battlecries≥3 → grant Divine Shield) was `allAllies` (whole board — any splash body). It is
+    now `allAllies` + `filterTribe:'reefkin'`, rewarding a committed Reefkin line rather than a generic
+    shield-splash. Data-only change in `units.ts` (gate threshold 3 unchanged); EV-BP-12 updated to prove a
+    non-Reefkin ally no longer receives the shield.
+52. **Two positional cards + their vocabulary primitives (2026-07-02; Phase 4).** Board position becomes a
+    lever via two clean-room-original cards (§0-checked; neither name nor text is from any reference game),
+    each promoting a RESERVED/new primitive to first-class LIVE (§6.4/§6.9 — the aura vocabulary is closed,
+    so this is an explicit addition + eval). (a) **Vanguard Pennant** (Corsair T2 1/4): a NEW positional
+    aura scope `leftmost` + modifier `attackBuff` — "your leftmost minion has +`engines.corsairs.leftmostAttackBuff`
+    (=2) attack." Query-at-read-time in combat (`leftmostAttackBonus`, folded into `strikeAtk` at every
+    strike), so a reposition or the leftmost's death moves the bonus to the new front unit for free
+    (verified by EV-AUR-06 + golden EV-GLD-13). Stacked pennants sum, capped at `leftmostAttackBuffCap`
+    (=4) so it stays a fixed positional utility buff, not an unbounded per-unit scaler (#22). (b) **Last
+    Rites Drummer** (Revenant T3 2/3): implements the RESERVED `adjacentAllies` selector for real —
+    "Deathrattle: your adjacent minions gain Reborn." Neighbors are board-index ±1 computed against the
+    SETTLED board at deathrattle time (D1 batch semantics — the source is already removed, so the flanks of
+    its settled slot are used), shipped declaratively via a pre-computed-neighbor-uids field on the select
+    context (EV-ADJ-01 + golden EV-GLD-14). Custom-handler registry stays at EXACTLY 2 (both cards are pure
+    declarative data). **Note:** Cindermarshal's go-tall line (#47b) remains deferred — the gate-spread does
+    not change the bot's fill-to-7 policy, so `alliesAtMost≤4` is still unreached in the macro sim.
+
 ## Tribe name map (clean-room — never ship the reference names)
 | Reference (do NOT ship) | Original name | Identity |
 |---|---|---|

@@ -54,6 +54,31 @@ export function draw(pool: PoolState, tier: number, n: number, rng: Rng): string
   return out;
 }
 
+/** Draw one card id from `allowed` at/below `tier`, copy-weighted; removes the copy. Returns
+ *  undefined if none of the allowed ids has a copy at/below tier (Phase 4 tech injection — the
+ *  caller then leaves the roll unchanged and logs it, never a phantom copy). */
+export function drawOneFrom(pool: PoolState, tier: number, rng: Rng, allowed: readonly string[]): string | undefined {
+  const set = new Set(allowed);
+  const list: Array<{ id: string; count: number }> = [];
+  for (const card of PURCHASABLE_UNITS) {
+    if (!set.has(card.id)) continue;
+    if (card.tier > tier) continue;
+    const count = pool[card.id] ?? 0;
+    if (count > 0) list.push({ id: card.id, count });
+  }
+  const total = list.reduce((s, e) => s + e.count, 0);
+  if (total === 0) return undefined;
+  let r = rng.int(total);
+  for (const e of list) {
+    if (r < e.count) {
+      pool[e.id]!--;
+      return e.id;
+    }
+    r -= e.count;
+  }
+  return undefined;
+}
+
 /** Return a copy to the pool (unbought roll offers, sold purchasable bodies). */
 export function returnCopy(pool: PoolState, cardId: string): void {
   if (!(cardId in pool)) return; // tokens / goldens are pool-exempt
