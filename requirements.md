@@ -372,6 +372,32 @@ build from functional mechanics only; original names/text/art throughout.
     routing; v1 is single-instance. No engine invariant is touched (this is transport/hosting,
     not rules); no eval changes.
 
+### Matchmaking display fix (Round 11) — pairing timing, no combat-outcome change
+
+42. **Pairing is computed at the START of the shop phase, not at combat start; the public
+    `pairings` list is the upcoming opponent, never last round's. (2026-07-01, spec §4.4/§10.
+    Refines #10.)** Symptom this fixes: during the shop the client's "vs" label and standings
+    highlight were reading a **stale** `state.pairings` (only ever written inside
+    `resolveCombatPhase`), so they showed the **previous** round's opponent — and, because
+    that opponent could have been eliminated in the intervening combat, they showed a **dead**
+    player's name with **no living row highlighted** (round 1's shop showed nothing at all,
+    since `pairings` was still empty). Fix: `Match.startRound` now computes the round's pairing
+    up front via an idempotent `ensurePairings()`; `resolveCombatPhase` **reuses** that exact
+    list and consumes it (so a bare resolve with no preceding `startRound` — the round-0 engine
+    tests, the ghost driver in `combatWriteback.test` — still re-pairs against the current alive
+    set). **This changes no combat outcome and is byte-identical for the sim:** the pairing
+    inputs (alive set, `lastOpponent`, most-recent ghost) cannot change during a shop (no one
+    dies mid-shop), and `computePairings` draws from its own `:pair:<round>` RNG, so no other
+    random stream shifts — all 215 evals unchanged. Client corollary: the two ad-hoc opponent
+    resolvers (`Shop.opponentSeat`, `App.opponentName`) collapse into one shared
+    `resolveOpponent(pub, seat) → {seat, name, ghost}` (`client/src/components.tsx`) used by
+    both the shop preview and the combat label, so a **ghost bye** now renders consistently as
+    "vs \<name\> · ghost" in the shop (no living row highlighted) instead of the shop showing
+    blank while the fight showed a name. **Not addressed here (logged, gameplay-affecting):** the
+    `ghostsEnabled` config flag is still never read (ghosts always fill odd counts), and an odd
+    roster with no eliminations yet still fights an empty board (a free win) — both are latent
+    and unreachable under 8-player bot-fill, deferred to a separate decision.
+
 ## Tribe name map (clean-room — never ship the reference names)
 | Reference (do NOT ship) | Original name | Identity |
 |---|---|---|

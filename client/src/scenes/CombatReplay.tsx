@@ -192,7 +192,7 @@ function useBeatClock(durationMs: number, playing: boolean, resetKey: number, on
   }, [durationMs, playing, resetKey]);
 }
 
-export function CombatReplay({ log, myBoard }: { log: CombatEvent[]; myBoard: { uid: string; cardId: string }[] }) {
+export function CombatReplay({ log, myBoard, opponentName }: { log: CombatEvent[]; myBoard: { uid: string; cardId: string }[]; opponentName: string }) {
   const bs = useMemo(() => beats(log), [log]);
   // Auto-fit: the server holds the 'combat' phase for combatWindowMs (capped). If this fight's
   // natural playback would overrun that cap, compress the dwell just enough to finish inside it,
@@ -407,11 +407,11 @@ export function CombatReplay({ log, myBoard }: { log: CombatEvent[]; myBoard: { 
           ))}
         </svg>
 
-        <BattleLine label={topSide === mySide ? 'You' : 'Opponent'} units={cur[topSide]} {...lineProps} />
+        <BattleLine label={topSide === mySide ? 'You' : opponentName} units={cur[topSide]} {...lineProps} />
         <div className="bl-divider">
           <span className="vs-badge">VS</span>
         </div>
-        <BattleLine label={bottomSide === mySide ? 'You' : 'Opponent'} units={cur[bottomSide]} {...lineProps} />
+        <BattleLine label={bottomSide === mySide ? 'You' : opponentName} units={cur[bottomSide]} {...lineProps} />
       </motion.div>
 
       <div className={'beat-caption' + (deathsFired && beat?.kind === 'deathrattle' ? ' breakpoint' : '')}>

@@ -77,7 +77,7 @@ export function ReplayLab(): ReactNode {
           </button>
         ))}
       </div>
-      <CombatReplay key={pick} log={log} myBoard={myBoard} />
+      <CombatReplay key={pick} log={log} myBoard={myBoard} opponentName="Opponent" />
     </div>
   );
 }

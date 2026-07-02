@@ -130,6 +130,38 @@ describe('EV-MTC — match outcome / state', () => {
     expect(m.applyIntent(0, { type: 'freeze' }).ok).toBe(true); // a successful intent refreshes the timer
     expect(m.state.timer).toBe(computeTimer(3, 8));
   });
+
+  it('EV-MTC-08 (#42): pairings are populated at shop-start and combat fights EXACTLY that preview', () => {
+    const m = new Match('mtc08', seats(4));
+    m.startRound(); // round 1 shop
+    // the public list is already the upcoming pairing during the shop — not empty, not stale.
+    expect(m.state.pairings.length).toBe(2); // 4 alive → two 1v1s, no ghost
+    const previewed = JSON.parse(JSON.stringify(m.state.pairings));
+    const seatsSeen = previewed
+      .flatMap((p: { aSeat: number; bSeat: number }) => [p.aSeat, p.bSeat])
+      .sort((a: number, b: number) => a - b);
+    expect(seatsSeen).toEqual([0, 1, 2, 3]); // every living seat previewed exactly once
+    // resolving combat reuses the SAME pairing the shop showed (byte-identical), never a re-roll.
+    m.resolveCombatPhase();
+    expect(m.state.pairings).toEqual(previewed);
+  });
+
+  it('EV-MTC-09 (#42): the next shop previews only LIVING opponents (never a just-eliminated seat)', () => {
+    const m = new Match('mtc09', seats(4));
+    m.startRound(); // round 1
+    for (let i = 0; i < 4; i++) m.sessions[i].board = []; // all tie → isolate the elimination
+    m.state.players[2].hp = -1; // seat 2 is eliminated by this combat
+    m.resolveCombatPhase();
+    expect(m.state.players[2].alive).toBe(false);
+
+    m.startRound(); // round 2 shop — 3 alive (odd) → one living 1v1 + one ghost bye
+    const living = m.state.pairings.filter((p) => !p.ghost).flatMap((p) => [p.aSeat, p.bSeat]);
+    const ghost = m.state.pairings.find((p) => p.ghost);
+    expect(living).not.toContain(2); // the dead seat is never a living opponent…
+    expect(living).not.toContain(-1); // …and -1 only ever appears as the ghost sentinel
+    for (const s of living) expect(m.state.players[s].alive).toBe(true);
+    expect(ghost?.ghostName).toBe(m.state.players[2].name); // the bye names the dead player
+  });
 });
 
 describe('EV-INV-SRV — a rejected intent returns {ok:false,error} and mutates nothing', () => {

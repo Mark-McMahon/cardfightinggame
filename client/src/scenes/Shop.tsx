@@ -14,7 +14,7 @@ import type { ClientUnit, ShopOffer, Intent, ActivatedAbilityState } from '@card
 import { economy, UNITS } from '@cardgame/shared';
 import { usePrivateState, usePublicState, useRoom } from '../net/hooks';
 import { sendIntent, buyThenPlay } from '../net/game';
-import { Card, Standings, StatBadge, unitToModel, offerToModel } from '../components';
+import { Card, Standings, StatBadge, unitToModel, offerToModel, resolveOpponent } from '../components';
 
 // decision #27: a resource counter shows only when you own a card that consumes it. Since #39
 // the gem CONSUMERS are the activated-ability cards (the wallet's spenders) — read from the
@@ -27,15 +27,6 @@ interface DragPayload {
   from: DragFrom;
   uid?: string;
   shopIndex?: number;
-}
-
-function opponentSeat(pairings: { aSeat: number; bSeat: number; ghost: boolean }[], seat: number | null): number | null {
-  if (seat == null) return null;
-  for (const pr of pairings) {
-    if (pr.aSeat === seat) return pr.ghost ? null : pr.bSeat;
-    if (pr.bSeat === seat) return pr.aSeat;
-  }
-  return null;
 }
 
 export function Shop() {
@@ -63,7 +54,7 @@ export function Shop() {
   const pending = priv.pendingTarget;
   const legal = new Set(pending?.legalTargets ?? []);
   const myPub = pub.players.find((p) => p.seat === conn.seat);
-  const oppSeat = opponentSeat(pub.pairings, conn.seat);
+  const opponent = resolveOpponent(pub, conn.seat);
   const ownedIds = [...priv.board, ...priv.bench].map((u) => u.cardId);
   const showGems = ownsGemConsumer(ownedIds) || priv.gems > 0;
   const abilityByUid = new Map<string, ActivatedAbilityState>((priv.abilities ?? []).map((a) => [a.uid, a]));
@@ -163,7 +154,7 @@ export function Shop() {
 
   return (
     <div className={'match-main' + (shopLive ? '' : ' shop-frozen')}>
-      <Standings pub={pub} mySeat={conn.seat} opponentSeat={oppSeat} />
+      <Standings pub={pub} mySeat={conn.seat} opponent={opponent} />
 
       {/* Combat hold: the shop below is a frozen preview, not yet live. The grey-out alone reads as a
           dead shop (clicks do nothing under pointer-events:none), so make the reason UNMISTAKABLE — a

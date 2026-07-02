@@ -231,8 +231,17 @@ living players are ready the phase ends early.
   *to* the ghost. Keeps everyone fighting every round. **(D8, decided):** the ghost source is
   the most-recently-eliminated player, and the pick is **deterministic from the match seed**
   (required for sim reproducibility).
+- **Pairing timing (decision #42, 2026-07-01):** the round's pairing is computed **at the start
+  of the shop phase** (`Match.startRound`), not at combat start, so the public `pairings` list
+  **previews the actual upcoming opponent** for the whole shop — the client's "vs" label +
+  highlight must never show last round's stale pairing. Combat **reuses that exact list**
+  (`ensurePairings` is idempotent per shop; `resolveCombatPhase` consumes it). This is
+  byte-identical to pairing at combat-start — the inputs (alive set, `lastOpponent`, most-recent
+  ghost) can't change during the shop (no one dies mid-shop) — so sim reproducibility is
+  unaffected.
 - A `pairings` list is public state (`Pairing{aSeat, bSeat, ghost, ghostName}`, `bSeat=-1`
-  for a ghost).
+  for a ghost). It is populated from the start of each shop phase (above), so it is never empty
+  or stale while a round is in progress.
 
 ### 4.5 Combat phase
 Boards fight automatically (full rules §7). Per pair:
@@ -999,7 +1008,15 @@ full ability text, and base-vs-buffed stats. Triggers (battlecry/deathrattle) st
 
 **Battlefield.** One clean **left→right battle line per side, no wrapping**. Leftmost =
 next-to-act and first-targeted; adjacency is visually obvious (matters for cleave +
-Bonepiper). The engine is already single-line — this is client-only.
+Bonepiper). The engine is already single-line — this is client-only. Each line is
+**labelled**: your board reads "You"; the far line reads the **opponent's display name** —
+the paired seat's player name, or (on a ghost bye) the eliminated player's `ghostName`.
+The combat log is identity-free (invariant #2, §7.3), so the name is resolved client-side
+from the already-synced public schema (`pairings` + `players`), not plumbed through the log.
+This resolution is a **single shared helper** (`resolveOpponent` in `client/src/components.tsx`,
+returning `{seat, name, ghost}`) used by **both** the shop-phase "vs" preview (§4.4) and this
+combat label, so the two screens never disagree — a ghost bye shows the same `ghostName` in
+the shop ("vs \<name\> · ghost", no living row highlighted) as in the fight.
 
 **Combat replay — choreographed causal beats.** The event stream is segmented into **causal
 beats** (never all-at-once) in a render-free, unit-tested module. That module is **pure and lives

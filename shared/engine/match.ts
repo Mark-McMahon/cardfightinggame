@@ -57,6 +57,7 @@ export class Match {
   private round = 0;
   private ghosts: GhostRecord[] = []; // elimination order; most-recent = last
   private lastOpponent: Record<number, number> = {};
+  private pairingsReady = false; // `state.pairings` holds this round's pairing, not yet consumed by combat
 
   constructor(seed: string, seats: SeatConfig[], roomCode = 'ROOM') {
     this.seed = seed;
@@ -87,6 +88,12 @@ export class Match {
       p.ready = false;
       if (p.alive) startShopPhase(this.sessions[p.seat]);
     }
+    // Pair NOW, at the start of the shop, so `state.pairings` (public schema) previews the ACTUAL
+    // upcoming opponent during the whole shop phase — not last round's stale pairing. Deterministic
+    // and unchanged from pairing at combat-start: the inputs (alive set, lastOpponent, most-recent
+    // ghost) are identical between shop-start and combat-start of the same round — nobody dies during
+    // the shop. Combat reuses this exact list (ensurePairings is idempotent per round). (spec §4.4)
+    this.ensurePairings();
     this.refreshTimer();
   }
 
@@ -194,13 +201,26 @@ export class Match {
     return pairings;
   }
 
+  /** Compute `state.pairings` once per shop and mark them ready. Idempotent within a round: called at
+   *  shop-start (so the client can preview the opponent) and again at combat-start, which REUSES the
+   *  same list — combat always fights exactly what the shop showed. `resolveCombatPhase` consumes the
+   *  pairing (clears the flag) so a fresh resolve without a preceding `startRound` re-pairs against the
+   *  current alive set (the round-0 engine tests, and the ghost driver in combatWriteback.test). */
+  private ensurePairings(): void {
+    if (!this.pairingsReady) {
+      this.state.pairings = this.computePairings();
+      this.pairingsReady = true;
+    }
+  }
+
   // ── combat phase (spec §4.5–4.6) ─────────────────────────────────────────────────
 
   /** Resolve every pairing's combat, apply loss damage, then eliminations/placement. */
   resolveCombatPhase(): void {
     this.state.phase = 'combat';
-    const pairings = this.computePairings();
-    this.state.pairings = pairings;
+    this.ensurePairings(); // reuse the shop-phase pairing (or compute if resolved without a startRound)
+    const pairings = this.state.pairings;
+    this.pairingsReady = false; // consumed: the next startRound (or bare resolve) re-pairs
 
     for (const pr of pairings) {
       if (pr.ghost) {

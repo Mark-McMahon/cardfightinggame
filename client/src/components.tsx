@@ -192,24 +192,48 @@ function SRow({ p, label, me, vs, dead }: { p: PublicPlayer; label: ReactNode; m
   );
 }
 
-export function Standings({ pub, mySeat, opponentSeat }: { pub: PublicState; mySeat: number | null; opponentSeat: number | null }): ReactNode {
+// Who `seat` is paired against this round, resolved from the public schema (pairings + players) — the
+// SINGLE source for both the shop "vs" preview and the combat replay label (spec §10). `seat` is null
+// for a ghost bye (nothing living to highlight), but `name` still carries the ghost's display name so
+// the shop and the combat screen agree instead of one showing blank.
+export interface OpponentInfo {
+  seat: number | null;
+  name: string;
+  ghost: boolean;
+}
+
+export function resolveOpponent(pub: PublicState, mySeat: number | null): OpponentInfo | null {
+  if (mySeat == null) return null;
+  const nameOf = (seat: number) => pub.players.find((p) => p.seat === seat)?.name || 'Opponent';
+  for (const pr of pub.pairings) {
+    if (pr.aSeat === mySeat) {
+      return pr.ghost
+        ? { seat: null, name: pr.ghostName || 'Ghost', ghost: true }
+        : { seat: pr.bSeat, name: nameOf(pr.bSeat), ghost: false };
+    }
+    if (pr.bSeat === mySeat) return { seat: pr.aSeat, name: nameOf(pr.aSeat), ghost: false };
+  }
+  return null;
+}
+
+export function Standings({ pub, mySeat, opponent }: { pub: PublicState; mySeat: number | null; opponent: OpponentInfo | null }): ReactNode {
   const living = pub.players.filter((p) => p.alive).sort((a, b) => b.hp - a.hp || a.seat - b.seat);
   const dead = pub.players.filter((p) => !p.alive).sort((a, b) => a.placement - b.placement);
-  const oppName = opponentSeat != null ? pub.players.find((p) => p.seat === opponentSeat)?.name : undefined;
   return (
     <div className="standings panel">
       <div className="side-head">
         <span className="side-round">Round {pub.round}</span>
         {pub.phase === 'shop' && <span className={'side-timer' + (pub.timer <= 10 ? ' low' : '')}>{pub.timer}s</span>}
       </div>
-      {oppName && (
+      {opponent && (
         <div className="side-vs">
-          vs <strong>{oppName}</strong>
+          vs <strong>{opponent.name}</strong>
+          {opponent.ghost && <span className="vs-ghost"> · ghost</span>}
         </div>
       )}
       <div className="standings-title">Standings</div>
       {living.map((p, i) => (
-        <SRow key={p.seat} p={p} label={i + 1} me={p.seat === mySeat} vs={p.seat === opponentSeat} dead={false} />
+        <SRow key={p.seat} p={p} label={i + 1} me={p.seat === mySeat} vs={p.seat === opponent?.seat} dead={false} />
       ))}
       {dead.length > 0 && <div className="sdiv" />}
       {dead.map((p) => (

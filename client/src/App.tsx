@@ -10,7 +10,7 @@ import { Lobby } from './scenes/Lobby';
 import { Shop } from './scenes/Shop';
 import { CombatReplay } from './scenes/CombatReplay';
 import { Results } from './scenes/Results';
-import { Toasts } from './components';
+import { Toasts, resolveOpponent } from './components';
 
 function Landing(): ReactNode {
   const conn = useRoom();
@@ -44,6 +44,8 @@ function Landing(): ReactNode {
 function CombatScene(): ReactNode {
   const log = useCombatLog();
   const priv = usePrivateState();
+  const pub = usePublicState();
+  const conn = useRoom();
   if (!log || log.length === 0) {
     return (
       <div className="overlay">
@@ -52,7 +54,8 @@ function CombatScene(): ReactNode {
     );
   }
   const myBoard = (priv?.board ?? []).map((u) => ({ uid: u.uid, cardId: u.cardId }));
-  return <CombatReplay log={log} myBoard={myBoard} />;
+  const oppName = (pub && resolveOpponent(pub, conn.seat)?.name) || 'Opponent';
+  return <CombatReplay log={log} myBoard={myBoard} opponentName={oppName} />;
 }
 
 export function App(): ReactNode {
