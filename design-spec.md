@@ -1207,10 +1207,13 @@ from (it doubles as the sell target), the **board as the focal felt** in the mid
 dock + fanned hand** along the bottom. The board is laid on a shallow **arc** (each slot lifted by
 its distance from the row centre) and every token casts a ground shadow so units "stand on" the
 surface; the **hand** overlaps its cards in a rotated **fan** that straightens and lifts on hover.
-The **hero dock** surfaces the owner's own **HP as a glossy orb** (previously only in the standings
-rail), a coin count, the gem pill (when a consumer is owned, decision #27/#39), tier + Tier-Up, and
-the two commit actions — **Refresh** (roll) and a glowing **Ready**. The 8-player standings stay a
-slim ladder rail. This is **client presentation only**: it renders the same private state and sends
+The tavern shelf's **control bar** across the top is the econ deck — sited nearest the shop you spend
+into: the **wallet** (a coin count and the gem pill, the latter shown only when a consumer is owned,
+decision #27/#39) reads beside the shop title, and the shop/commit actions cluster on the right —
+**Tier-Up**, **Freeze**, **Refresh** (roll), and a glowing **Ready**. The **hero dock** at the bottom
+is then a compact identity plate: the owner's seat crest and their own **HP as a glossy orb**
+(previously only in the standings rail) — health reading at the bottom, the spend controls at the top.
+The 8-player standings stay a slim ladder rail. This is **client presentation only**: it renders the same private state and sends
 the same intents (invariant #1) — drag-and-drop still maps onto the existing op set (below), and the
 combat engine is untouched. Every tabletop *magnitude* (the arc rise, the fan angle/lift/overlap, the
 felt/shelf tones, the token shadow, the HP-orb colour) is a **single-sourced CSS token** beside

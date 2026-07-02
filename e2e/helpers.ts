@@ -151,7 +151,7 @@ export async function startMatchToShop(page: Page): Promise<void> {
   await page.getByRole('button', { name: /Start match/i }).click();
   // Shop is live once the tavern + board felt render and the phase is 'shop' (Ready button visible)
   await page.locator('.board-felt').waitFor({ state: 'visible', timeout: 30_000 });
-  await page.locator('.hero .ctl-btn.ready').waitFor({ state: 'visible' });
+  await page.locator('.tavern-bar .ctl-btn.ready').waitFor({ state: 'visible' });
 }
 
 /** Number of units currently on the board (arc slots). */
@@ -179,7 +179,7 @@ export async function currentRound(page: Page): Promise<number> {
  *  combat windows (the round number flips at combat start while the shop is still frozen). */
 export async function advanceRound(page: Page): Promise<void> {
   const r = await currentRound(page);
-  await page.locator('.hero .ctl-btn.ready:not([disabled])').click();
+  await page.locator('.tavern-bar .ctl-btn.ready:not([disabled])').click();
   try { await page.getByRole('button', { name: /Skip/i }).click({ timeout: 3000 }); } catch { /* no overlay (bye) */ }
   // Live next shop = round advanced AND the table is no longer frozen. Poll generously: the server
   // holds the combat window (up to ~40s late-game) regardless of the client Skip.
@@ -189,7 +189,7 @@ export async function advanceRound(page: Page): Promise<void> {
     expect(await page.locator('.match-main.shop-frozen').count()).toBe(0);
     expect(await page.locator('.board-felt').count()).toBeGreaterThan(0);
   }).toPass({ timeout: 75_000, intervals: [400] });
-  await page.locator('.hero .ctl-btn.ready:not([disabled])').waitFor({ timeout: 15_000 });
+  await page.locator('.tavern-bar .ctl-btn.ready:not([disabled])').waitFor({ timeout: 15_000 });
 }
 
 /** Advance rounds until at least `n` gold is available (gold = min(2+round, 10)). */
@@ -197,11 +197,9 @@ export async function ensureGold(page: Page, n: number, maxRounds = 12): Promise
   for (let i = 0; i < maxRounds && (await gold(page)) < n; i++) await advanceRound(page);
 }
 
-/** Read the gold value from the hero dock. */
+/** Read the gold value from the tavern-bar wallet. */
 export async function gold(page: Page): Promise<number> {
-  const txt = await page.locator('.hero-stats .coin-ico, .hero-stats [class*="coin"]').first().textContent().catch(() => null);
-  // fall back to the whole stat badge text
-  const badge = txt ?? (await page.locator('.hero-stats').first().innerText());
+  const badge = await page.locator('.tavern-bar .coin').first().innerText();
   const m = badge.match(/\d+/);
   return m ? Number(m[0]) : NaN;
 }

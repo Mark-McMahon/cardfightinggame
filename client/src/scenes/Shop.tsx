@@ -247,15 +247,36 @@ export function Shop() {
           onDragLeave={() => setSellOver(false)}
           onDrop={onShopDrop}
         >
+          {/* The tavern bar is the top control deck (nearest the shop you spend into): the wallet
+              (gold + gems) reads beside the shop title, then the shop/commit actions — Tier-Up,
+              Freeze, Refresh, and the glowing Ready. HP lives on the bottom hero plate instead. */}
           <div className="tavern-bar">
             <span className="tavern-title">{sellArmed ? `↑ Drop to sell  +${economy.sellRefund}g` : shopLive ? 'Tavern' : 'Tavern · 🔒 locked'}</span>
+            <StatBadge kind="coin" icon="◈" iconClass="coin-ico" title="gold">
+              {priv.gold}
+            </StatBadge>
+            {showGems && (
+              <StatBadge kind="gem-pill" icon="◆" iconClass="gem-ico" title="gems (feeds the Tusker doubler)">
+                {priv.gems}
+              </StatBadge>
+            )}
             <span className="spacer" />
+            <button className="ctl-btn tierup" disabled={priv.tierUpCost < 0 || !canAfford(priv.tierUpCost)} onClick={intent({ type: 'tierUp' })}>
+              <span className="ctl-ico">▲</span> Tier <span className="tp-n">{priv.tier}</span>
+              {priv.tierUpCost >= 0 && <span className="ctl-cost">{priv.tierUpCost}</span>}
+            </button>
             <button
               className={'ctl-btn freeze' + (priv.frozen ? ' active' : '')}
               title="freeze the shop for next turn"
               onClick={intent(priv.frozen ? { type: 'unfreeze' } : { type: 'freeze' })}
             >
               <span className="ctl-ico">❄</span> {priv.frozen ? 'Frozen' : 'Freeze'}
+            </button>
+            <button className="ctl-btn refresh" disabled={!canAfford(priv.rerollCost)} onClick={intent({ type: 'roll' })}>
+              <span className="ctl-ico">⟳</span> Refresh<span className="ctl-cost">{priv.rerollCost}</span>
+            </button>
+            <button className="ctl-btn ready primary" disabled={!!myPub?.ready} onClick={intent({ type: 'readyUp' })}>
+              {myPub?.ready ? 'Ready ✓' : 'Ready'}
             </button>
           </div>
           <div className="shelf">
@@ -353,35 +374,14 @@ export function Shop() {
           </div>
         </div>
 
-        {/* DOCK — hero zone (portrait, HP orb, coins, tier/upgrade, Refresh, Ready) + the fanned hand
-            (bench). The hand is the buy(from shop) drop target. */}
+        {/* DOCK — hero identity plate (portrait + HP orb; health lives at the bottom, the econ
+            controls moved up to the tavern bar) + the fanned hand (bench). The hand is the
+            buy(from shop) drop target. */}
         <div className="dock">
           <div className="hero">
             <HeroCrest name={myPub?.name ?? 'You'} seat={conn.seat} />
             <div className="hp-orb" title="your health">
               <span className="hp-val">{Math.max(0, myPub?.hp ?? 0)}</span>
-            </div>
-            <div className="hero-stats">
-              <StatBadge kind="coin" icon="◈" iconClass="coin-ico" title="gold">
-                {priv.gold}
-              </StatBadge>
-              {showGems && (
-                <StatBadge kind="gem-pill" icon="◆" iconClass="gem-ico" title="gems (feeds the Tusker doubler)">
-                  {priv.gems}
-                </StatBadge>
-              )}
-              <button className="ctl-btn tierup" disabled={priv.tierUpCost < 0 || !canAfford(priv.tierUpCost)} onClick={intent({ type: 'tierUp' })}>
-                <span className="ctl-ico">▲</span> Tier <span className="tp-n">{priv.tier}</span>
-                {priv.tierUpCost >= 0 && <span className="ctl-cost">{priv.tierUpCost}</span>}
-              </button>
-            </div>
-            <div className="hero-actions">
-              <button className="ctl-btn refresh" disabled={!canAfford(priv.rerollCost)} onClick={intent({ type: 'roll' })}>
-                <span className="ctl-ico">⟳</span> Refresh<span className="ctl-cost">{priv.rerollCost}</span>
-              </button>
-              <button className="ctl-btn ready primary" disabled={!!myPub?.ready} onClick={intent({ type: 'readyUp' })}>
-                {myPub?.ready ? 'Ready ✓' : 'Ready'}
-              </button>
             </div>
           </div>
 

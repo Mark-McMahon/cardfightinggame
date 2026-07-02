@@ -535,6 +535,7 @@ input {
 .match-main.shop-frozen .shelf,
 .match-main.shop-frozen .board-row,
 .match-main.shop-frozen .hand-fan,
+.match-main.shop-frozen .tavern-bar .ctl-btn,
 .match-main.shop-frozen .hero { opacity: 0.5; filter: grayscale(0.35); }
 .match-main.shop-frozen .tavern-title { color: var(--accent); }
 
@@ -628,8 +629,19 @@ input {
   box-shadow: inset 0 1px 0 #ffffff14, inset 0 -10px 20px -12px #000, 0 4px 10px -6px #000a;
   transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
 }
-.tavern-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+/* the top control deck: shop title + wallet on the left, the shop/commit action buttons on the
+   right (pushed out by the .spacer). Wraps rather than overflowing when the table narrows. */
+.tavern-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-bottom: 8px; }
 .tavern-title { font-family: var(--serif); font-size: 15px; font-weight: 800; letter-spacing: 0.4px; color: #e8cf9a; }
+.tavern-bar .ctl-btn.tierup .tp-n { color: var(--accent); font-weight: 800; }
+.tavern-bar .ctl-btn.refresh { min-width: 104px; }
+/* Ready is the big glowing commit button */
+.tavern-bar .ctl-btn.ready {
+  padding: 10px 26px; font-size: 15px; font-weight: 800; letter-spacing: 0.3px;
+  box-shadow: var(--bevel), 0 0 16px #e0a82e66; animation: readyPulse 2.4s ease-in-out infinite;
+}
+.tavern-bar .ctl-btn.ready:disabled { animation: none; box-shadow: var(--bevel); }
+@keyframes readyPulse { 0%,100% { box-shadow: var(--bevel), 0 0 12px #e0a82e55; } 50% { box-shadow: var(--bevel), 0 0 22px #e0a82eaa; } }
 /* the shelf is a shallow lit recess the minions "sit in" */
 .shelf {
   display: flex; gap: calc(10px * var(--card-scale)); flex-wrap: wrap; align-items: flex-end;
@@ -698,17 +710,17 @@ input {
 /* ── DOCK — hero zone (left) + fanned hand (right) ── */
 .dock { display: flex; align-items: flex-end; gap: 18px; }
 
-/* HERO ZONE — portrait medallion + HP orb + coins + tier/upgrade + Refresh + Ready */
+/* HERO ZONE — a compact identity plate: portrait medallion + HP orb. The econ controls (coins,
+   gems, tier, Refresh, Ready) moved up to the tavern bar; health stays down here on the dock. */
 .hero {
-  display: grid; grid-template-columns: auto auto 1fr; grid-template-rows: auto auto; gap: 8px 12px;
-  align-items: center; align-content: center;
-  padding: 12px 16px; border-radius: 10px; flex: 0 0 auto; min-width: 330px;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; border-radius: 10px; flex: 0 0 auto;
   background: linear-gradient(180deg, #2a2340, #1c1628);
   border: 1px solid #4a3f5e;
   box-shadow: var(--plaque), 0 6px 16px -8px #000a;
 }
 .hero-crest {
-  grid-row: 1 / span 2; width: 58px; height: 58px; border-radius: 50%;
+  width: 58px; height: 58px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   background:
     radial-gradient(70% 70% at 35% 30%, hsl(var(--crest-hue,40) 55% 55%), hsl(var(--crest-hue,40) 45% 30%));
@@ -718,24 +730,13 @@ input {
 .hero-initial { font-family: var(--serif); font-size: 26px; font-weight: 800; color: #fff; text-shadow: 0 1px 3px #000a; }
 /* HP orb — a glossy ember sphere; the iconic "hero health" read */
 .hp-orb {
-  grid-row: 1 / span 2; width: 56px; height: 56px; border-radius: 50%;
+  width: 56px; height: 56px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center; position: relative;
   background: radial-gradient(60% 60% at 38% 30%, #ff8a6a 0%, var(--orb) 46%, var(--orb-lo) 100%);
   box-shadow: inset 0 3px 6px #ffffff55, inset 0 -6px 10px #0008, 0 3px 8px #0009, 0 0 14px #c0402b55;
 }
 .hp-orb::after { content: ''; position: absolute; top: 8px; left: 12px; width: 16px; height: 10px; border-radius: 50%; background: #ffffffaa; filter: blur(2px); }
 .hp-val { font-family: var(--serif); font-weight: 800; font-size: 22px; color: #fff; text-shadow: 0 1px 3px #000c; z-index: 1; font-variant-numeric: tabular-nums; }
-.hero-stats { grid-column: 3; grid-row: 1; display: flex; align-items: center; gap: 8px; }
-.hero-actions { grid-column: 3; grid-row: 2; display: flex; align-items: center; gap: 8px; }
-.hero .ctl-btn.tierup .tp-n { color: var(--accent); font-weight: 800; }
-.hero .ctl-btn.refresh { min-width: 104px; }
-/* Ready is the big glowing commit button */
-.hero .ctl-btn.ready {
-  padding: 10px 26px; font-size: 15px; font-weight: 800; letter-spacing: 0.3px;
-  box-shadow: var(--bevel), 0 0 16px #e0a82e66; animation: readyPulse 2.4s ease-in-out infinite;
-}
-.hero .ctl-btn.ready:disabled { animation: none; box-shadow: var(--bevel); }
-@keyframes readyPulse { 0%,100% { box-shadow: var(--bevel), 0 0 12px #e0a82e55; } 50% { box-shadow: var(--bevel), 0 0 22px #e0a82eaa; } }
 
 /* FANNED HAND — bench cards overlap in a shallow arc, tilting out from centre; hover straightens +
    lifts the card for a clean read. Drag/drop + click-to-play intents are unchanged. */
@@ -765,7 +766,6 @@ input {
 @media (max-width: 1120px) { :root { --card-scale: 0.92; } }
 @media (max-width: 1040px) {
   .dock { flex-wrap: wrap; }
-  .hero { min-width: 0; width: 100%; }
 }
 @media (max-width: 900px) { :root { --card-scale: 0.82; } }
 @media (max-width: 860px) {
@@ -782,7 +782,7 @@ input {
    Ready-button pulse). The combat replay's own beat choreography is the game's core read, so it stays. */
 @media (prefers-reduced-motion: reduce) {
   .field-ember { animation: none; opacity: 0; }
-  .hero .ctl-btn.ready { animation: none; }
+  .tavern-bar .ctl-btn.ready { animation: none; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════════════════════
