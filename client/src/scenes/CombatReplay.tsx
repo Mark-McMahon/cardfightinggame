@@ -135,14 +135,6 @@ function computeBoards(events: CombatEvent[]): { a: RUnit[]; b: RUnit[] } {
   return { a, b };
 }
 
-function mySideOf(log: CombatEvent[], myUids: Set<string>): 'a' | 'b' {
-  const start = log.find((e) => e.t === 'combatStart');
-  if (start && start.t === 'combatStart') {
-    if (start.b.units.some((u) => myUids.has(u.uid))) return 'b';
-  }
-  return 'a';
-}
-
 interface Link {
   x1: number;
   y1: number;
@@ -192,7 +184,7 @@ function useBeatClock(durationMs: number, playing: boolean, resetKey: number, on
   }, [durationMs, playing, resetKey]);
 }
 
-export function CombatReplay({ log, myBoard, opponentName }: { log: CombatEvent[]; myBoard: { uid: string; cardId: string }[]; opponentName: string }) {
+export function CombatReplay({ log, myBoard, opponentName, side }: { log: CombatEvent[]; myBoard: { uid: string; cardId: string }[]; opponentName: string; side: 'a' | 'b' }) {
   const bs = useMemo(() => beats(log), [log]);
   // Auto-fit: the server holds the 'combat' phase for combatWindowMs (capped). If this fight's
   // natural playback would overrun that cap, compress the dwell just enough to finish inside it,
@@ -204,7 +196,13 @@ export function CombatReplay({ log, myBoard, opponentName }: { log: CombatEvent[
   }, [bs]);
   const myUids = useMemo(() => new Set(myBoard.map((u) => u.uid)), [myBoard]);
   const myCardIds = useMemo(() => myBoard.map((u) => u.cardId), [myBoard]);
-  const mySide = useMemo(() => mySideOf(log, myUids), [log, myUids]);
+  // The viewer's side is ALWAYS the authoritative pairing-derived `side` (aSeat→'a', bSeat→'b'; see
+  // sideForSeat / decisions #65, #66). It is a REQUIRED prop — there is deliberately NO board-uid
+  // fallback, because a wiped/empty board carries no uids, so inferring the side would silently mirror
+  // the replay and invert the Victory/Defeat banner (the original §10 bug). Callers with no pairing
+  // (the dev ReplayLab) pass an explicit side; App.CombatScene withholds the replay until the pairing
+  // has synced rather than guess.
+  const mySide = side;
 
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(true);
@@ -416,7 +414,7 @@ export function CombatReplay({ log, myBoard, opponentName }: { log: CombatEvent[
 
       <div className={'beat-caption' + (deathsFired && beat?.kind === 'deathrattle' ? ' breakpoint' : '')}>
         <span className="cap-spark">{beat ? beatIcon(beat.kind) : ''}</span>
-        {beat?.caption ?? ''}
+        {beat ? captionFor(beat, mySide, opponentName, end) : ''}
       </div>
 
       {atEnd && end && end.t === 'combatEnd' && <ResultBanner winner={end.winner} mySide={mySide} damage={end.damageToLoser} />}
@@ -665,6 +663,17 @@ function ResultBanner({ winner, mySide, damage }: { winner: 'a' | 'b' | 'tie'; m
 
 function toModel(u: RUnit, hp: number = u.hp): CardModel {
   return { cardId: u.cardId, name: u.name, tribe: u.tribe, tier: u.tier, atk: u.atk, hp: Math.max(0, hp), keywords: u.keywords, golden: u.golden, isToken: u.isToken, text: u.text };
+}
+
+/** The shared beat captions are side-agnostic (both players watch the same log), so the 'end' beat's
+ *  caption is a neutral "Side A/B wins". Personalize it HERE — where mySide is known — to "You win" /
+ *  "<opponent> wins" so players never see the engine's internal side labels (spec §10). */
+function captionFor(beat: Beat, mySide: 'a' | 'b', opponentName: string, end: CombatEvent | undefined): string {
+  if (beat.kind === 'end' && end && end.t === 'combatEnd') {
+    if (end.winner === 'tie') return 'Draw';
+    return end.winner === mySide ? 'You win' : `${opponentName} wins`;
+  }
+  return beat.caption;
 }
 
 function beatIcon(kind: Beat['kind']): string {

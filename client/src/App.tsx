@@ -10,7 +10,7 @@ import { Lobby } from './scenes/Lobby';
 import { Shop } from './scenes/Shop';
 import { CombatReplay } from './scenes/CombatReplay';
 import { Results } from './scenes/Results';
-import { Toasts, resolveOpponent } from './components';
+import { Toasts, resolveOpponent, sideForSeat } from './components';
 
 function Landing(): ReactNode {
   const conn = useRoom();
@@ -46,6 +46,19 @@ function CombatScene(): ReactNode {
   const priv = usePrivateState();
   const pub = usePublicState();
   const conn = useRoom();
+  const opponent = pub ? resolveOpponent(pub, conn.seat) : null;
+  // Bye: no fight this round (odd roster, no ghost to pull). Driven by the synced pairing, not the log
+  // (which is empty for a bye), so it shows immediately instead of a stuck "Resolving combat…".
+  if (opponent?.bye) {
+    return (
+      <div className="overlay">
+        <div className="center">
+          <div className="title">Bye</div>
+          <div className="dim">No opponent this round — you take no damage.</div>
+        </div>
+      </div>
+    );
+  }
   if (!log || log.length === 0) {
     return (
       <div className="overlay">
@@ -54,8 +67,20 @@ function CombatScene(): ReactNode {
     );
   }
   const myBoard = (priv?.board ?? []).map((u) => ({ uid: u.uid, cardId: u.cardId }));
-  const oppName = (pub && resolveOpponent(pub, conn.seat)?.name) || 'Opponent';
-  return <CombatReplay log={log} myBoard={myBoard} opponentName={oppName} />;
+  const oppName = opponent?.name || 'Opponent';
+  // Which side I'm on comes from the synced pairing, not my board uids — so an empty/wiped board no
+  // longer mirrors the replay or inverts the Victory/Defeat banner (§10, decisions #65/#66). `side` is
+  // authoritative and required: if the pairing hasn't synced yet (null), withhold the replay rather
+  // than guess a side — CombatReplay no longer has a board-uid fallback to default to.
+  const mySide = pub ? sideForSeat(pub, conn.seat) : null;
+  if (mySide == null) {
+    return (
+      <div className="overlay">
+        <div className="center dim">Resolving combat…</div>
+      </div>
+    );
+  }
+  return <CombatReplay log={log} myBoard={myBoard} opponentName={oppName} side={mySide} />;
 }
 
 export function App(): ReactNode {

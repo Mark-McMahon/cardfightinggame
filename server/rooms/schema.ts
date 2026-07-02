@@ -41,12 +41,14 @@ export class PairingSchema extends Schema {
   bSeat = -1;
   ghost = false;
   ghostName = '';
+  bye = false;
 }
 defineTypes(PairingSchema, {
   aSeat: 'number',
   bSeat: 'number',
   ghost: 'boolean',
   ghostName: 'string',
+  bye: 'boolean',
 });
 
 export class RoomState extends Schema {
@@ -93,6 +95,7 @@ export function makePairing(src: Pairing): PairingSchema {
   p.bSeat = src.bSeat;
   p.ghost = src.ghost;
   p.ghostName = src.ghostName ?? '';
+  p.bye = src.bye ?? false;
   return p;
 }
 

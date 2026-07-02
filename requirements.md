@@ -395,10 +395,10 @@ build from functional mechanics only; original names/text/art throughout.
     `resolveOpponent(pub, seat) → {seat, name, ghost}` (`client/src/components.tsx`) used by
     both the shop preview and the combat label, so a **ghost bye** now renders consistently as
     "vs \<name\> · ghost" in the shop (no living row highlighted) instead of the shop showing
-    blank while the fight showed a name. **Not addressed here (logged, gameplay-affecting):** the
-    `ghostsEnabled` config flag is still never read (ghosts always fill odd counts), and an odd
-    roster with no eliminations yet still fights an empty board (a free win) — both are latent
-    and unreachable under 8-player bot-fill, deferred to a separate decision.
+    blank while the fight showed a name. **Deferred here, now resolved in #63 (gameplay-affecting):** the
+    `ghostsEnabled` config flag was still never read (ghosts always filled odd counts), and an odd
+    roster with no eliminations yet fought an empty board (a free win + phantom writeback accrual) —
+    both latent and unreachable under 8-player bot-fill; #63 replaces them with a proper bye.
 
 ### Multi-lane scaling rework (Round 9, cont.) — Phase 2 review fixes
 
@@ -717,6 +717,168 @@ build from functional mechanics only; original names/text/art throughout.
     principled (a real assembled go-tall payoff, 116/1600, cap=5 reached, mirroring the #39 spend-gated
     precedent) but a human should explicitly RATIFY at final validation that the merge tower is a legitimate
     primary payoff rather than a goalpost move. Flagged in `sim/harness.ts` + design-spec §11.2.
+
+### Config balance-tuning pass (Round 9, cont.) — post-rework win-rate spread compression
+
+59. **Config-only balance pass — compress the tribe win-rate spread (2026-07-02; post-rework, deferred
+    from the #38–#58 rework per invariant #4 "tuning = edit config, re-run the sim, never a logic change").**
+    FOUR config levers changed (all in `shared/config/*`; NO logic, NO content, NO new knobs), each applied
+    ONE-AT-A-TIME with a full 8-gate re-run between: (1) `reefkin_pearlguard` shield-break board payoff **1/3→1/2**;
+    (2) `wildkin_thornwarden` `alliesAtStart` payoff **2/4→3/5**; (3) `primordials_stormcaller` `battlecries`
+    board payoff **2/1→3/3** (adds the hp the tribe lacked); (4) `wildkin_packmother` avenge payoff **2/2→3/3**
+    (`engines.wildkin.avengePayoffAtk/Hp` + its mirrored breakpoint row). **Methodology:** the note's metric
+    (tribe = `classifyBoard(peakBoard).dominantTribe`, win rate = fraction placing 1st, band = [40%,160%] of the
+    mean tribe win rate) — but measured at **600 matches**, not 200: the 200-match win-rate is too noisy (tribes
+    swing ±25pp run-to-run; a Wildkin buff appeared to drop Primordials 27pp, pure sampling noise), 600 stabilizes
+    to ±few pp. **Result (600-match, run/macro):** the sole out-of-band tribe on either seed is now **Reefkin
+    (189%/176%, down from 248%/214% baseline)**; every other tribe is inside [40,160]% on BOTH seeds
+    (Constructs 145/140, Corsairs 99/105, Revenants 103/89, Sirens 83/83, Tuskers 80/86, Infernals 73/84,
+    Wildkin 69/53, Primordials 59/85). Range compressed **5.8×→3.2× (run), 4.5×→3.3× (macro)**; Primordials +
+    Wildkin (the two weak tribes) lifted into band; Infernals + Revenants stay MID-pack (off bottom-two, holds
+    #57's floor). 269 tests green, all 8 §11.3 gates green throughout (final: A −5.8pp, B 51.4%, C 0, D 8.65,
+    E 0, F UW0/unc0, G 0.00%, coherence PASS). **CONFIG-LIMITED RESIDUAL (the honest finding — some targets are
+    unreachable by config alone, as anticipated):** Reefkin's ~176-189% rides on hardcoded BODIES with no config
+    knob — pearlguard 2/3 DS+taunt (24% pick) + spinefish/coralwarden/brineling keyword-GRANT utility (poison/DS
+    are binary keywords, not stats). Only pearlguard's board payoff is a tunable knob; a further nerf (1/3→1/1)
+    shaves Reefkin to 172% but TRANSFERS the lost wins to the equally-untouchable **Constructs** (cogling 2/2
+    DR-token @21% pick + bulwark 2/4 DS+taunt — its only reaching knobs are gate-B-tied `magneticMergeCap` and the
+    dead-in-sim `forgemasterSentinelBuff`; `mechDeathToken*`, `spellcraftBuff*`, `spellpowerPerCast`, `buffPerToken`,
+    `elementalPlayBuffHp` are all VERIFIED-DEAD knobs), pushing Constructs 133→174% (out) for zero net spread gain —
+    the **zero-sum apex coupling**. So `1/2` is the sweet spot: shave Reefkin maximally WITHOUT overflowing
+    Constructs. **The change that WOULD close it needs a content edit (out of scope for a config-only pass):** trim
+    the pearlguard/cogling/bulwark BODY stats (e.g. pearlguard 2/3→2/2, or convert body stats to knobs). **Levers
+    that DON'T reach in bot play (tried + REVERTED, byte-≈-identical output):** motherthorn threshold 3→2,
+    tokenDeathFloor 1→2 / cap 6→10, chorustide 3/3→2/2, elementalPlayBuffAtk 2→3, burstDamage 3→5 — bots rarely
+    satisfy shop-turn/battlecry-gated conditions or this-combat token payoffs, so only frequently-firing effects +
+    on-board body payoffs move a tribe. **OP flags (goal B) — evaluated:** `corsairs_marauder` (2.0-2.3) IS
+    config-nerfable (2/1→1/1) but redistributes to the untouchable Constructs → net goal-A regression → LEFT +
+    documented; `tuskers_warhoard` (1.9-2.4) has NO isolated lever (5/6 taunt body + hardcoded deathrattle +2/+2 +
+    SHARED `gemBaseValue`) → documented (needs a content edit); `wildkin_packmother` (2.0-2.1) is a NEW flag from
+    lever (4) — the deliberate carrier that rescued Wildkin, retained as an acceptable build-around outlier
+    (dialing to 3/2 drops Wildkin toward the floor, feeds the apexes, and does NOT clear the flag);
+    `corsairs_seaqueen` (1.8-2.1, 600-only) is a hardcoded-body flag, no lever. **Tusker variance (goal C, optional)
+    NOT pursued:** stddev run 2.265 / macro 2.313 ≈ baseline 2.245/2.277 (flat); a larger `doubleCostStep` or a soft
+    doubler floor would flatten the intended high-ceiling blowout identity (#39) — the tradeoff is recorded and the
+    lane's character is preserved. **No design-spec number changed** — the spec catalogs knob NAMES + thresholds;
+    the canonical payoff VALUES live in `shared/config/*` (reproducibility contract), which this pass edits.
+
+60. **RATIFY the magnetic-merge-tower reachability credit (2026-07-02; closes #58d final-validation flag).**
+    Decision: **KEEP** the `constructs_magnetic_merge` credit (`mergeCount>0` → `breakpointsHit`) as a legitimate
+    EV-BAL-B primary payoff. An assembled merge tower is a go-tall CONSOLIDATION win-condition PURCHASED with shop
+    actions (merge N magnetic units, per-unit cap `magneticMergeCap`=5) — the same payoff CLASS as the #39
+    spend-gated precedent (a purchased ability counts toward reachability), not a board-state freebie. Non-vacuous:
+    116/1600 macro player-games assemble one, cap reached (vs the removed Forgemaster credit's 1/1600, #58a).
+    Load-bearing but passing with headroom at the #59 config: EV-BAL-B = 51.4% (run 200) / 54.8% (run 600) / 55.2%
+    (macro 600) — without it ~48% (fail). Ratified as a payoff-CLASS extension, NOT a moved goalpost: the tower is a
+    real payoff a competent 2-tribe splash reaches. The `EV-SIM-P5-02` firing-RATE guard (#58c, ≥20/640 run) keeps
+    it honest. The alternative (drop the credit) would FAIL the gate by mis-classifying a genuine primary payoff as
+    unreachable. `sim/harness.ts` flag downgraded from "awaiting ratification" to "ratified #60".
+
+61. **Forgemaster — ACCEPT as a documented unit-test-only card (2026-07-02; closes the #55/#58a disposition).**
+    Options were (a) accept the macro-sim gap, (b) raise the bot's Forgemaster/Sentinel valuation to develop it,
+    (c) re-scope the card. **Chosen: (a).** Its +`forgemasterSentinelBuff`×stacks Sentinel modifier is correct and
+    PINNED by EV-FRG-01..03 + golden EV-GLD-16; it fires in ~1/1600 macro player-games (bots buy the 3/5 body but
+    leave it benched), so its BALANCE is macro-unvalidated — a documented gap, not a balance risk (a benched card
+    cannot be OP). (b) is rejected because forcing it onto board is the exact move that broke EV-BAL-B in #57's
+    interim (over-valuing it crowds real breakpoints off splash boards) — the fix must not re-introduce that; (c) is
+    rejected because the mechanic is sound and eval-pinned. No `server/bots/BotAgent.ts` change. Matches the #47(b)
+    precedent. Gap retained in design-spec §11.2 + the sim note.
+
+62. **Cindermarshal go-tall (`alliesAtMost≤4`) — ACCEPT as a documented sim-coverage gap; closes the #47b/#57/#58
+    deferral chain (2026-07-02).** Same three options as #61. **Chosen: ACCEPT.** The `loneVanguard*` start-of-combat
+    payoff's EFFECT correctness is pinned by the EV-CON evals; the macro bots fill to `boardCap` 7 and never build
+    Infernal-narrow, so the go-tall line stays unreached (verified #47b: even with the buff temporarily raised to
+    +6/+6 it was unreached — the bot policy, not the number, is the limiter). Improving bot go-tall play is unmodeled
+    and out of scope for a config pass; re-scoping an otherwise-functional T4 4/5 body is unwarranted. This converts
+    the rolling #47b/#57/#58 deferral into a PERMANENT documented gap (design-spec §11.2), not an open TODO.
+
+### Matchmaking rework (Round 11, cont.) — bye semantics + config honored
+
+63. **Odd live count with no ghost available → a BYE, not a phantom fight; `ghostsEnabled` is now honored
+    (2026-07-02, spec §4.4. Resolves the two items #42 deferred.)** Two latent gameplay bugs, both from the
+    ghost branch running whenever the count was odd: (a) `ghostsEnabled` was **dead config** — never read, so
+    ghosts always filled odd counts regardless of the flag (violates invariant #4); (b) an odd roster **before any
+    elimination** (an odd seat count with bot-fill off) had `this.ghosts` empty, so `computePairings` fell through
+    to a `bBoard = {units:[], playerTier:1}` — the solo seat fought a **phantom empty board**: a guaranteed "win"
+    that ALSO ran the writeback fold on its side, letting its combat-fired permanents **accrue buffs every odd
+    round** for free. **Fix:** the ghost branch is taken only when `ghostsEnabled` **and** a ghost exists;
+    otherwise the solo seat gets a **bye** — a new `Pairing{ghost:false, bye:true, bSeat:-1}` that runs **no
+    combat, no hero damage, no writeback, empty combat log** (`resolveCombatPhase` short-circuits it before the
+    normal branch, which would otherwise index `sessions[-1]`). `Pairing` gains a `bye` field (shared type +
+    `PairingSchema` + `makePairing` + client `toPublic`); the client's `resolveOpponent` returns `{bye:true}` so
+    the shop reads "Bye · no opponent" (no highlight) and the combat scene shows a "Bye — you take no damage"
+    panel instead of a stuck "Resolving combat…" on the empty log. **Reachability:** unchanged for shipped play —
+    the 8-player bot-filled match starts even and always has a ghost by its first odd round, so byes only occur if
+    ghosts are config-disabled or the room is seated with an odd human count and bot-fill off. Pinned by EV-MTC-10
+    (no-ghost-yet bye: no damage, no free win, empty log) and EV-MTC-11 (`ghostsEnabled=false` → bye even when a
+    ghost exists). No combat-outcome change for the default config; all evals green.
+
+### Combat-replay reveal fix (Round 12) — final combat shown + outcome revealed at replay end
+
+64. **The combat outcome is revealed when the replay ENDS, not when it starts; and the deciding
+    round plays its replay before Results. (2026-07-02, spec §9.1/§10. Refines #10, #42.)** Two
+    player-reported symptoms, both from `MatchRoom.resolveRound` publishing the post-combat public
+    state at combat *start*: (a) **the match's final combat was never shown** — `resolveRound` set
+    `phaseState = m.isFinished() ? 'finished' : 'combat'`, so the deciding round jumped **straight to
+    `finished`** and the client routed to Results without a replay ("it skips right to the end");
+    (b) **deaths were spoiled on the first beat** — `resolveCombatPhase` applies loss damage +
+    eliminations + placement in-place, and the immediate `syncPublic()` pushed those to every client,
+    so the standings sidebar (frozen behind the replay overlay) showed the new HP and moved an
+    eliminated player to the dead list before the replay had played ("shows if someone died right in
+    the beginning of combat"). **Fix:** `resolveRound` now (1) snapshots the pre-combat
+    `hp`/`alive`/`placement` **before** resolving; (2) **always** enters `combat` — even when
+    `isFinished()` — and pushes each watcher their private `combatLog` so the replay plays; (3)
+    freezes the public player rows and `winnerSeat` at the snapshot for the whole `combat` window
+    (`syncPublic` writes the frozen values while a `preCombat` snapshot is set); (4) on the sized
+    window-end callback `revealResults`, clears the snapshot → publishes the real post-combat
+    standings, emits the combat-result / elimination toasts, and transitions to **`finished`** (final
+    round) or **`beginShop`** (continuing). This makes the code match the **documented §9.1 lifecycle**
+    `(shop → combat)* → finished` — combat now always precedes `finished`. **No engine / combat-outcome
+    change:** `resolveCombatPhase` is byte-identical and still authoritative; only the *timing of the
+    public reveal* moved (private board + writeback still update at resolve so the replay has its
+    `myBoard`). The window is unchanged — `combatWindowMs` over watched logs — so a skipped or bot-only
+    round still just floors at `REPLAY_WINDOW_MIN_MS`. Transport-layer only; all evals green.
+
+### Combat-replay orientation fix (Round 12, cont.) — side from the pairing, not the board
+
+65. **The replay's "You" side and the Victory/Defeat banner are derived from the synced pairing, not
+    from the viewer's board uids. (2026-07-02, spec §10. Refines #42's `resolveOpponent`.)** Found via
+    multi-player Playwright testing (real humans, no bots): a player with an **empty or fully-wiped
+    board** who LOST a combat saw **"Victory"** and a **mirrored** replay (the opponent's units
+    labelled "You"). Root cause: `CombatReplay` inferred the viewer's combat side with
+    `mySideOf(log, myUids)`, matching the viewer's board unit uids against the two combat lines — but a
+    wiped/empty board contributes **no uids**, so nothing matched side `b` and it **silently defaulted
+    to `a`**; when the opponent was side `a` and won, `iWon = (winner === mySide)` came out true. **Fix:**
+    a new `sideForSeat(pub, seat)` (in `components.tsx`, beside `resolveOpponent`) reads the side from
+    the same synced `pairings` the opponent label already uses — `aSeat → 'a'`, `bSeat → 'b'`, bye/none
+    → null — which is authoritative because `resolveCombatPhase` always resolves `aSeat` as side `a`
+    and `bSeat` as side `b` (live player = `a` in a ghost fight). `App.CombatScene` passes it as the
+    optional `side` prop; `CombatReplay` uses `side ?? mySideOf(...)` (the board-uid inference remained
+    only as the fallback for the dev `ReplayLab`, which has no pairing — **later removed entirely in
+    #66**, making `side` a required prop with no fallback to silently guess wrong). **Corollary polish:** the
+    end-beat caption showed the engine-internal **"Side B wins"**; since the shared beat captions are
+    side-agnostic (`captionOf`, unchanged, still emits "Side A/B wins"), the presenter now personalizes
+    the `end` caption to **"You win" / "\<opponent\> wins" / "Draw"** from the corrected side. **No
+    engine / combat-outcome change** (transport + client only); pinned by `client/src/components.test.ts`
+    (aSeat→a, bSeat→b, ghost→a, bye/none→null, agrees with `resolveOpponent`). All 275 evals green, plus
+    live 2-player browser verification (empty-board loser now sees "Defeat" + "\<winner\> wins" + its own
+    empty line labelled "You").
+
+66. **The `CombatReplay` `side` prop is now REQUIRED; the `mySideOf` board-uid fallback is removed.
+    (2026-07-02, spec §10. Hardens #65.)** #65 fixed the empty-board mirror by deriving the viewer's
+    side from the synced pairing (`sideForSeat`), but left `mySideOf(log, myUids)` in place as a
+    fallback (`side ?? mySideOf(...)`) for the dev `ReplayLab`. That fallback was the exact defect #65
+    diagnosed — it silently defaults a wiped/empty board to side `a` — kept alive one `?? ` away from
+    any future caller that forgot to pass `side` (e.g. a refactor dropping the prop in `App.tsx`). A
+    dormant landmine, found while re-auditing the perspective path via 2-player Playwright. **Fix:**
+    delete `mySideOf` entirely and make `side: 'a' | 'b'` a **required** prop, so the type checker now
+    forces every caller to supply an authoritative side — the wrong-side default is no longer
+    representable. `ReplayLab` (whose `myBoard` is always the side-`a` snapshot) passes `side="a"`
+    explicitly. `App.CombatScene` computes `side` from `sideForSeat`; when the pairing hasn't synced yet
+    (`null`), it **withholds the replay** ("Resolving combat…") instead of guessing — strictly safer
+    than a board-uid inference that can't recover the side from an empty board anyway. **No engine /
+    combat-outcome change** (client-only); the side↔pairing mapping stays pinned by
+    `client/src/components.test.ts`, and the required prop is enforced by `pnpm typecheck`.
 
 ## Tribe name map (clean-room — never ship the reference names)
 | Reference (do NOT ship) | Original name | Identity |

@@ -69,6 +69,7 @@ function toPublic(s: Record<string, unknown>): PublicState {
       bSeat: Number(pr.bSeat ?? -1),
       ghost: Boolean(pr.ghost),
       ghostName: pr.ghostName ? String(pr.ghostName) : undefined,
+      bye: Boolean(pr.bye),
     })),
   };
 }

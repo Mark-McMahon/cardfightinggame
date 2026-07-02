@@ -51,9 +51,9 @@ export const breakpoints: BreakpointsConfig = {
     // per-token buff remains, and its threshold is raised 2→3 so it costs a real over-summon (a second
     // generator / a summon-battlecry), not one autopilot Brambleling. tokenAtk/tokenHp only.
     { card: 'wildkin_motherthorn', counter: 'tokensThisTurn', threshold: 3, tokenAtk: 2, tokenHp: 2 },
-    { card: 'wildkin_thornwarden', counter: 'alliesAtStart', threshold: 5, once: true, atk: 2, hp: 4 }, // Phase 4 gate-spread: STAYS at 5 (the low-width anchor of the diversified alliesAtStart ladder 5/6/7, decision #48)
+    { card: 'wildkin_thornwarden', counter: 'alliesAtStart', threshold: 5, once: true, atk: 3, hp: 5 }, // Phase 4 gate-spread: STAYS at 5 (the low-width anchor of the diversified alliesAtStart ladder 5/6/7, decision #48). Balance pass (#59): payoff 2/4→3/5 — Wildkin's 24%-pick go-wide anchor was too weak (tribe ~26-34% of mean win rate).
     { card: 'wildkin_grovelord', counter: 'alliesAtStart', threshold: 7, once: true, atk: 2, hp: 2 }, // Phase 4 gate-spread: 5→7 — a FULL-BOARD payoff (decision #48). Balance-risk noted: nerfs an already-weak line; no compensating tuning this PR (rework rule). Phase 5 (#57): a 7→6 relaxation was tried to restore EV-BAL-B headroom and REVERTED (zero effect on the metric)
-    { card: 'wildkin_packmother', counter: 'deaths', threshold: 2, atk: 2, hp: 2 }, // each-N (existing avenge); hp aligned to as-shipped card payoff (engines.wildkin.avengePayoff = 2/2)
+    { card: 'wildkin_packmother', counter: 'deaths', threshold: 2, atk: 3, hp: 3 }, // each-N (existing avenge); aligned to engines.wildkin.avengePayoff (balance pass #59: 2/2→3/3, the SWARM↔DEATHS carrier that rescued Wildkin from ~36% of mean)
     { card: 'wildkin_brackentide', counter: 'battlecries', threshold: 2, summonUnitId: 'wildkin_thornpup', summonCount: 2 },
     // ── Revenants / DEATHS ──
     { card: 'revenants_mortarch', counter: 'deaths', threshold: 3, once: true, atk: 3, hp: 3 },
@@ -74,7 +74,7 @@ export const breakpoints: BreakpointsConfig = {
       ],
     },
     // ── Reefkin / BATTLECRIES (+ ENDURE) ──
-    { card: 'reefkin_pearlguard', counter: 'shieldBreak', threshold: 1, once: true, atk: 1, hp: 3 },
+    { card: 'reefkin_pearlguard', counter: 'shieldBreak', threshold: 1, once: true, atk: 1, hp: 2 }, // balance pass (#59): board payoff 1/3→1/2 — Reefkin was the top out-of-band tribe (~215-220% of mean); this shield-break board buff fires nearly every combat, so it is the one *reaching* Reefkin lever (the pearlguard 2/3 DS+taunt BODY that drives its 24% pick is not a config knob). Stopped at 1/2 (not 1/1): a further point transferred Reefkin's lost wins to the equally-untouchable Constructs, pushing IT out of band (zero-sum apex coupling) for no net spread gain. atk kept at 1 (EV-BP-10 golden asserts the board buff fires).
     { card: 'reefkin_chorustide', counter: 'battlecries', threshold: 2, atk: 3, hp: 3 },
     { card: 'reefkin_leviathan', counter: 'battlecries', threshold: 3, grantKeyword: 'divineShield' },
     // ── Prompt-2: Infernals / SACRIFICE (reuse the combat `deaths` counter — an aggressor's
@@ -104,7 +104,7 @@ export const breakpoints: BreakpointsConfig = {
     //    class. Still beatable by poison (P1 ignores stat size). ──
     // ── Primordials / ELEMENTS: play-count → WIDE cleave splash. Counter: TALL (few targets waste
     //    cleave) + poison. Reuses `battlecries` (each play) and `alliesAtStart` (went wide). ──
-    { card: 'primordials_stormcaller', counter: 'battlecries', threshold: 2, atk: 2, hp: 1 },
+    { card: 'primordials_stormcaller', counter: 'battlecries', threshold: 2, atk: 3, hp: 3 }, // balance pass (#59): 2/1→3/3 — Primordials' reachable permanent board buff was too small + gave no hp; tribe sat ~50% of mean
     { card: 'primordials_tempest', counter: 'alliesAtStart', threshold: 6, once: true, atk: 2 }, // Phase 4 gate-spread: 5→6 (mid-width, decision #48)
     { card: 'primordials_worldspark', counter: 'alliesAtStart', threshold: 7, once: true, grantKeyword: 'cleave' }, // Phase 4 gate-spread: 5→7 — FULL-BOARD cleave grant (decision #48). Balance-risk noted (see Grovelord); no compensating tuning this PR. Phase 5 (#57): a 7→6 relaxation was tried + REVERTED (zero effect on EV-BAL-B; reachability restored via harness payoff-credit instead)
     // ── Sirens / SPELLCRAFT: a second POISON home + start-of-combat burst. Counter: divine-shield

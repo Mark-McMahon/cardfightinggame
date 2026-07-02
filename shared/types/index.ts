@@ -491,9 +491,14 @@ export interface PublicPlayer {
 
 export interface Pairing {
   aSeat: number;
-  bSeat: number; // -1 if ghost
+  bSeat: number; // -1 if ghost or bye
   ghost: boolean;
   ghostName?: string;
+  // `bye` = the solo seat on an odd live count has NO opponent this round (ghosts disabled via
+  // `ghostsEnabled`, or none eliminated yet so no ghost exists). A bye is not a fight: no combat runs,
+  // no hero damage, no writeback accrual. Distinct from a ghost bye (`ghost:true`), which IS a fight
+  // against a dead player's frozen board. (spec §4.4)
+  bye?: boolean;
 }
 
 export interface PublicState {

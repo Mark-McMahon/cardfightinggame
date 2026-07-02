@@ -1,5 +1,13 @@
 # Post-rework sim state — 2026-07-02 (multi-lane scaling & strategy rework, Phases 1–5)
 
+> **Superseded for the balance picture by `BALANCE-PASS-2026-07-02.md`** (ledger #59-#62): the
+> config-only balance pass compressed the spread (Reefkin 248→189% run / 214→176% macro at 600
+> matches; Primordials + Wildkin lifted into band), ratified the merge-tower credit (#60), and
+> accepted the Forgemaster (#61) + Cindermarshal (#62) gaps. The per-tribe win rates below were read
+> at 200 matches and are **noise-inflated** (±20-25pp) — see the successor's 600-match reads. The
+> §11.3 gate results here remain valid; the "Proposed tuning — NOT APPLIED" list below is now APPLIED
+> (in part) + superseded by that pass.
+
 Final validation at HEAD after ledger decisions #38–#58. Compare to
 `BASELINE-2026-07-01.md` (pre-rework). Commands: `pnpm --filter @cardgame/sim report`
 (seed `run`) + `pnpm sim:macro` (seed `macro`), 200 matches each. Methodology identical to

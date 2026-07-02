@@ -191,13 +191,16 @@ export class Match {
     const arr = [...order];
     if (arr.length % 2 === 1) {
       const soloSeat = arr.pop()!;
-      const ghost = this.ghosts[this.ghosts.length - 1];
-      pairings.push({
-        aSeat: soloSeat,
-        bSeat: -1,
-        ghost: true,
-        ghostName: ghost ? ghost.name : 'Ghost',
-      });
+      // The solo seat fights the most-recently-eliminated player's ghost — but only if ghosts are
+      // enabled AND one exists. Otherwise it's a true BYE: no opponent, no combat, no damage (an odd
+      // roster before anyone dies — e.g. an odd seat count with bot-fill off — must NOT fight a phantom
+      // empty board, which would hand a free win AND let the solo side accrue writeback buffs). (§4.4)
+      const ghost = matchCfg.ghostsEnabled ? this.ghosts[this.ghosts.length - 1] : undefined;
+      pairings.push(
+        ghost
+          ? { aSeat: soloSeat, bSeat: -1, ghost: true, ghostName: ghost.name }
+          : { aSeat: soloSeat, bSeat: -1, ghost: false, bye: true },
+      );
     }
     for (let i = 0; i + 1 < arr.length; i += 2) {
       pairings.push({ aSeat: arr[i], bSeat: arr[i + 1], ghost: false });
@@ -227,6 +230,14 @@ export class Match {
     this.pairingsReady = false; // consumed: the next startRound (or bare resolve) re-pairs
 
     for (const pr of pairings) {
+      if (pr.bye) {
+        // Bye: the solo seat has no opponent (ghosts off or none exist yet). It does NOT fight — no
+        // damage, no writeback, no death accrual, empty combat log — so it can neither win free value
+        // nor lose HP this round. (Never taken when ghosts are enabled and any player has been
+        // eliminated; the shipped 8-player bot-filled match always has a ghost by the first odd round.)
+        this.sessions[pr.aSeat].lastCombatLog = [];
+        continue;
+      }
       if (pr.ghost) {
         const ghost = this.ghosts[this.ghosts.length - 1];
         const aBoard = boardToCombat(this.sessions[pr.aSeat]);

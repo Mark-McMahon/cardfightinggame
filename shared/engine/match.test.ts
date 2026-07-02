@@ -162,6 +162,45 @@ describe('EV-MTC — match outcome / state', () => {
     for (const s of living) expect(m.state.players[s].alive).toBe(true);
     expect(ghost?.ghostName).toBe(m.state.players[2].name); // the bye names the dead player
   });
+
+  it('EV-MTC-10 (#63): odd roster with no ghost yet → the solo seat gets a BYE (no fight, no damage, no free win)', () => {
+    const m = new Match('mtc10', seats(3));
+    // Real boards on every seat: a phantom "fight vs empty board" WOULD hand the solo a win + let it
+    // accrue — the bye must do neither.
+    for (let i = 0; i < 3; i++) m.sessions[i].board = [inst('corsairs_ironclad', `u${i}`)];
+    m.startRound(); // round 1: 3 alive, nobody eliminated → no ghost exists
+    const bye = m.state.pairings.find((p) => p.bye);
+    expect(bye).toBeTruthy();
+    expect(bye!.ghost).toBe(false); // a bye is NOT a ghost fight
+    expect(bye!.bSeat).toBe(-1);
+    const solo = bye!.aSeat;
+    const hpBefore = m.state.players[solo].hp;
+    m.resolveCombatPhase();
+    expect(m.state.players[solo].hp).toBe(hpBefore); // took no damage, won nothing
+    expect(m.sessions[solo].lastCombatLog).toEqual([]); // no combat ran → no writeback fold possible
+    expect(m.state.players[solo].alive).toBe(true);
+  });
+
+  it('EV-MTC-11 (#63): ghostsEnabled=false → the solo seat gets a BYE even when a ghost exists (config honored)', () => {
+    const orig = matchCfg.ghostsEnabled;
+    try {
+      const m = new Match('mtc11', seats(4));
+      m.startRound(); // round 1
+      for (let i = 0; i < 4; i++) m.sessions[i].board = [];
+      m.state.players[2].hp = -1; // eliminate seat 2 → a ghost now EXISTS
+      m.resolveCombatPhase();
+      expect(m.state.players[2].alive).toBe(false);
+
+      matchCfg.ghostsEnabled = false; // flip the flag: ghosts available but disabled
+      m.startRound(); // round 2: 3 alive (odd)
+      expect(m.state.pairings.some((p) => p.ghost)).toBe(false); // no ghost fight despite a ghost existing
+      const bye = m.state.pairings.find((p) => p.bye);
+      expect(bye).toBeTruthy();
+      expect(bye!.ghost).toBe(false);
+    } finally {
+      matchCfg.ghostsEnabled = orig; // never leak the flip to other tests
+    }
+  });
 });
 
 describe('EV-INV-SRV — a rejected intent returns {ok:false,error} and mutates nothing', () => {

@@ -67,6 +67,13 @@ export class MatchRoom extends Room<RoomState> {
   private shopEndsAt = 0;
   private combatEndsAt = 0; // when the current 'combat' hold ends (→ next shop opens); drives the countdown
   private resolving = false;
+  // Combat resolves server-side the instant the shop closes, but the public standings (HP,
+  // eliminations, placement, winner) must NOT be revealed until the replay has played (spec §10).
+  // While a fight's replay window is open we freeze the public player rows at this pre-combat
+  // snapshot; `revealResults` clears it to publish the real post-combat truth. `pendingFinish`
+  // remembers that the deciding round's replay, once watched, ends the match (→ 'finished').
+  private preCombat: Array<{ hp: number; alive: boolean; placement: number }> | null = null;
+  private pendingFinish = false;
   private tickHandle?: ReturnType<typeof setInterval>;
   private timeouts = new Set<ReturnType<typeof setTimeout>>();
 
@@ -289,7 +296,12 @@ export class MatchRoom extends Room<RoomState> {
   private resolveRound(): void {
     const m = this.match;
     if (!m) return;
-    const aliveBefore = new Set(m.state.players.filter((p) => p.alive).map((p) => p.seat));
+
+    // Freeze the pre-combat public standings BEFORE resolving. The engine applies loss damage,
+    // eliminations and placement in-place inside resolveCombatPhase, but the public rows must keep
+    // showing these pre-combat values while the replay plays — the result is revealed only when the
+    // combat window ends (revealResults), never spoiled at combat start (spec §10, decision #64).
+    const preCombat = m.state.players.map((p) => ({ hp: p.hp, alive: p.alive, placement: p.placement }));
 
     // End-of-shop triggers (Brambleling summons, gem doublers, multiplyStats compounders).
     // The engine's resolveCombatPhase does NOT run these — the round DRIVER must (shop.ts /
@@ -297,10 +309,14 @@ export class MatchRoom extends Room<RoomState> {
     for (const p of m.state.players) if (p.alive) endOfTurnPhase(m.sessions[p.seat]);
     m.resolveCombatPhase(); // pair + pure combat + loss damage + eliminations + placement
 
-    this.phaseState = m.isFinished() ? 'finished' : 'combat';
-    this.syncPublic();
+    // ALWAYS enter 'combat' to play the replay — even the deciding round. (Previously the final
+    // round jumped straight to 'finished', so the match-ending combat was never shown; spec §10.)
+    this.pendingFinish = m.isFinished();
+    this.preCombat = preCombat; // deferral ON: syncPublic now publishes the frozen pre-combat rows
+    this.phaseState = 'combat';
 
-    // private channel: each connected human gets their own combat log + refreshed state.
+    // private channel: each connected human gets their own combat log + refreshed state, so the
+    // replay can start immediately even while the public standings stay frozen at pre-combat.
     for (let seat = 0; seat < m.state.players.length; seat++) {
       const client = this.clientBySeat(seat);
       if (!client) continue;
@@ -308,28 +324,47 @@ export class MatchRoom extends Room<RoomState> {
       if (log) client.send('combatLog', log);
       this.pushPrivate(seat);
     }
-    this.emitCombatToasts(aliveBefore);
 
-    if (m.isFinished()) {
+    // Size the 'combat' hold to the longest replay any watching human actually has this round, so
+    // nobody is yanked to the next shop / results mid-fight (spec §10). Bots don't watch; if no
+    // human is connected the window floors at REPLAY_WINDOW_MIN_MS.
+    const watchedLogs: CombatEvent[][] = [];
+    for (let seat = 0; seat < m.state.players.length; seat++) {
+      if (!this.clientBySeat(seat)) continue;
+      const log = m.sessions[seat].lastCombatLog;
+      if (log) watchedLogs.push(log);
+    }
+    const windowMs = watchedLogs.length ? combatWindowMs(watchedLogs) : REPLAY_WINDOW_MIN_MS;
+    this.combatEndsAt = Date.now() + windowMs;
+    this.startTick(); // endShop() stopped the tick; resume it so the 'next' countdown refreshes
+    this.syncPublic(); // publish phase='combat' with the frozen standings + initial countdown
+    this.schedule(() => this.revealResults(), windowMs);
+  }
+
+  /** Combat window elapsed: publish the real post-combat standings + toasts, then open the next
+   *  shop (or end the match if this was the deciding round). The replay has now played (spec §10). */
+  private revealResults(): void {
+    const m = this.match;
+    if (!m) return;
+    const snapshot = this.preCombat;
+    this.preCombat = null; // deferral OFF → syncPublic now publishes the real post-combat truth
+    // aliveBefore for the elimination toasts comes from the frozen snapshot (who was alive pre-combat).
+    const aliveBefore = new Set<number>();
+    (snapshot ?? m.state.players.map(() => ({ alive: true }))).forEach((s, seat) => {
+      if (s.alive) aliveBefore.add(seat);
+    });
+
+    if (this.pendingFinish) {
+      this.phaseState = 'finished';
+      this.stopTick();
+      this.syncPublic(); // reveal final HP / placements / winnerSeat → clients route to Results
+      this.emitCombatToasts(aliveBefore);
       const winner = m.state.players.find((p) => p.seat === m.state.winnerSeat);
       if (winner) this.broadcastToast({ kind: 'placement', message: `${winner.name} wins the match!`, seat: winner.seat });
-      this.stopTick();
-    } else {
-      // Size the 'combat' hold to the longest replay any watching human actually has this round,
-      // so nobody is yanked to the next shop mid-fight (spec §10). Bots don't watch; if no human
-      // is connected the window floors at REPLAY_WINDOW_MIN_MS.
-      const watchedLogs: CombatEvent[][] = [];
-      for (let seat = 0; seat < m.state.players.length; seat++) {
-        if (!this.clientBySeat(seat)) continue;
-        const log = m.sessions[seat].lastCombatLog;
-        if (log) watchedLogs.push(log);
-      }
-      const windowMs = watchedLogs.length ? combatWindowMs(watchedLogs) : REPLAY_WINDOW_MIN_MS;
-      this.combatEndsAt = Date.now() + windowMs;
-      this.startTick(); // endShop() stopped the tick; resume it so the 'next shop' countdown refreshes
-      this.syncPublic(); // publish the initial countdown now, before the first tick fires
-      this.schedule(() => this.beginShop(), windowMs);
+      return;
     }
+    this.emitCombatToasts(aliveBefore); // eliminations / combat results land as the standings update
+    this.beginShop(); // startRound → syncPublic reveals the post-combat standings and opens the next shop
   }
 
   private emitCombatToasts(aliveBefore: Set<number>): void {
@@ -417,7 +452,9 @@ export class MatchRoom extends Room<RoomState> {
     this.state.phase = this.phaseState;
     this.state.round = st.round;
     this.state.botFill = st.botFill;
-    this.state.winnerSeat = st.winnerSeat;
+    // While a combat replay is playing we hide the outcome: no winner is announced until the window
+    // ends (revealResults clears `preCombat`), so a deciding round shows its replay before Results.
+    this.state.winnerSeat = this.preCombat ? -1 : st.winnerSeat;
     this.state.timer =
       this.phaseState === 'shop'
         ? Math.max(0, Math.ceil((this.shopEndsAt - Date.now()) / 1000))
@@ -431,7 +468,17 @@ export class MatchRoom extends Room<RoomState> {
       const meta = this.seatInfo[i];
       const dst = this.state.players[i];
       const src = st.players[i];
-      if (dst) writePlayer(dst, src, meta?.connected ?? true, meta?.isBot ?? src.isBot);
+      if (!dst) continue;
+      writePlayer(dst, src, meta?.connected ?? true, meta?.isBot ?? src.isBot);
+      // During a combat replay, freeze the outcome fields (hp / alive / placement) at their
+      // pre-combat snapshot so the standings don't spoil damage or deaths before the replay plays
+      // (spec §10, decision #64). Everything else (tier, ready, connected) reflects live state.
+      const frozen = this.preCombat?.[i];
+      if (frozen) {
+        dst.hp = frozen.hp;
+        dst.alive = frozen.alive;
+        dst.placement = frozen.placement;
+      }
     }
 
     this.state.pairings.splice(0, this.state.pairings.length);

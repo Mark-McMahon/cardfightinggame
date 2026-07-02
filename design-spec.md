@@ -233,6 +233,15 @@ living players are ready the phase ends early.
   *to* the ghost. Keeps everyone fighting every round. **(D8, decided):** the ghost source is
   the most-recently-eliminated player, and the pick is **deterministic from the match seed**
   (required for sim reproducibility).
+- **No ghost available → a bye, never a phantom fight (decision #63, 2026-07-02):** the ghost
+  branch is taken only when `ghostsEnabled` is true **and** a ghost actually exists. If ghosts are
+  disabled, or the roster is odd **before anyone has been eliminated** (an odd seat count with
+  bot-fill off — the shipped 8-player bot-filled match always has a ghost by its first odd round),
+  the solo seat gets a **bye**: `Pairing{ghost:false, bye:true, bSeat:-1}`. A bye is **not a fight**
+  — no combat runs, no hero damage, no writeback accrual, empty combat log. This closes a latent
+  bug where the solo seat fought a phantom **empty** board: a free "win" that also let its own
+  combat-fired permanents accrue writeback buffs every odd round. `ghostsEnabled` is now honored
+  (it was previously dead config).
 - **Pairing timing (decision #42, 2026-07-01):** the round's pairing is computed **at the start
   of the shop phase** (`Match.startRound`), not at combat start, so the public `pairings` list
   **previews the actual upcoming opponent** for the whole shop — the client's "vs" label +
@@ -241,9 +250,9 @@ living players are ready the phase ends early.
   byte-identical to pairing at combat-start — the inputs (alive set, `lastOpponent`, most-recent
   ghost) can't change during the shop (no one dies mid-shop) — so sim reproducibility is
   unaffected.
-- A `pairings` list is public state (`Pairing{aSeat, bSeat, ghost, ghostName}`, `bSeat=-1`
-  for a ghost). It is populated from the start of each shop phase (above), so it is never empty
-  or stale while a round is in progress.
+- A `pairings` list is public state (`Pairing{aSeat, bSeat, ghost, ghostName, bye}`, `bSeat=-1`
+  for a ghost or a bye). It is populated from the start of each shop phase (above), so it is never
+  empty or stale while a round is in progress.
 
 ### 4.5 Combat phase
 Boards fight automatically (full rules §7). Per pair:
@@ -1175,6 +1184,19 @@ This resolution is a **single shared helper** (`resolveOpponent` in `client/src/
 returning `{seat, name, ghost}`) used by **both** the shop-phase "vs" preview (§4.4) and this
 combat label, so the two screens never disagree — a ghost bye shows the same `ghostName` in
 the shop ("vs \<name\> · ghost", no living row highlighted) as in the fight.
+**Which line is "You" is likewise read from the pairing, not from the board** (`sideForSeat`,
+same module, decision #65): `resolveCombatPhase` always resolves `aSeat`'s board as side `a` and
+`bSeat`'s as side `b` (and the live player is side `a` in a ghost fight), so the viewer's side is
+`a` iff they are the pairing's `aSeat`. Inferring the side from the viewer's own board uids breaks
+for an **empty or fully-wiped board** (no uid matches either side → it silently defaulted to `a`),
+which **mirrored the replay and inverted the Victory/Defeat banner** for that player; deriving it
+from the synced pairing is board-independent and correct. The pairing-derived side is a **required**
+prop of the presenter (`CombatReplay`) — there is deliberately **no board-uid fallback** to silently
+default to; if the pairing has not synced yet (`sideForSeat` → null) the scene **withholds the replay**
+("Resolving combat…") rather than guess a side (decision #66). The end-of-combat **caption is
+personalized in the presenter** from that side — "You win" / "\<opponent\> wins" / "Draw" — since
+the shared beat captions are side-agnostic (`captionOf` emits a neutral "Side A/B wins" that must
+never reach a player).
 
 **Combat replay — choreographed causal beats.** The event stream is segmented into **causal
 beats** (never all-at-once) in a render-free, unit-tested module. That module is **pure and lives
@@ -1287,7 +1309,28 @@ During the hold the server also publishes the remaining seconds in the public `t
 means "seconds left in the current timed phase" — the shop budget during `shop`, the time until the
 next shop during `combat`; it was formerly hard-zeroed in `combat`), so a client that skipped its
 replay sees a live countdown to when the frozen shop reopens. `MatchRoom` keeps its tick running
-through `combat` to refresh it; the scheduled `beginShop` still owns the actual phase transition.
+through `combat` to refresh it; the scheduled window-end callback still owns the actual phase
+transition.
+
+**Results are revealed at the END of the replay, not its start (decision #64).** Combat resolves
+server-side the instant the shop closes (`resolveCombatPhase` applies loss damage, eliminations and
+placement in-place), but publishing that outcome immediately would spoil the fight: the standings
+would show the new HP — and move an eliminated player to the dead list — while the replay is still
+on its first beat. So `MatchRoom` **freezes the public player rows** (`hp`/`alive`/`placement`, and
+`winnerSeat`) at a **pre-combat snapshot** for the whole `combat` window, pushes each watcher their
+private `combatLog` so the replay can play, and only on the window-end callback (`revealResults`)
+clears the snapshot — publishing the real post-combat standings and emitting the combat-result /
+elimination toasts as the standings tick over. The private board (with §7.5 writeback) still updates
+at resolve so the replay has its `myBoard`; only the *public* outcome is deferred.
+
+**The deciding round plays its replay before Results.** The lifecycle is `(round: shop → combat)* →
+finished` (§9.1): the match-ending combat is a combat like any other and must be *shown*. So the
+window-end callback — not `resolveCombatPhase` — owns the `finished` transition: even when
+`isFinished()` is true the server enters `combat`, holds for the sized window so the winner (and the
+just-eliminated loser) watch the final fight, then flips to `finished` (revealing `winnerSeat` and
+routing clients to Results). Entering `finished` directly at resolve would skip the last combat
+entirely — the client would jump straight to the results screen. The continuing case instead calls
+`beginShop` from the same callback.
 
 **Contextual counters (decision #27).** Show a manufactured-event counter (deaths / tokens
 / battlecries / gems) **only when you own a card that consumes it** — never an always-on
@@ -1324,20 +1367,23 @@ to repair.
   board-shape / anti-wide tech, so the go-tall line is deferred there rather than exercised by
   a speculative (inert) bot heuristic today. **Phase-4 status:** the board-shape work shipped
   (the `alliesAtStart` 5/6/7 gate-spread, decision #48) diversified WIDTH but did NOT change the
-  bot's fill-to-`boardCap` policy, so `alliesAtMost≤4` is still unreached in the macro sim — the
-  #47(b) deferral **persists** into a later phase (an anti-wide tech / a narrow-restraint bot line
-  is still the prerequisite, and neither shipped here). **Phase-5 status (decision #54/#55/#58):** the
+  bot's fill-to-`boardCap` policy, so `alliesAtMost≤4` is still unreached in the macro sim.
+  **ACCEPTED (#62):** the balance pass's final validation converts the rolling #47b deferral into a
+  PERMANENT documented sim-coverage gap — the effect is EV-CON-pinned, the bot fills to `boardCap` 7,
+  and forcing bot go-tall play is unmodeled/out-of-scope; it is no longer an open TODO. **Phase-5 status (decision #54/#55/#58):** the
   **MAGNETIC merge tower** IS exercised — the bot's deterministic `bestMerge` consolidates a magnetic
   bench unit onto a Construct tower, and an assembled tower (`mergeCount>0`) is credited toward the
   reachability gate (§11.3b) as a primary payoff, mirroring the #39 spend-gated precedent (116/1600
-  player-games on the canonical `run` seed, per-unit cap=5 reached; **flagged for final-validation
-  ratification** that this payoff-class extension is legitimate rather than a goalpost move, #58). The
-  **Forgemaster Sentinel-stack (#55)** is a SECOND documented coverage gap: bots buy the 3/5 body but
-  its deliberately-small valuation (a payoff bump would crowd real breakpoints off splash builds and
-  break EV-BAL-B, #57) leaves it benched and sold, so `forgemastersPlayed>0` fires in only ~1/1600
-  macro player-games. It is therefore NOT credited to reachability (a credit would be vacuous — 0.00pp
-  effect); its combat scalar is pinned by the EV-FRG-01..03 + EV-GLD-16 determinism/property evals, and
-  the macro-sim non-coverage is deferred to final validation rather than number-tuned away (#58).
+  player-games on the canonical `run` seed, per-unit cap=5 reached). **RATIFIED (#60):** the final
+  validation confirmed the merge tower is a legitimate assembled go-tall payoff (same class as #39),
+  not a goalpost move — the credit is KEPT. The **Forgemaster Sentinel-stack (#55)** is a SECOND
+  documented coverage gap: bots buy the 3/5 body but its deliberately-small valuation (a payoff bump
+  would crowd real breakpoints off splash builds and break EV-BAL-B, #57) leaves it benched and sold,
+  so `forgemastersPlayed>0` fires in only ~1/1600 macro player-games. It is therefore NOT credited to
+  reachability (a credit would be vacuous — 0.00pp effect); its combat scalar is pinned by the
+  EV-FRG-01..03 + EV-GLD-16 determinism/property evals. **ACCEPTED (#61):** it is a documented
+  unit-test-only card — the macro non-coverage is a permanent documented gap, not number-tuned away
+  (forcing it onto board is the exact move that broke EV-BAL-B in #57's interim).
 
 **11.3 Breakpoint balance-gate metrics (decision #29).** Thresholds in
 `shared/config/sim.ts`; the macro-sim asserts:

@@ -135,8 +135,8 @@ export const engines: EnginesConfig = {
     endOfTurnTriggerMultiplier: 2,
     endOfTurnTriggerMultiplierCap: 2,
     avengeDeathThreshold: 2, // fires sooner — go-wide payoff
-    avengePayoffAtk: 2,
-    avengePayoffHp: 2,
+    avengePayoffAtk: 3, // balance pass (#59): 2→3 — Pack Mother's every-2-deaths board buff is the SWARM↔DEATHS carrier that scales with a wide board's frequent losses; Wildkin sat ~36-42% of mean
+    avengePayoffHp: 3,
     tokenDeathFloorAtk: 1,
     tokenDeathFloorCapAtk: 6,
     deathrattleReplayScope: 'adjacent',

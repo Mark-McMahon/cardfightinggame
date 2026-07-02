@@ -197,9 +197,10 @@ function SRow({ p, label, me, vs, dead }: { p: PublicPlayer; label: ReactNode; m
 // for a ghost bye (nothing living to highlight), but `name` still carries the ghost's display name so
 // the shop and the combat screen agree instead of one showing blank.
 export interface OpponentInfo {
-  seat: number | null;
+  seat: number | null; // living opponent's seat, or null for a ghost fight / bye (no living row to highlight)
   name: string;
-  ghost: boolean;
+  ghost: boolean; // fighting a dead player's frozen board
+  bye: boolean; // no opponent at all this round (ghosts off / none yet) — no fight happens
 }
 
 export function resolveOpponent(pub: PublicState, mySeat: number | null): OpponentInfo | null {
@@ -207,11 +208,26 @@ export function resolveOpponent(pub: PublicState, mySeat: number | null): Oppone
   const nameOf = (seat: number) => pub.players.find((p) => p.seat === seat)?.name || 'Opponent';
   for (const pr of pub.pairings) {
     if (pr.aSeat === mySeat) {
-      return pr.ghost
-        ? { seat: null, name: pr.ghostName || 'Ghost', ghost: true }
-        : { seat: pr.bSeat, name: nameOf(pr.bSeat), ghost: false };
+      if (pr.bye) return { seat: null, name: 'Bye', ghost: false, bye: true };
+      if (pr.ghost) return { seat: null, name: pr.ghostName || 'Ghost', ghost: true, bye: false };
+      return { seat: pr.bSeat, name: nameOf(pr.bSeat), ghost: false, bye: false };
     }
-    if (pr.bSeat === mySeat) return { seat: pr.aSeat, name: nameOf(pr.aSeat), ghost: false };
+    if (pr.bSeat === mySeat) return { seat: pr.aSeat, name: nameOf(pr.aSeat), ghost: false, bye: false };
+  }
+  return null;
+}
+
+// Which side of the combat log `seat` fought on, read from the SAME synced pairing as resolveOpponent
+// (spec §10). `resolveCombatPhase` always resolves `aSeat`'s board as side 'a' and `bSeat`'s as side
+// 'b' (and the live player is always side 'a' in a ghost fight), so this is the authoritative side —
+// unlike inferring it from the viewer's board uids, which is empty (→ wrong side) for an empty or
+// fully-wiped board. Returns null for a bye / no pairing (no fight to orient).
+export function sideForSeat(pub: PublicState, mySeat: number | null): 'a' | 'b' | null {
+  if (mySeat == null) return null;
+  for (const pr of pub.pairings) {
+    if (pr.bye) continue;
+    if (pr.aSeat === mySeat) return 'a';
+    if (pr.bSeat === mySeat) return 'b';
   }
   return null;
 }
@@ -225,12 +241,15 @@ export function Standings({ pub, mySeat, opponent }: { pub: PublicState; mySeat:
         <span className="side-round">Round {pub.round}</span>
         {pub.phase === 'shop' && <span className={'side-timer' + (pub.timer <= 10 ? ' low' : '')}>{pub.timer}s</span>}
       </div>
-      {opponent && (
-        <div className="side-vs">
-          vs <strong>{opponent.name}</strong>
-          {opponent.ghost && <span className="vs-ghost"> · ghost</span>}
-        </div>
-      )}
+      {opponent &&
+        (opponent.bye ? (
+          <div className="side-vs side-bye">Bye · no opponent</div>
+        ) : (
+          <div className="side-vs">
+            vs <strong>{opponent.name}</strong>
+            {opponent.ghost && <span className="vs-ghost"> · ghost</span>}
+          </div>
+        ))}
       <div className="standings-title">Standings</div>
       {living.map((p, i) => (
         <SRow key={p.seat} p={p} label={i + 1} me={p.seat === mySeat} vs={p.seat === opponent?.seat} dead={false} />

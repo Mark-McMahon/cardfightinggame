@@ -105,6 +105,7 @@ input {
 .side-vs { margin-top: 5px; font-size: 12px; color: var(--dim); }
 .side-vs strong { color: var(--accent); font-weight: 700; }
 .side-vs .vs-ghost { color: var(--dim); font-style: italic; opacity: 0.8; }
+.side-bye { color: var(--dim); font-style: italic; }
 .side-foot { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11px; color: var(--dim); text-align: center; letter-spacing: 0.5px; }
 
 /* standings sidebar — living ranked by HP, dead greyed at the bottom in finish order */

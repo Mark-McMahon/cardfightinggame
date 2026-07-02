@@ -77,7 +77,9 @@ export function ReplayLab(): ReactNode {
           </button>
         ))}
       </div>
-      <CombatReplay key={pick} log={log} myBoard={myBoard} opponentName="Opponent" />
+      {/* The lab always views side 'a' (myBoard is derived from the side-a snapshot above); `side` is a
+          required prop with no board-uid fallback, so pass it explicitly (decision #66). */}
+      <CombatReplay key={pick} log={log} myBoard={myBoard} opponentName="Opponent" side="a" />
     </div>
   );
 }
