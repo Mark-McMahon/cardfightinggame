@@ -335,24 +335,38 @@ function detectTriples(s: ShopSession): string[] {
     }
     if (!mergeCard) break;
 
-    // remove copiesForTriple copies (from bench first, then board).
+    // remove copiesForTriple copies (from bench first, then board), CAPTURING each so its
+    // accumulated buffs fold into the golden rather than being discarded (decision #69).
     const toRemove = triplesCfg.copiesForTriple;
-    let removed = 0;
-    for (let i = s.bench.length - 1; i >= 0 && removed < toRemove; i--) {
+    const consumed: UnitInstance[] = [];
+    for (let i = s.bench.length - 1; i >= 0 && consumed.length < toRemove; i--) {
       if (s.bench[i].cardId === mergeCard && !s.bench[i].golden) {
-        s.bench.splice(i, 1);
-        removed++;
+        consumed.push(s.bench.splice(i, 1)[0]);
       }
     }
-    for (let i = s.board.length - 1; i >= 0 && removed < toRemove; i--) {
+    for (let i = s.board.length - 1; i >= 0 && consumed.length < toRemove; i--) {
       if (s.board[i].cardId === mergeCard && !s.board[i].golden) {
-        s.board.splice(i, 1);
-        removed++;
+        consumed.push(s.board.splice(i, 1)[0]);
       }
     }
 
-    // create the golden (base stats × goldenStatMultiplier) on the bench.
-    const golden = makeInstance(mergeCard, { uid: genUid(s), golden: true, bornTurn: s.round });
+    // Golden stats = base × goldenStatMultiplier + Σ buffs across the consumed copies (decision #69).
+    // Config-driven equivalent: Σ(copy stats) + base × (goldenStatMultiplier − copiesForTriple), so a
+    // fully-vanilla triple lands at base × goldenStatMultiplier (2×, decision #11) while every permanent
+    // buff — magnetic merges, folded combat write-backs, battlecry chains — is kept, not thrown away.
+    // Floored at atk 0 / hp 1 and bounded by statSanityBound, matching the §6.8 stat clamps.
+    const base = getCard(mergeCard);
+    const bound = engines.tuskers.statSanityBound;
+    const baseTerm = triplesCfg.goldenStatMultiplier - triplesCfg.copiesForTriple;
+    const sumAtk = consumed.reduce((n, u) => n + u.atk, 0);
+    const sumHp = consumed.reduce((n, u) => n + u.hp, 0);
+    const golden = makeInstance(mergeCard, {
+      uid: genUid(s),
+      golden: true,
+      bornTurn: s.round,
+      atk: Math.min(bound, Math.max(0, sumAtk + base.atk * baseTerm)),
+      hp: Math.min(bound, Math.max(1, sumHp + base.hp * baseTerm)),
+    });
     s.bench.push(golden);
     triples.push(mergeCard);
 

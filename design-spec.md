@@ -214,10 +214,20 @@ Notes:
   The *result* is baked into the board before combat, so **combat needs no human input**
   and stays a pure function (§7.4).
 - **Triple/upgrade:** holding a 3rd copy (`copiesForTriple` = 3) of the same base unit
-  auto-merges the three into a **golden** (stats × `goldenStatMultiplier` = 2) and grants
-  a **Discover** — pick 1 of 3 units from `tripleDiscoverTierOffset` (1) tier above your
-  current tier. A merge re-scans for cascade triples. If the bench is full when a Discover
-  would be granted, the Discover is lost (logged). Golden/token units are pool-exempt.
+  auto-merges the three into a **golden** and grants a **Discover** — pick 1 of 3 units from
+  `tripleDiscoverTierOffset` (1) tier above your current tier. A merge re-scans for cascade
+  triples. If the bench is full when a Discover would be granted, the Discover is lost
+  (logged). Golden/token units are pool-exempt.
+  - **Golden stats COMBINE the three copies (decision #69):** the golden's atk/hp =
+    `base × goldenStatMultiplier` (2) **+ Σ of the buffs on all three consumed copies**, where a
+    copy's buff is its live `atk`/`hp` beyond print (magnetic merges §6.3, folded permanent
+    combat write-backs §7.5, battlecry stat-chains). Config-driven form (no hardcoded constant,
+    invariant 4): `Σ(copy stats) + base × (goldenStatMultiplier − copiesForTriple)`. A
+    **fully-vanilla** triple therefore lands at exactly `base × goldenStatMultiplier` (the Σbuffs
+    term is 0 — this is the "double stats" of §4.7/decision #11, not a contradiction), while a
+    buffed board **keeps** its accumulated stats through the merge instead of resetting to 2×base.
+    Result is floored (atk 0 / hp 1) and bounded by `statSanityBound` per the §6.8 clamps.
+    Keywords and planted deathrattles are **not** combined (the golden carries base keywords only).
 - **Drag-and-drop (client-only, decision #28):** drag shop→board (buy + place at slot),
   board→sell-zone, board reorder, board↔bench. Buttons remain a fallback. **No server
   change** — it maps onto the existing `buy`/`sell`/`playUnit`/`moveUnit` intents.

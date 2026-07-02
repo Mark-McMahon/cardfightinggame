@@ -936,6 +936,23 @@ build from functional mechanics only; original names/text/art throughout.
     goldens; the `magnetic` keyword rulesText (was "(Deferred.)") is corrected. **This is the template for
     rolling the same rigor across the other eight tribes (paused here for review).**
 
+69. **A triple-merge now COMBINES the three copies' stats into the golden — buffs are kept, not
+    discarded (2026-07-02; spec §4.2; `shared/engine/shop.ts` `detectTriples`).** Before this, the golden
+    was built fresh at `base × goldenStatMultiplier` (2×), so any permanent buffs on the consumed copies
+    (magnetic merges #54/#68, folded combat write-backs #38/#39, battlecry stat-chains) simply vanished at
+    the merge — a buffed pair + a vanilla third produced the same golden as three vanilla copies. **Chosen:**
+    the golden's stats = `base × goldenStatMultiplier + Σ(buffs across the 3 consumed copies)`, where a
+    copy's buff is its live `atk`/`hp` beyond print. Config-driven equivalent (kept, so no constant is
+    hardcoded — invariant 4): `Σ(copy stats) + base × (goldenStatMultiplier − copiesForTriple)`. **This does
+    NOT override decision #11's "double stats":** a fully-vanilla triple still lands at exactly `base ×
+    goldenStatMultiplier` (2×) — the Σbuffs term is 0 — so #11 is the buff-free special case, not a
+    contradiction. The other literal reading (golden = raw sum of all three, i.e. 3× for vanilla) was
+    **rejected** by the user as it *would* have overridden #11 and inflated every golden by 50%. Result is
+    floored (atk 0 / hp 1) and bounded by `statSanityBound`, matching the §6.8 stat clamps; keywords/granted
+    deathrattles are out of scope here (still base-only on the golden — a possible later follow-up). Pinned by
+    the extended EV-ECO-10 (`shop-triple.test.ts`): a buffed copy among the three now yields a golden at
+    `2×base + the buff`, and the fully-vanilla case still asserts `base × goldenStatMultiplier`.
+
 ## Tribe name map (clean-room — never ship the reference names)
 | Reference (do NOT ship) | Original name | Identity |
 |---|---|---|

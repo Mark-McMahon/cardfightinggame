@@ -54,6 +54,23 @@ describe('EV-ECO — triple / golden / discover (SHOP)', () => {
     for (const id of s.discover!.options) expect(getCard(id).tier).toBe(wantTier);
   });
 
+  it('EV-ECO-10: a triple COMBINES buffs — golden = base×mult + Σ buffs on the 3 copies (decision #69)', () => {
+    const s = createShopSession(0, { pool: createPool(), seed: 'trip10combine' });
+    s.round = 1;
+    const card = getCard('reefkin_tidecaller');
+    const c1 = put(s, 'reefkin_tidecaller'); // buffed +2/+3
+    c1.atk += 2;
+    c1.hp += 3;
+    const c2 = put(s, 'reefkin_tidecaller'); // buffed +1/+0
+    c2.atk += 1;
+    const res = buyCard(s, 'reefkin_tidecaller'); // copy 3 (vanilla, base stats) → triple
+    expect(res.triples).toEqual(['reefkin_tidecaller']);
+    const golden = s.bench.find((u) => u.golden)!;
+    // base×goldenStatMultiplier + Σ(buffs on all 3): (2/3) + (1/0) + (0/0)
+    expect(golden.atk).toBe(card.atk * triples.goldenStatMultiplier + 3);
+    expect(golden.hp).toBe(card.hp * triples.goldenStatMultiplier + 3);
+  });
+
   it('EV-ECO-10: a merge re-scans and cascades (6 non-golden copies → two goldens)', () => {
     const s = createShopSession(0, { pool: createPool(), seed: 'trip10b' });
     s.round = 1;
