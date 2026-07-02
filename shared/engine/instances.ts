@@ -55,10 +55,13 @@ export function instanceToCombatUnit(inst: UnitInstance): CombatUnit {
   };
 }
 
-/** Convert a player's board (ordered left→right) into a CombatBoard for resolveCombat. */
-export function toCombatBoard(board: UnitInstance[], playerTier: number): CombatBoard {
+/** Convert a player's board (ordered left→right) into a CombatBoard for resolveCombat. `lifetimeDeaths`
+ *  (Phase 3) is the controller's persistent friendly-death total, carried IN on the snapshot so combat
+ *  can gate `lifetimeDeathsAtLeast` payoffs (Ossuary Titan) without any ambient state (invariant 1b). */
+export function toCombatBoard(board: UnitInstance[], playerTier: number, lifetimeDeaths = 0): CombatBoard {
   return {
     units: board.map(instanceToCombatUnit),
     playerTier,
+    lifetimeDeaths,
   };
 }

@@ -97,6 +97,12 @@ export function selectTargets<T extends Targetable>(spec: TargetSpec, ctx: Selec
     case 'chosenAlly':
       // Resolved during the shop phase (player pick). No combat consumer.
       return [];
+    case 'leftmostAlly': {
+      // POSITIONAL board-index-0 friendly (§6.4). `allies` is already in board order (left→right),
+      // so the first filtered entry is the leftmost — distinct from bornTurn `oldestAlly`.
+      const pool = applyFilters(allies, spec, source);
+      return pool.length ? [pool[0]] : [];
+    }
     case 'frontEnemy':
       return enemies.length ? [enemies[0]] : [];
     case 'randomEnemy': // [reserved]
@@ -131,6 +137,9 @@ export interface ConditionCounts {
   battlecriesThisTurn?: number;
   tokensThisTurn?: number;
   deathsThisCombat?: number;
+  /** Phase 3: the controller's persistent friendly-death total (combat carries it in on the
+   *  CombatBoard snapshot; shop reads the live session counter). */
+  lifetimeDeaths?: number;
 }
 
 /** Evaluate an optional condition. Missing/unknown → true; wrong-phase counter reads 0 (§6.3). */
@@ -148,6 +157,11 @@ export function evaluateCondition(cond: ConditionSpec | undefined, counts: Condi
       return (counts.tokensThisTurn ?? 0) >= v;
     case 'deathsThisCombatAtLeast':
       return (counts.deathsThisCombat ?? 0) >= v;
+    case 'alliesAtMost':
+      // ≤ value minions on the source's side (Phase 3 Lone Vanguard go-tall gate).
+      return (counts.countAllies ?? 0) <= v;
+    case 'lifetimeDeathsAtLeast':
+      return (counts.lifetimeDeaths ?? 0) >= v;
     default:
       // [reserved] kinds (hasTribe/hasKeyword/goldAtLeast/tierAtLeast/isGolden/isToken):
       // no live consumer → treated as unknown → true (spec §6.3 default).

@@ -218,12 +218,14 @@ stat-growing activated ability is registered SPEND-GATED with real positive cost
 | EV-BAL-E | `sim/audit.ts` caps lint | no multiplier value exceeds its `engines.ts` cap (`endOfTurnTriggerMultiplierCap`, `battlecryTriggerMultiplierCap`, `undeadDamageAmpCap`, `multiplyFactorCap`) | B | decision #25 |
 | EV-BAL-F | `sim/web.test.ts` | anti-degeneracy floor holds (every scaling line has a reachable counter that connects) | B | §16 gate |
 | EV-BAL-G | macro-sim | fraction of combats hitting `maxCombatSteps` (stale combat) below a flag threshold | B | §11.3 outputs |
+| EV-SIM-CONS-01 | macro-sim (`sim/consumptionCoverage.test.ts`) | the bot VALUES a consumption payoff (Gorgemaw) so it reaches combat (players>0), not dumped as raw-stat chaff — the mechanic is exercised in the macro sim, not dead | SIM | §11.2 bot coverage, #47 |
 
 ## K. Determinism goldens (thin, intra-impl) — G, generated after D1–D3 (D4: not cross-impl)
 
 | id | fixture | asserted property | layer |
 |---|---|---|---|
 | EV-GLD-01..09 | one fixed (boards, seed) each spanning: swarm mirror; poison-vs-shield; reborn chain; Pale-Lich amp crossing; Tusker doubler across turns; cleave with neighbors; Bonepiper replay; Pallbearer double; a combat-fired **permanent** buff (writeback seam — pins the `permanent`/`dAtk`/`dHp` + `survivorsA/B` payload) | byte-identical `CombatEvent[]` (the reference log). **Regenerated from the chosen-intent engine; the log is a lock, never the spec.** | G |
+| EV-GLD-10/11/12 (Phase 3) | Cindermarshal leftmost buff; Ossuary Titan tiered lifetime buff (`CombatBoard.lifetimeDeaths=12`); Gravemonarch survive-a-near-wipe double (5 start-of-combat destroys → `endOfCombat` permanent multiply) | byte-identical `CombatEvent[]` — pins the `leftmostAlly`/`lifetimeDeaths`/`endOfCombat` + `permanentFactor`/`deathsA/B` payloads | G |
 
 ## L. Combat→board writeback fold (§7.5, decision #38) — COMBAT + MATCH (`shared/engine/combatWriteback.test.ts`)
 
@@ -238,6 +240,29 @@ stat-growing activated ability is registered SPEND-GATED with real positive cost
 | EV-WBK-07 | any log with permanent buffs | `foldPermanentBuffs` never rewrites the log it reads (deep-equal before/after) | P | §7.5 purity |
 | EV-WBK-08 | lint over `units.ts` | content audit pin: every combat-fired `buffStats` on a shipped card is explicitly non-permanent (or gated behind a shop-scoped condition, e.g. Mother Thorn's `onSummon`); `engines.wildkin.tokenBuffPermanent` is live and read by Gorehide/Thornbeast | P/meta | #38 audit |
 | EV-WBK-09 | a combat-only +5/+5 lands first, then a permanent -6/-5 (emitted `dAtk`/`dHp` = -6/-5, unclamped in combat) on a persistent 2/3 survivor | the fold replays deltas through the same §6.8 `applyBuff` clamps combat used: the persistent instance becomes 0/1, never -4/-2 (a raw `+=` fold is distinguishable and forbidden) | P | #38 rule (h), §6.8 clamps |
+| EV-WBK-10 (Phase 3) | a combat-fired `multiplyStats` flagged `permanent:true` (2/3 body), two combats through `Match` | the event carries `permanentFactor` (never `dAtk`/`dHp`); the fold multiplies the SURVIVING persistent instance by the capped factor (2/3 → 4/6), NOT the combat absolutes, and compounds across combats (→ 8/12) | P | §7.5 writeback-multiply |
+
+## N. Phase 3 — Infernal CONSUMPTION + Revenant LIFETIME scaling — COMBAT / SHOP / MATCH (`shared/engine/consumption.test.ts`, `shared/engine/revenant-lifetime.test.ts`)
+
+| id | fixture | asserted property | layer | covers |
+|---|---|---|---|---|
+| EV-CON-01 | Cindermarshal at board index 1, witness at index 0 (board ≤ threshold) | `leftmostAlly` is POSITIONAL index-0 — the front witness is buffed, not Cindermarshal itself | P | §6.4 selector |
+| EV-CON-02 | Cindermarshal at exactly the `alliesAtMost` cap and one over | payoff fires AT/below the ally cap and is SUPPRESSED above it (a go-tall gate) | P | §6.3 condition |
+| EV-CON-03 | Cindermarshal startOfCombat, ≤ threshold | leftmost ally gets +atk/+hp AND Taunt, THIS COMBAT ONLY (`permanent` undefined → the §7.5 fold never picks it up) | P | Cindermarshal |
+| EV-CON-04 | Gorgemaw battlecry eats a Pearlguard (divineShield+taunt) | destroy the chosen friendly + permanently ABSORB its live atk/hp; keywords NOT transferred; victim removed; `lifetimeFriendlyDeaths`++ | P | destroyAlly + absorbStats |
+| EV-CON-05 | Gorgemaw eats a GOLDEN Pearlguard | absorbs the DOUBLED current stats (absorb reads live instance stats) | P | absorbStats golden |
+| EV-CON-06 | Gorgemaw alone on board | no legal target → battlecry FIZZLES (D5): never armed, no crash, no lifetime change | P | D5 fizzle |
+| EV-LFT-01 | 2-player `Match`, chaff that die every combat | friendly combat deaths accrue to the persistent `lifetimeFriendlyDeaths` and COMPOUND across combats; the survivor's owner accrues nothing | P | §7.5 lifetime fold |
+| EV-LFT-02 | Gorgemaw sacrifice in the shop, then a combat | a shop-phase `destroyAlly` increments the SAME counter as combat deaths (1 + 1 = 2) | P | counting rule (#44) |
+| EV-LFT-03 | 4-player `Match`; a player becomes the ghost | GHOST boards never accrue — the dead player's counter is frozen across ghost fights | P | ghost exclusion |
+| EV-OSS-01..03 | Ossuary Titan with a `CombatBoard.lifetimeDeaths` scalar carried in | below tier 1 → no buff; one cumulative self-buff per crossed tier; step payoffs ESCALATE (top ≥1.5× first, EV-BAL-D shape); all tier buffs are this-combat only | P | tiered breakpoint |
+| EV-GRM-01 | Gravemonarch, 5+ friendly deaths this combat, survives | a permanent ×`graveEmperorFactor` writeback event (`permanentFactor`) fires | P | contested double |
+| EV-GRM-02 | only 4 deaths (below the threshold) | NO double | P | threshold |
+| EV-GRM-03 | Gravemonarch dies (Reborn stripped) with 5+ deaths | NO double — it must SURVIVE | P | survival gate |
+| EV-GRM-04 | Gravemonarch dies once, Reborn returns, survives | Reborn counts as surviving; the double folds onto the PERSISTENT instance (6/7 → 12/14), not its 1-hp combat body | P | reborn edge (#46) |
+
+*(Determinism goldens `EV-GLD-10/11/12` pin Cindermarshal / Ossuary / Gravemonarch byte-stably;
+`sim/audit.ts` EV-BAL-C covers the `contestedCondition` registry ↔ catalog 1:1 + knob positivity.)*
 
 ## M. Activated abilities / spendable gems (decision #39/#40, spec §6.6a) — SHOP / INTENT / STATE (`shared/engine/activated.test.ts`)
 
@@ -277,7 +302,7 @@ Every card / keyword / breakpoint counter / economy rule / invariant → the eva
 | cleave | EV-KW-CLV, EV-BP-24 (grant) |
 | magnetic (reserved) | EV-KW-MAG |
 
-## Breakpoint counters (7)
+## Breakpoint counters (8)
 | counter | fails-if-broken |
 |---|---|
 | deaths | EV-DTH-02/04, EV-BP-04/06/09/13/14/15/16/18 |
@@ -287,8 +312,9 @@ Every card / keyword / breakpoint counter / economy rule / invariant → the eva
 | gemsThisTurn | EV-ACT-GEM, EV-CND-01/03 (0 card consumers since #39 — the doublers moved to EV-ABL) |
 | alliesAtStart | EV-BP-02/03/17/23/24/28/29 |
 | shieldBreak | EV-BP-10, EV-KW-DS-01 |
+| lifetimeDeaths (Phase 3) | EV-OSS-01..03, EV-LFT-01..03, EV-GLD-11 |
 
-## Cards (93) — by coverage mechanism
+## Cards (97) — by coverage mechanism
 - **26 ⭐ breakpoint cards** → their `EV-BP-*` rows (1:1; 19–21 retired by #39).
 - **6 spend-gated activated cards (#39)** — Ivorytusk/Ivorylord/Gemtitan (purchased doubles) →
   EV-ABL-01..05/10 + sim Part A; Facetguard → EV-ABL-06; Gemwright → EV-ABL-07;
@@ -312,6 +338,11 @@ Every card / keyword / breakpoint counter / economy rule / invariant → the eva
   EV-ECO-03 (onSell fires) + EV-ECO-16 (Pattern A/B trigger firing + payoffs) + EV-ACT-BUFF/GEM.
 - **plantDeathrattle bridge** (Reefmourner) → EV-ACT-PLANT.
 - **Token-floor carriers** (Gorehide, Thornbeast) → EV-DTH-05.
+- **Phase 3 consumption / lifetime cards (4):** Gorgemaw → EV-CON-04/05/06, EV-LFT-02,
+  **EV-SIM-CONS-01** (bot exercises it in the macro sim, #47);
+  Cindermarshal → EV-CON-01/02/03, EV-GLD-10 (EFFECT correctness; its go-tall LINE is not macro-sim
+  exercised — a documented Phase-4 bot-coverage limitation, design-spec §11.2 / decision #47);
+  Ossuary Titan → EV-OSS-01..03, EV-GLD-11; Gravemonarch → EV-GRM-01..04, EV-GLD-12, EV-WBK-10.
 
 ## Economy rules
 income EV-ECO-01 · buy EV-ECO-02 · sell/onSell EV-ECO-03 · roll EV-ECO-04 · freeze EV-ECO-05 ·
@@ -328,7 +359,8 @@ EV-MTC-01 · placement EV-MTC-03/04 · maxRounds EV-MTC-05 · pairing/ghost EV-M
 fold semantics + survivors-only → EV-WBK-01/02 · reborn/uid key → EV-WBK-04 · token no-op →
 EV-WBK-03 · ghost exclusion → EV-WBK-05 · shop no-double → EV-WBK-06 · log immutability →
 EV-WBK-07 · content audit (no silent upgrades) → EV-WBK-08 · fold clamps (§6.8, permanent
-debuffs) → EV-WBK-09 · event payload byte-lock → EV-GLD-09.
+debuffs) → EV-WBK-09 · permanent-MULTIPLY fold (Phase 3 extension) → EV-WBK-10 · event
+payload byte-lock → EV-GLD-09/12.
 
 ---
 

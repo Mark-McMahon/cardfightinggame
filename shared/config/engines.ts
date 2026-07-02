@@ -36,6 +36,9 @@ export interface EnginesConfig {
     undeadDamageAmpCap: number; // Round-6 cap on the amp value
     undeadDamageThreshold: number; // revenant deaths needed to switch the amp on
     undeadDamageAmpStacks: boolean;
+    // Phase 3 LIFETIME-death scaling additions
+    graveEmperorDeathThreshold: number; // friendly deaths THIS combat needed for the contested double
+    graveEmperorFactor: number; // permanent multiplyStats factor (capped by multiplyFactorCap)
   };
   infernals: {
     selfDamageHpCost: number;
@@ -44,6 +47,10 @@ export interface EnginesConfig {
     boardAttackBuffPerTurn: number;
     sacrificeBuffAtk: number;
     sacrificeBuffHp: number;
+    // Phase 3 CONSUMPTION additions
+    loneVanguardBuffAtk: number; // Lone Vanguard: leftmost ally +atk this combat (go-tall payoff)
+    loneVanguardBuffHp: number;
+    loneVanguardAllyThreshold: number; // fires only at ≤ this many minions (alliesAtMost)
   };
   tuskers: {
     // Exponential engine (spoils axis), reworked by decision #39: gems are a SPENDABLE wallet.
@@ -133,6 +140,11 @@ export const engines: EnginesConfig = {
     undeadDamageAmpCap: 2,
     undeadDamageThreshold: 3,
     undeadDamageAmpStacks: false,
+    // Phase 3 LIFETIME scaling: Grave Emperor's contested-condition double — exponential, but each
+    // double demands surviving a near-wipe (5+ friendlies dead THIS combat). Factor capped at
+    // multiplyFactorCap (=2) by applyMultiply, so the caps lint (EV-BAL-E) holds.
+    graveEmperorDeathThreshold: 5,
+    graveEmperorFactor: 2,
   },
   infernals: {
     // Prompt-2 expansion (sacrifice/risk). Self-damage buys attack; sacrifice trades a body
@@ -144,6 +156,10 @@ export const engines: EnginesConfig = {
     boardAttackBuffPerTurn: 1, // (engine 11 — reserved; not shipped in this pass)
     sacrificeBuffAtk: 3, // sacrifice a friendly → the sacrificer gains +3/+3
     sacrificeBuffHp: 3,
+    // Phase 3 CONSUMPTION: Lone Vanguard concentrates a wide-enough board into one leftmost threat.
+    loneVanguardBuffAtk: 4, // +4/+4 to the leftmost ally, THIS COMBAT (pure combat buff — never folds)
+    loneVanguardBuffHp: 4,
+    loneVanguardAllyThreshold: 4, // only at ≤4 minions (a go-tall reward; wide boards do not qualify)
   },
   tuskers: {
     gemBaseValue: 1,

@@ -28,6 +28,7 @@ import { Rng } from './rng';
 import {
   applyBuff,
   applyMultiply,
+  cappedMultiplyFactor,
   evaluateCondition,
   selectTargets,
   type ConditionCounts,
@@ -68,6 +69,7 @@ interface Side {
   deaths: number;
   revenantDeaths: number;
   tokenDeaths: number;
+  lifetimeDeaths: number; // Phase 3: persistent friendly-death total carried IN on the CombatBoard (fixed all fight)
   primedDouble: boolean; // Pallbearer: next friendly dier's deathrattle fires twice
 }
 
@@ -133,6 +135,7 @@ function makeSide(id: 'a' | 'b', board: CombatBoard): Side {
     deaths: 0,
     revenantDeaths: 0,
     tokenDeaths: 0,
+    lifetimeDeaths: board.lifetimeDeaths ?? 0,
     primedDouble: false,
   };
 }
@@ -510,6 +513,7 @@ function resolveCombatEffect(
   const counts: ConditionCounts = {
     deathsThisCombat: side.deaths,
     countAllies: ctx.startCount[side.id], // "minions controlled at start of combat"
+    lifetimeDeaths: side.lifetimeDeaths, // Phase 3: fixed per-board scalar carried in (Ossuary Titan)
   };
   if (!evaluateCondition(effect.condition, counts)) return;
 
@@ -562,9 +566,9 @@ function applyCombatAction(
       break;
     }
     case 'setStats': {
-      // NOTE (§7.5): in combat, `permanent` is honored ONLY on buffStats (a delta can be
-      // folded back; an absolute set / multiply / reset cannot be disentangled from combat
-      // damage). setStats/multiplyStats/resetToBase are always this-combat-only here.
+      // NOTE (§7.5): in combat, `permanent` is honored on buffStats (a delta folds back) and — since
+      // the Phase 3 writeback-multiply extension — on multiplyStats (a factor folds back). An absolute
+      // `setStats`/`resetToBase` still cannot be disentangled from combat damage → this-combat-only here.
       for (const t of targets) {
         const s = applyBuff({ atk: 0, hp: 0 }, action.atk ?? t.atk, action.hp ?? t.hp);
         t.atk = s.atk;
@@ -578,7 +582,22 @@ function applyCombatAction(
         const s = applyMultiply({ atk: t.atk, hp: t.hp }, action.factor ?? 1);
         t.atk = s.atk;
         t.hp = s.hp;
-        ctx.events.push({ t: 'stats', unitId: t.uid, atk: t.atk, hp: t.hp, sourceId: source.uid });
+        if (action.permanent === true) {
+          // Phase 3 writeback-multiply extension (§7.5, decision #38 seam extension): carry the
+          // CAPPED factor so the post-combat fold multiplies the SURVIVING persistent instance by it
+          // (not the combat-inflated absolute atk/hp). Grave Emperor's contested-condition double.
+          ctx.events.push({
+            t: 'stats',
+            unitId: t.uid,
+            atk: t.atk,
+            hp: t.hp,
+            sourceId: source.uid,
+            permanent: true,
+            permanentFactor: cappedMultiplyFactor(action.factor ?? 1),
+          });
+        } else {
+          ctx.events.push({ t: 'stats', unitId: t.uid, atk: t.atk, hp: t.hp, sourceId: source.uid });
+        }
       }
       break;
     }
@@ -692,7 +711,27 @@ function fireTrigger(ctx: Ctx, side: Side, unit: Fighter, type: 'onAttack' | 'on
 
 // ── finalize ──────────────────────────────────────────────────────────────────────
 
+/** §7 end-of-combat effects (Phase 3): fire for LIVING units, A then B, left→right. A unit that is
+ *  in `side.units` at fight end SURVIVED (reborn returns count), so an endOfCombat effect is
+ *  inherently survival-gated. Condition/target resolve through the shared resolver (deaths counter is
+ *  final here). Grave Emperor's permanent multiplyStats emits its writeback event from here. */
+function fireEndOfCombat(ctx: Ctx): void {
+  const order: Array<{ side: Side; unit: Fighter }> = [
+    ...ctx.a.units.map((unit) => ({ side: ctx.a, unit })),
+    ...ctx.b.units.map((unit) => ({ side: ctx.b, unit })),
+  ];
+  for (const { side, unit } of order) {
+    if (unit.hp <= 0 || unit.poisoned) continue;
+    for (const e of unit.effects) {
+      if (e.trigger.type !== 'endOfCombat') continue;
+      const anchor = side.units.indexOf(unit) + 1;
+      resolveCombatEffect(ctx, side, unit, e, anchor, undefined);
+    }
+  }
+}
+
 function finalize(ctx: Ctx): void {
+  fireEndOfCombat(ctx); // survival-gated end-of-combat payoffs (does not change who is alive)
   const aAlive = ctx.a.units.length > 0;
   const bAlive = ctx.b.units.length > 0;
   let winner: 'a' | 'b' | 'tie';
@@ -717,5 +756,8 @@ function finalize(ctx: Ctx): void {
     damageToLoser,
     survivorsA: ctx.a.units.map((u) => u.uid),
     survivorsB: ctx.b.units.map((u) => u.uid),
+    // Phase 3: friendly-death totals per side (incl. tokens), for the persistent lifetimeFriendlyDeaths fold.
+    deathsA: ctx.a.deaths,
+    deathsB: ctx.b.deaths,
   });
 }

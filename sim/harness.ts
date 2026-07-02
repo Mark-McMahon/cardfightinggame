@@ -126,6 +126,8 @@ function counterValue(counter: BreakpointCounter, shop: ShopSnapshot, cc: SideCo
       return cc.revenantDeaths;
     case 'shieldBreak':
       return cc.shieldBrokenCards.has(cardId) ? 1 : 0;
+    case 'lifetimeDeaths':
+      return shop.lifetimeDeaths; // Phase 3: PERSISTENT per-player total (from the session, not the log)
     default:
       return 0;
   }
@@ -138,6 +140,7 @@ interface ShopSnapshot {
   boardLen: number;
   board: string[]; // cardIds (post endOfTurnPhase, pre-combat)
   tier: number;
+  lifetimeDeaths: number; // Phase 3: persistent friendly-death total at snapshot time
 }
 
 // ── the driver ─────────────────────────────────────────────────────────────────────────────
@@ -193,6 +196,7 @@ export function runMatch(seed: string, seats: SeatSpec[]): MatchResult {
         boardLen: s.board.length,
         board: s.board.map((u) => u.cardId),
         tier: s.tier,
+        lifetimeDeaths: s.lifetimeFriendlyDeaths,
       });
       // spend-gated payoffs (decision #39): a purchased activation IS an assembled primary
       // payoff — count it beside breakpoint hits (the reachability gate measures payoffs, and

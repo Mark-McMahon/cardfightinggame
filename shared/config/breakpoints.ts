@@ -10,7 +10,8 @@ export type BreakpointCounter =
   | 'battlecries' // resolved battlecries this shop turn (Echo Choir doubles)
   | 'alliesAtStart' // minions controlled at start of combat (Thornwarden)
   | 'shieldBreak' // this unit's own divine shield broke (Pearlguard; degenerate threshold 1)
-  | 'gemsThisTurn'; // gems generated this shop turn (Round-6 Tuskers — the compounding doubler)
+  | 'gemsThisTurn' // gems generated this shop turn (Round-6 Tuskers — the compounding doubler)
+  | 'lifetimeDeaths'; // Phase 3: PERSISTENT per-player friendly-death total (Ossuary Titan — tiered breakpoints)
 
 export interface Breakpoint {
   card: string; // catalog id — the lint cross-checks against the catalog
@@ -27,6 +28,13 @@ export interface Breakpoint {
   summonUnitId?: string; // token-summon payoffs (Brackentide / Tideclaimer / Bone Colossus)
   summonCount?: number;
   grantKeyword?: 'divineShield' | 'cleave'; // board-wide keyword grant (Reef Leviathan / Worldspark)
+  /**
+   * Phase 3: a TIERED breakpoint — several discrete {threshold, atk, hp} steps on one counter, whose
+   * per-step payoffs ESCALATE (each step ≥ the last → the step-not-line shape). The top-level
+   * `threshold`/`atk`/`hp` mirror the FIRST tier (so single-tier consumers + the lint stay uniform).
+   * The card fires one cumulative effect per crossed tier (Ossuary Titan). Payoffs are this-combat.
+   */
+  tiers?: Array<{ threshold: number; atk: number; hp: number }>;
 }
 
 export interface BreakpointsConfig {
@@ -52,6 +60,19 @@ export const breakpoints: BreakpointsConfig = {
     { card: 'revenants_palelich', counter: 'revenantDeaths', threshold: 3, amp: 2 },
     { card: 'revenants_tideclaimer', counter: 'battlecries', threshold: 2, summonUnitId: 'revenants_rebornwisp', summonCount: 1 },
     { card: 'revenants_boncolossus', counter: 'deaths', threshold: 4, once: true, summonUnitId: 'revenants_rebornwraith', summonCount: 2 },
+    // Ossuary Titan (Phase 3): the original "+1/+1 per 2 lifetime deaths" is LINEAR primary scaling
+    // (banned by #22). Reworked to DISCRETE, ESCALATING breakpoints on the PERSISTENT lifetimeDeaths
+    // counter — a step, not a line: the card fires one cumulative self-buff per crossed tier at start
+    // of combat, THIS COMBAT ONLY (permanent:false). Thresholds 4/8/12 are a whole-game investment
+    // (deaths accrue across every fight + every Maw sacrifice); step payoffs 2/2 → 3/3 → 5/5 grow so
+    // the marginal reward per crossed tier RISES (non-linear ≥1.5×), never a flat per-death gradient.
+    { card: 'revenants_ossuarytitan', counter: 'lifetimeDeaths', threshold: 4, atk: 2, hp: 2,
+      tiers: [
+        { threshold: 4, atk: 2, hp: 2 },
+        { threshold: 8, atk: 3, hp: 3 },
+        { threshold: 12, atk: 5, hp: 5 },
+      ],
+    },
     // ── Reefkin / BATTLECRIES (+ ENDURE) ──
     { card: 'reefkin_pearlguard', counter: 'shieldBreak', threshold: 1, once: true, atk: 1, hp: 3 },
     { card: 'reefkin_chorustide', counter: 'battlecries', threshold: 2, atk: 3, hp: 3 },
@@ -147,5 +168,46 @@ export function hasSpendGated(card: string): boolean {
 export function getSpendGated(card: string): SpendGatedPayoff {
   const r = spendByCard[card];
   if (!r) throw new Error(`No spend-gated registry row for ${card}`);
+  return r;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Contested-condition payoff registry (decision #40 corollary; spec §6.6b/§11.3c)
+// ─────────────────────────────────────────────────────────────────────────────
+// The THIRD legal primary-payoff class beside breakpoints and spend-gated abilities: a payoff whose
+// every step is purchased with a RISK — a CONTESTED CONDITION that the opponent actively fights
+// against, not accrued for free from your own board state. Exponential scaling is legal here because
+// each step demands surviving that contested condition (decision #40: unbounded scaling is fine only
+// where each step is bought with a decision, a risk, OR a contested condition).
+//
+// The §11.3c lint accepts a card's threshold-gated primary payoff WITHOUT a breakpoint row ONLY if it
+// is registered here, names the combat CONDITION that gates it, and that condition resolves to a real,
+// positive `engines[<tribe>]` knob. This is a first-class classification, NOT a suppression: a payoff
+// that is neither a breakpoint, nor spend-gated, nor a registered contested condition still fails.
+
+export interface ContestedConditionPayoff {
+  card: string; // catalog id — the lint cross-checks against the catalog
+  // the combat condition that gates each step (the CONTEST the opponent fights). Grave Emperor: it
+  // must SURVIVE while 5+ friendlies die THIS combat — a near-wipe the opponent is trying to complete.
+  condition: 'survivedNearWipe';
+  thresholdKnobs: string[]; // engines[<card.tribe>] knob names sizing the contested threshold + payoff
+}
+
+export const contestedCondition: ContestedConditionPayoff[] = [
+  // Gravemonarch (Phase 3): end of combat, IF 5+ friendlies died this combat AND it survived →
+  // permanently DOUBLE its stats (via the §7.5 writeback-multiply). Each double is bought by surviving
+  // a near-wipe — the opponent contests it by finishing the kill (poison a 1-hp reborn, out-tempo).
+  { card: 'revenants_gravemonarch', condition: 'survivedNearWipe', thresholdKnobs: ['graveEmperorDeathThreshold', 'graveEmperorFactor'] },
+];
+
+const contestedByCard: Record<string, ContestedConditionPayoff> = Object.fromEntries(contestedCondition.map((r) => [r.card, r]));
+
+export function hasContestedCondition(card: string): boolean {
+  return card in contestedByCard;
+}
+
+export function getContestedCondition(card: string): ContestedConditionPayoff {
+  const r = contestedByCard[card];
+  if (!r) throw new Error(`No contested-condition registry row for ${card}`);
   return r;
 }

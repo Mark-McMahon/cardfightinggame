@@ -233,6 +233,9 @@ export class Match {
         const end = endEvent(log);
         // No hero damage flows TO a ghost; only the live player can take damage.
         if (end && end.winner === 'b') this.damagePlayer(pr.aSeat, end.damageToLoser);
+        // Phase 3: fold this fight's friendly deaths into the LIVE player's persistent lifetime total.
+        // The ghost (side b) is a dead player's frozen snapshot — its deaths accrue to nobody.
+        this.sessions[pr.aSeat].lifetimeFriendlyDeaths += end?.deathsA ?? 0;
         // Writeback fold (§7.5, decision #38): only the LIVE side accrues. The ghost is a
         // frozen snapshot of a dead player's board — it never accrues (its side is skipped).
         this.applyWriteback(pr.aSeat, log, end?.survivorsA ?? [], 'a');
@@ -250,6 +253,9 @@ export class Match {
           if (end.winner === 'a') this.damagePlayer(pr.bSeat, end.damageToLoser);
           else if (end.winner === 'b') this.damagePlayer(pr.aSeat, end.damageToLoser);
         }
+        // Phase 3: BOTH live players fold this fight's friendly deaths into their persistent lifetime total.
+        this.sessions[pr.aSeat].lifetimeFriendlyDeaths += end?.deathsA ?? 0;
+        this.sessions[pr.bSeat].lifetimeFriendlyDeaths += end?.deathsB ?? 0;
         // Writeback fold (§7.5, decision #38): BOTH live sides accrue their survivors' buffs.
         this.applyWriteback(pr.aSeat, log, end?.survivorsA ?? [], 'a');
         this.applyWriteback(pr.bSeat, log, end?.survivorsB ?? [], 'b');

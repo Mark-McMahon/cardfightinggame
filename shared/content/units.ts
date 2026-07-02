@@ -486,6 +486,55 @@ export const UNITS: UnitCard[] = [
     ],
   },
   {
+    // ⭐ Phase 3 LIFETIME scaling — Ossuary Titan. The original "+1/+1 per 2 lifetime deaths" was LINEAR
+    // primary scaling (banned by #22); reworked to DISCRETE, ESCALATING breakpoints on the PERSISTENT
+    // lifetimeDeaths counter (rides in on the CombatBoard scalar). One cumulative self-buff per crossed
+    // tier at start of combat, THIS COMBAT ONLY (permanent:false). Numbers live in breakpoints.ts.tiers.
+    id: 'revenants_ossuarytitan',
+    name: 'Ossuary Titan',
+    tribe: 'revenants',
+    tier: 5,
+    atk: 4,
+    hp: 6,
+    keywords: [],
+    axis: ['deaths'],
+    text: `Start of combat: for every lifetime-friendly-death milestone reached (${bp('revenants_ossuarytitan').tiers!.map((t) => t.threshold).join('/')}), gain an escalating +Atk/+Health this combat.`,
+    effects: bp('revenants_ossuarytitan').tiers!.map(
+      (tier): Effect => ({
+        trigger: { type: 'startOfCombat' },
+        condition: { kind: 'lifetimeDeathsAtLeast', value: tier.threshold },
+        target: { selector: 'self' },
+        actions: [{ type: 'buffStats', atk: tier.atk, hp: tier.hp, permanent: false }],
+      }),
+    ),
+  },
+  {
+    // ⭐ Phase 3 CONTESTED-CONDITION double — Gravemonarch (T6 capstone). End of combat: if 5+ friendlies
+    // died THIS combat AND it survived, permanently DOUBLE its stats (via the §7.5 writeback-multiply
+    // extension). Exponential, but each double is BOUGHT by surviving a near-wipe (a contested condition,
+    // legal under #22/#40) — the opponent contests it by finishing the kill (poison the 1-hp reborn body,
+    // out-tempo). Reborn edge (#44): a Reborn RETURN counts as surviving; the double folds onto the
+    // PERSISTENT instance (its post-reborn 1-hp combat state is irrelevant to the persistent write).
+    // Clean-room: renamed from the working title "Grave Emperor" to the original compound "Gravemonarch".
+    id: 'revenants_gravemonarch',
+    name: 'Gravemonarch',
+    tribe: 'revenants',
+    tier: 6,
+    atk: 6,
+    hp: 7,
+    keywords: ['reborn'],
+    axis: ['deaths', 'endure'],
+    text: `Reborn. End of combat: if ${V.graveEmperorDeathThreshold}+ friendly minions died this combat and Gravemonarch survived, permanently multiply its stats by ${V.graveEmperorFactor}.`,
+    effects: [
+      {
+        trigger: { type: 'endOfCombat' },
+        condition: { kind: 'deathsThisCombatAtLeast', value: V.graveEmperorDeathThreshold },
+        target: { selector: 'self' },
+        actions: [{ type: 'multiplyStats', factor: V.graveEmperorFactor, permanent: true }],
+      },
+    ],
+  },
+  {
     id: 'revenants_rebornwisp',
     name: 'Reborn Wisp',
     tribe: 'revenants',
@@ -913,6 +962,56 @@ export const UNITS: UnitCard[] = [
     ],
   },
 
+  {
+    // Phase 3 CONSUMPTION — the proactive sacrifice body. Battlecry: eat a chosen friendly, keeping its
+    // stats. Absorb reads LIVE stats (a golden target contributes its doubled stats), keywords do NOT
+    // transfer. Increments the PERSISTENT lifetimeFriendlyDeaths (a shop-phase destroy). Clean-room:
+    // renamed from the working title "Gluttonous Maw" to the clearly-original compound "Gorgemaw".
+    id: 'infernals_gorgemaw',
+    name: 'Gorgemaw',
+    tribe: 'infernals',
+    tier: 4,
+    atk: 3,
+    hp: 3,
+    keywords: [],
+    axis: ['sacrifice'],
+    text: 'Battlecry: destroy another friendly minion and permanently gain its Attack and Health.',
+    effects: [
+      {
+        trigger: { type: 'battlecry' },
+        target: { selector: 'chosenAlly', excludeSelf: true },
+        // absorb BEFORE destroy (reads the target's live stats, then consumes it) — identical outcome
+        // to "destroy then absorb"; this order is re-entrancy-safe under an Echo-Choir double.
+        actions: [{ type: 'absorbStats' }, { type: 'destroyAlly' }],
+      },
+    ],
+  },
+  {
+    // Phase 3 CONSUMPTION — a GO-TALL reward: at ≤4 minions, concentrate the board into the leftmost
+    // threat (+4/+4 and Taunt, THIS COMBAT). A pure combat buff (permanent:false) — the §7.5 writeback
+    // must NOT pick it up. Countered by wide boards (it never fires above the threshold) and by poison.
+    // Clean-room: renamed from the working title "Lone Vanguard" to the original compound "Cindermarshal".
+    id: 'infernals_cindermarshal',
+    name: 'Cindermarshal',
+    tribe: 'infernals',
+    tier: 4,
+    atk: 4,
+    hp: 5,
+    keywords: [],
+    axis: ['sacrifice'],
+    text: `Start of combat: if you have ${I.loneVanguardAllyThreshold} or fewer minions, give your leftmost minion +${I.loneVanguardBuffAtk}/+${I.loneVanguardBuffHp} and Taunt this combat.`,
+    effects: [
+      {
+        trigger: { type: 'startOfCombat' },
+        condition: { kind: 'alliesAtMost', value: I.loneVanguardAllyThreshold },
+        target: { selector: 'leftmostAlly' },
+        actions: [
+          { type: 'buffStats', atk: I.loneVanguardBuffAtk, hp: I.loneVanguardBuffHp, permanent: false },
+          { type: 'grantKeyword', keyword: 'taunt' },
+        ],
+      },
+    ],
+  },
   {
     // ⭐ NEW audit capstone (Infernals T6 — fills the missing top-end + Endorsed Pattern A death scalar).
     // Each friendly death pumps your surviving Infernals; Infernals MANUFACTURE those deaths by spending

@@ -8,10 +8,10 @@
 // PURCHASED, provided the card is registered in `spendGated` and its cost knobs are real
 // positive config numbers.
 
-import { breakpoints, engines, getBreakpoint, hasBreakpoint, spendGated, getSpendGated, hasSpendGated, type Breakpoint } from '../config';
+import { breakpoints, engines, getBreakpoint, hasBreakpoint, spendGated, getSpendGated, hasSpendGated, contestedCondition, getContestedCondition, hasContestedCondition, type Breakpoint } from '../config';
 import { UNIT_BY_ID } from '../content';
 
-export { getBreakpoint, hasBreakpoint, getSpendGated, hasSpendGated };
+export { getBreakpoint, hasBreakpoint, getSpendGated, hasSpendGated, getContestedCondition, hasContestedCondition };
 export type { Breakpoint };
 
 export interface BreakpointLintResult {
@@ -62,6 +62,26 @@ export function lintBreakpoints(): BreakpointLintResult {
   for (const card of Object.values(UNIT_BY_ID)) {
     if (card.activated && !hasSpendGated(card.id)) {
       errors.push(`activated ability not registered in the spend-gated registry: ${card.id}`);
+    }
+  }
+
+  // contested-condition registry (decision #40 corollary, §6.6b/§11.3c): registry → real card, no
+  // dupes, and every threshold knob resolves to a positive finite number in the card's tribe block.
+  const seenContested = new Set<string>();
+  for (const row of contestedCondition) {
+    const card = UNIT_BY_ID[row.card];
+    if (!card) {
+      errors.push(`contested-condition row references unknown card: ${row.card}`);
+      continue;
+    }
+    if (seenContested.has(row.card)) errors.push(`duplicate contested-condition row for card: ${row.card}`);
+    seenContested.add(row.card);
+    const tribeKnobs = (engines as unknown as Record<string, Record<string, unknown>>)[card.tribe] ?? {};
+    for (const knob of row.thresholdKnobs) {
+      const v = tribeKnobs[knob];
+      if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) {
+        errors.push(`contested-condition knob engines.${card.tribe}.${knob} for ${row.card} is not a positive number`);
+      }
     }
   }
   return { ok: errors.length === 0, errors };

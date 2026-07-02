@@ -10,12 +10,12 @@ import { UNITS } from '@cardgame/shared';
 
 // ── §6.9 vocabulary partition (authoritative) ─────────────────────────────────────
 const LIVE = {
-  triggers: new Set(['battlecry', 'deathrattle', 'startOfCombat', 'endOfTurn', 'afterFriendlyDeaths', 'onSell', 'onAttack', 'onShieldBreak', 'onSummon', 'afterFriendlyBattlecry']),
-  selectors: new Set(['self', 'allAllies', 'chosenAlly', 'randomAlly', 'lowestStatAlly', 'highestStatAlly', 'frontEnemy', 'highestStatEnemy', 'triggerSource']),
-  actions: new Set(['buffStats', 'grantKeyword', 'summon', 'dealDamage', 'giveGem', 'multiplyStats', 'plantDeathrattle', 'resetToBase', 'custom', 'destroy', 'gainGold', 'refreshShop']),
+  triggers: new Set(['battlecry', 'deathrattle', 'startOfCombat', 'endOfCombat', 'endOfTurn', 'afterFriendlyDeaths', 'onSell', 'onAttack', 'onShieldBreak', 'onSummon', 'afterFriendlyBattlecry']),
+  selectors: new Set(['self', 'allAllies', 'chosenAlly', 'leftmostAlly', 'randomAlly', 'lowestStatAlly', 'highestStatAlly', 'frontEnemy', 'highestStatEnemy', 'triggerSource']),
+  actions: new Set(['buffStats', 'grantKeyword', 'summon', 'dealDamage', 'giveGem', 'multiplyStats', 'plantDeathrattle', 'resetToBase', 'custom', 'destroy', 'destroyAlly', 'absorbStats', 'gainGold', 'refreshShop']),
   // `gemsThisTurnAtLeast` stays LIVE as engine vocabulary (EV-CND-01/03) though #39 left it
   // with 0 card consumers (the doublers became purchased activations) — see §6.9.
-  conditions: new Set(['countAllies', 'battlecriesThisTurnAtLeast', 'gemsThisTurnAtLeast', 'deathsThisCombatAtLeast', 'tokensSummonedThisTurnAtLeast']),
+  conditions: new Set(['countAllies', 'battlecriesThisTurnAtLeast', 'gemsThisTurnAtLeast', 'deathsThisCombatAtLeast', 'tokensSummonedThisTurnAtLeast', 'alliesAtMost', 'lifetimeDeathsAtLeast']),
   auraScopes: new Set(['selfTribeAllies', 'yourBattlecries', 'yourEndOfTurn']),
   auraModifiers: new Set(['damageMultiplier', 'triggerMultiplier']),
 };

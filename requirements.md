@@ -415,6 +415,109 @@ build from functional mechanics only; original names/text/art throughout.
     missed them. Now `engines.tuskers.gemtitanGems`/`tuskmongerGems`, single-sourced into both the
     effect and the interpolated text. No combat/determinism/privacy change; all evals green.
 
+### Multi-lane scaling rework (Round 9, cont.) — Phase 3: Infernal consumption + Revenant lifetime scaling
+
+44. **Persistent `lifetimeFriendlyDeaths` counter; consumption vocabulary (`destroyAlly` /
+    `absorbStats` / `alliesAtMost` / `leftmostAlly`); two Infernal bodies. (2026-07-02.)** Adds a
+    PERSISTENT per-player friendly-death total to `ShopSession` (private; NEVER reset between
+    turns/rounds). **Counting rule (recorded):** the combat-scoped `deaths`/`revenantDeaths` counters
+    stay per-fight by construction; a shop-phase sacrifice does NOT touch them; `lifetimeFriendlyDeaths`
+    is the ONLY counter that BOTH a shop sacrifice AND combat deaths increment. It is incremented by
+    (a) shop-phase `destroyAlly` (Gorgemaw) and (b) friendly deaths counted from each combat log —
+    carried out of `resolveCombat` as additive `combatEnd.deathsA`/`deathsB` (incl. tokens/summons),
+    folded in `Match.resolveCombatPhase` for both LIVE boards; GHOST boards do not accrue. For combat
+    visibility the lifetime value rides IN on a new `CombatBoard.lifetimeDeaths` per-board SCALAR (NOT
+    the `resolveCombat(boardA,boardB,seed)` signature — invariant 1b holds; determinism holds).
+    **`destroyAlly` vs the existing `destroy` (settled):** `destroyAlly` is a NEW, distinct ActionType,
+    not `destroy` targeting a chosenAlly — the two are genuinely different operations. `destroy` (D11)
+    is a COMBAT removal that fires deathrattles and bypasses divine shield; `destroyAlly` is a
+    SHOP-phase chosen-ally removal that fires no combat/deathrattle (there is no shop combat), returns
+    the body's pool copy (like a sell), and increments `lifetimeFriendlyDeaths`. Reusing `destroy`
+    would have forced phase-branching inside one action; two names keep each phase's semantics honest.
+    `absorbStats`: the SOURCE permanently gains the TARGET's CURRENT atk/hp (reads live instance stats
+    — a golden target contributes its DOUBLED stats); keywords are NOT transferred. `alliesAtMost`
+    (≤N minions, a go-tall gate) and `leftmostAlly` (POSITIONAL board-index-0, distinct from bornTurn
+    `oldestAlly`) are new live condition/selector primitives. Cards: **Gorgemaw** (Infernal T4 3/3;
+    battlecry chosenAlly: `absorbStats` then `destroyAlly` — authored absorb-BEFORE-destroy so the
+    absorb reads the live target and the pair is re-entrancy-safe under an Echo-Choir double; identical
+    outcome to "destroy then absorb"; no legal target → D5 fizzle) and **Cindermarshal** (Infernal T4
+    4/5; startOfCombat, `alliesAtMost` ≤4 → leftmostAlly +4/+4 and Taunt, THIS COMBAT ONLY,
+    `permanent:false` — the §7.5 writeback deliberately does NOT pick it up). **Clean-room (§0):** both
+    renamed from working titles ("Gluttonous Maw" / "Lone Vanguard") to the clearly-original compounds
+    **Gorgemaw** / **Cindermarshal**. Numbers are `engines.infernals` knobs.
+
+45. **Ossuary Titan — LINEAR primary scaling reworked to DISCRETE, ESCALATING lifetime breakpoints.
+    (2026-07-02; upholds #22/#40.)** Its original "+1/+1 per 2 lifetime deaths this combat" is banned
+    linear per-unit scaling (#22). Reworked to a TIERED `breakpoints.ts` row on the new `lifetimeDeaths`
+    counter (a `tiers[]` field on `Breakpoint`): thresholds **4/8/12** with per-step payoffs **+2/+2 →
+    +3/+3 → +5/+5**, this-combat only (`permanent:false`). The card fires one cumulative startOfCombat
+    self-buff per crossed tier (three `lifetimeDeathsAtLeast`-gated Effects). **Sizing rationale:**
+    lifetime deaths accrue slowly across a whole game (every fight + every Gorgemaw sacrifice), so the
+    thresholds are a long-horizon investment, not a per-fight ramp; the step payoffs RISE (marginal
+    reward per crossed tier increases, top step = 2.5× the first) so the shape is a step, not a line —
+    the anti-linear intent of EV-BAL-D. The combat evaluation reads the FIXED per-board scalar carried
+    in on `CombatBoard.lifetimeDeaths`, not an event-accumulated count. Registered as ONE breakpoint
+    row (`revenants_ossuarytitan`), so the EV-BAL-C lint covers it.
+
+46. **Writeback-multiply extension; Gravemonarch's contested-condition double; a first-class
+    CONTESTED-CONDITION payoff class for the §11.3c lint. (2026-07-02; extends #38, corollary to #40.)**
+    (a) **Writeback-multiply (a Phase-1 seam extension, additive):** `combatWriteback.foldPermanentBuffs`
+    now also folds a combat-fired `multiplyStats` flagged `permanent:true`. Combat emits `permanent:true`
+    + a new additive `permanentFactor` (the CAPPED factor) on the `stats` event (existing `dAtk`/`dHp`
+    unchanged; a permanent event is EITHER a buff OR a multiply, never both); the fold multiplies the
+    SURVIVING persistent instance by that factor through the same §6.8 `applyMultiply` clamps
+    (`multiplyFactorCap` + `statSanityBound`), NOT the combat-inflated absolutes — so it compounds
+    across combats exactly like the buff fold. `setStats`/`resetToBase` stay this-combat-only.
+    (b) **Gravemonarch** (Revenant T6 6/7 Reborn; renamed clean-room from "Grave Emperor"): a new
+    `endOfCombat` trigger fires for LIVING units at fight end; if `deathsThisCombatAtLeast`
+    (5, config) it permanently DOUBLES its stats (×`graveEmperorFactor`=2, capped) via the
+    writeback-multiply. Exponential, but each double is BOUGHT by surviving a near-wipe (a CONTESTED
+    CONDITION — the opponent fights it by finishing the kill; legal under #22/#40). **Reborn edge:** a
+    Reborn RETURN counts as surviving (it is in `survivorsA/B` under its persistent uid); the double
+    folds onto the PERSISTENT instance (its post-reborn 1-hp combat state is irrelevant to the
+    persistent write). (c) **Contested-condition classification:** EV-BAL-C flagged Gravemonarch as an
+    unclassified primary payoff (its `deathsThisCombatAtLeast` gate reads as a breakpoint condition, but
+    it is deliberately NOT a breakpoint and NOT spend-gated). Rather than suppress the flag, a THIRD
+    first-class legal primary-payoff class was added — `contestedCondition` in `breakpoints.ts` (a
+    registry PARALLEL to Phase-2's `spendGated`), naming the contested combat CONDITION and its
+    engine-knob sizing; the lint (`lintBreakpoints` + `sim/audit.ts` coverage) now accepts a
+    threshold-gated payoff registered there, and validates the registry ↔ catalog 1:1 + knob positivity.
+    This encodes #40's own words ("unbounded scaling is fine only where each step is bought with a
+    decision, a RISK, or a contested condition") as lint vocabulary, not a bypass.
+
+47. **Bot consumption-payoff awareness (so the macro sim VALIDATES Gorgemaw); Cindermarshal's go-tall
+    line deferred to Phase 4; §8 roster-count reconciliation. (2026-07-02; Phase-3 review-fix.)**
+    (a) **Consumption is a fourth primary-payoff class *to the bot*.** `server/bots/BotAgent.ts` now
+    recognises a CONSUMPTION card — one whose effects carry a `destroyAlly` action (detected from card
+    DATA via `isConsumption`, no card id hardcoded) — as a primary payoff alongside breakpoints /
+    spend-gated / contested-condition: it earns the `breakpointValue` weight in `scoreCard`, counts as
+    "worthwhile" in `bestBuy`, and joins the payoff sets in `shouldRoll`. **Why:** pre-fix the bot valued
+    Gorgemaw as a raw 3/3 body, so it dumped it as the weakest hold to free bench room and Gorgemaw
+    reached combat 0× on seed `run` — the macro-sim Infernal number did NOT reflect the consumption
+    rework at all. Post-fix Gorgemaw reaches combat (15 players, avgP 4.13 — mid-pack, not OP/DEAD) and
+    its battlecry fires 100% of the times it is played (83/83 absorbed in instrumentation). A play-order
+    guard in `chooseDevelopment` also prevents playing a consumption body into an EMPTY board (no ally to
+    eat → D5 fizzle): a normal body is developed first. `bestTarget` already eats the SMALLEST spare body.
+    (b) **Cindermarshal's go-tall payoff is unreachable under any rational bot policy in the current
+    engine — deferred to Phase 4.** The `alliesAtMost ≤4` start-of-combat buff only fires when the
+    controller deploys narrow, but deploying WIDE dominates in this engine, so a rational agent never
+    holds narrow. Verified empirically: with the buff temporarily raised to +6/+6, Cindermarshal was
+    deployed narrow in **0 of ~37** owner-sides across 200 matches — the swing size is not the lever. A
+    speculative "go-tall restraint" bot heuristic was therefore NOT shipped (it would be inert dead code
+    for a future phase). Cindermarshal remains a functional T4 4/5 body whose EFFECT correctness is
+    validated by the deterministic EV-CON evals; the go-tall LINE (making narrow a real, winning choice)
+    depends on the Phase-4 board-shape / anti-wide tech and is a documented known-limitation (design-spec
+    §11.2 bot-coverage note), not a silent gap. This supersedes the implicit assumption in #44 that the
+    sim would exercise Cindermarshal.
+    (c) **§8 roster-count drift fixed.** §8 still read "93-row roster · Revenants 13 · Infernals 8" after
+    Phase 3 added 4 non-token cards, contradicting §6.7 / the file tree (both already "97 rows"). §8 is
+    now **97 rows · Revenants 15 · Infernals 10 · 91 purchasable + 6 tokens** (verified against
+    `units.ts` by id; the tribe-field grep double-counts one aura's `tribe:'revenants'` modifier — the
+    review's "Revenants 16" reflected that miscount; actual is 15). **Placement note:** the Phase-3 pool
+    additions shifted zero-sum placement; primordials (avgP 5.28) and wildkin (5.83) are now the
+    bottom-two and remain the explicit Phase 4/5 rebalance targets. All §11.3 gates still PASS and no
+    Phase-3 card flags OP/DEAD.
+
 ## Tribe name map (clean-room — never ship the reference names)
 | Reference (do NOT ship) | Original name | Identity |
 |---|---|---|

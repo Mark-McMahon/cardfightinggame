@@ -29,6 +29,7 @@ export type TriggerType =
   | 'onDamaged'
   | 'onShieldBreak' // this unit's own divine shield was just broken (Round-6, spec §16.3 #4)
   | 'startOfCombat'
+  | 'endOfCombat' // fires for LIVING units once the fight ends (Phase 3 Grave Emperor — a survival-gated payoff)
   | 'endOfTurn' // shop-phase end
   | 'onPlayTribe'
   | 'onPurchase'
@@ -98,6 +99,7 @@ export type Selector =
   | 'highestStatAlly'
   | 'lowestStatAlly'
   | 'chosenAlly' // player-targeted; resolved in shop only
+  | 'leftmostAlly' // POSITIONAL board-index-0 friendly (distinct from bornTurn oldestAlly; Phase 3 Lone Vanguard)
   | 'nAllies'
   | 'randomEnemy'
   | 'frontEnemy'
@@ -123,6 +125,10 @@ export type ActionType =
   | 'dealDamage'
   | 'destroy' // D11: remove a target (NOT combat damage) — counts as a friendly death + fires its
   // deathrattle; bypasses divine shield (D11(a) ruling). Promoted from the `dealDamage:999` idiom.
+  | 'destroyAlly' // Phase 3 (shop-phase): destroy a CHOSEN friendly — removes it, increments the
+  // persistent lifetimeFriendlyDeaths counter, fires no combat/deathrattle (there is no shop combat).
+  | 'absorbStats' // Phase 3 (shop-phase): the SOURCE permanently gains the TARGET's CURRENT atk/hp
+  // (reads live instance stats — a golden target contributes its doubled stats). Keywords NOT transferred.
   | 'giveGem'
   | 'makeSpell'
   | 'gainGold' // LIVE in the activated-ability resolver only (decision #39): gold clamped to goldCap
@@ -166,7 +172,9 @@ export interface ConditionSpec {
     // Round-6 manufactured-event breakpoints (spec §16.3):
     | 'battlecriesThisTurnAtLeast' // shop counter; Echo Choir's doubled triggers count
     | 'tokensSummonedThisTurnAtLeast' // shop counter; SWARM (Mother Thorn)
-    | 'deathsThisCombatAtLeast'; // combat counter; DEATHS (Bone Colossus)
+    | 'deathsThisCombatAtLeast' // combat counter; DEATHS (Bone Colossus)
+    | 'alliesAtMost' // Phase 3: true iff the controller has ≤ value minions (Lone Vanguard — a go-tall gate)
+    | 'lifetimeDeathsAtLeast'; // Phase 3: persistent per-player friendly-death total (Ossuary Titan; combat reads the CombatBoard scalar)
   value?: number;
   tribe?: TribeId;
   keyword?: Keyword;
@@ -305,6 +313,13 @@ export interface CombatUnit {
 export interface CombatBoard {
   units: CombatUnit[];
   playerTier: number;
+  /**
+   * Phase 3: the controller's PERSISTENT lifetime friendly-death total, carried IN on the board
+   * snapshot (never via ambient state — invariant 1b). A fixed per-board scalar the combat engine
+   * reads for `lifetimeDeathsAtLeast` gates (Ossuary Titan); defaults to 0 when absent. Determinism
+   * holds: same (boards, seed) — including this scalar — → identical log.
+   */
+  lifetimeDeaths?: number;
 }
 
 export interface BoardSnapshot {
@@ -359,8 +374,13 @@ export type CombatEvent =
       hp: number;
       sourceId?: string;
       permanent?: boolean;
-      dAtk?: number; // present iff permanent:true — the applied attack delta (post-clamp)
-      dHp?: number; // present iff permanent:true — the applied health delta (post-clamp)
+      dAtk?: number; // present iff permanent:true AND the source was a buffStats — the applied attack delta (post-clamp)
+      dHp?: number; // present iff permanent:true AND the source was a buffStats — the applied health delta (post-clamp)
+      // Phase 3 writeback-multiply extension (additive; §7.5, decision #38 seam extension): present
+      // iff permanent:true AND the source was a combat-fired multiplyStats. The CAPPED factor applied
+      // (≤ multiplyFactorCap). The fold multiplies the surviving persistent instance by this factor
+      // (through the same §6.8 applyMultiply clamps), instead of folding an atk/hp delta (Grave Emperor).
+      permanentFactor?: number;
     }
   | { t: 'death'; unitId: string }
   | { t: 'deathrattle'; unitId: string }
@@ -377,6 +397,11 @@ export type CombatEvent =
       // appears here (it counts as surviving).
       survivorsA?: string[];
       survivorsB?: string[];
+      // Phase 3 (additive): total FRIENDLY deaths per side this combat (incl. tokens/summons), as the
+      // engine counted them. Match folds these into each LIVE player's persistent lifetimeFriendlyDeaths
+      // (ghosts do not accrue). Derived deterministically; never re-derived from the event stream.
+      deathsA?: number;
+      deathsB?: number;
     };
 
 export type CombatWinner = 'a' | 'b' | 'tie';

@@ -65,6 +65,9 @@ export interface ShopSession {
   abilityUses: Record<string, number>; // decision #39: per-GAME activation count by cardId (sim payoff tracking)
   battlecriesThisTurn: number;
   tokensThisTurn: number;
+  lifetimeFriendlyDeaths: number; // Phase 3: PERSISTENT per-player friendly-death total (private). NEVER reset
+  // between turns/rounds. Incremented by shop-phase destroys (Maw's destroyAlly) AND by friendly deaths
+  // counted from each combat log (Match.resolveCombatPhase). Rides into combat on the CombatBoard scalar.
   discover: { reason: string; options: string[] } | null;
   pendingTarget: PendingTargetInternal | null;
   lastCombatLog: PrivateState['lastCombatLog'];
@@ -99,6 +102,7 @@ export function createShopSession(seat: number, opts: SessionOpts = {}): ShopSes
     abilityUses: {},
     battlecriesThisTurn: 0,
     tokensThisTurn: 0,
+    lifetimeFriendlyDeaths: 0,
     discover: null,
     pendingTarget: null,
     lastCombatLog: null,
@@ -518,11 +522,37 @@ export function resolveTargetChoice(s: ShopSession, targetUid: string): OpResult
     for (const action of pt.actions) {
       if (action.type === 'summon') summonShop(s, source.inst, action.summonUnitId, action.summonCount ?? 1);
       else if (action.type === 'giveGem') giveGemShop(s, action.amount ?? 0);
+      else if (action.type === 'absorbStats') absorbStatsShop(s, source.inst, target.inst);
+      else if (action.type === 'destroyAlly') destroyAllyShop(s, target.inst);
       else applyTargetAction(s, action, target.inst);
     }
   }
   s.pendingTarget = null;
   return { ok: true };
+}
+
+/** Phase 3 (shop): the SOURCE permanently gains the TARGET's CURRENT atk/hp (reads live instance stats —
+ *  a golden target contributes its DOUBLED stats). Keywords are NOT transferred. Presence-gated so an
+ *  Echo-Choir-doubled resolution can't double-consume a body already destroyed this resolution. */
+function absorbStatsShop(s: ShopSession, source: UnitInstance, target: UnitInstance): void {
+  if (!findUnit(s, target.uid)) return; // already consumed (multiplier re-entry) → no-op
+  const st = applyBuff({ atk: source.atk, hp: source.hp }, target.atk, target.hp);
+  source.atk = st.atk;
+  source.hp = st.hp;
+}
+
+/** Phase 3 (shop): destroy a CHOSEN friendly — remove it from the board/bench, return its pool copy
+ *  (non-token, non-golden — like a sell), and increment the PERSISTENT lifetimeFriendlyDeaths. Fires no
+ *  combat and no deathrattle (there is no shop-phase combat). D5-safe: an empty legal set never arms this. */
+function destroyAllyShop(s: ShopSession, target: UnitInstance): void {
+  const found = findUnit(s, target.uid);
+  if (!found) return; // already consumed (multiplier re-entry) → no double increment
+  if (found.where === 'board') s.board.splice(found.index, 1);
+  else s.bench.splice(found.index, 1);
+  const card = getCard(found.inst.cardId);
+  if (!card.isToken && !found.inst.golden) returnCopy(s.pool, found.inst.cardId);
+  s.lifetimeFriendlyDeaths += 1;
+  s.log.push(`sacrificed ${card.name} (lifetime deaths → ${s.lifetimeFriendlyDeaths})`);
 }
 
 // ── activated abilities (spend-gated, decision #39; spec §6.6a) ─────────────────────
@@ -640,9 +670,10 @@ export function resolveDiscoverPick(s: ShopSession, optionIndex: number): OpResu
   return { ok: true, triples };
 }
 
-/** Convert the current board into a CombatBoard for resolveCombat (spec §9.7). */
+/** Convert the current board into a CombatBoard for resolveCombat (spec §9.7). The persistent
+ *  lifetimeFriendlyDeaths rides in as the CombatBoard scalar (Phase 3, Ossuary Titan). */
 export function boardToCombat(s: ShopSession): CombatBoard {
-  return toCombatBoard(s.board, s.tier);
+  return toCombatBoard(s.board, s.tier, s.lifetimeFriendlyDeaths);
 }
 
 // ── projection to the private channel (owner-only) ──────────────────────────────────

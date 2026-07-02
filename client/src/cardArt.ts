@@ -534,6 +534,8 @@ const RECIPES: Record<string, () => string> = {
   revenants_tideclaimer: () => rev({ variant: 'skull', tint: '#2f9a86', glow: '#7fe8d4', finHood: true }),
   revenants_palelich: () => rev({ variant: 'lich', crown: 'tall', pale: true, glow: '#dfeaff' }),
   revenants_boncolossus: () => rev({ variant: 'colossus', horns: true, crackHeavy: true }),
+  revenants_ossuarytitan: () => rev({ variant: 'colossus', crackHeavy: true, tint: '#6a5a86' }) + boneMark(150, 128, '#e7def4'),
+  revenants_gravemonarch: () => rev({ variant: 'lich', crown: 'tall', horns: true, glow: '#c9b8ee' }),
   revenants_rebornwisp: () => wisp({ skin: '#a7b8e0', glow: '#cfe0ff', size: 'sm' }),
   revenants_rebornwraith: () => rev({ variant: 'wing', glow: '#cfe0ff', tint: '#5b7fd0' }),
   // REEFKIN — battlecries
@@ -558,6 +560,8 @@ const RECIPES: Record<string, () => string> = {
   infernals_dreadmaw: () => inf({ shape: 'big', skin: 'coal', horns: 'swept', eyes: 'hollow', mouth: 'maw', cracks: 1 }),
   infernals_abysslord: () => glowMotes('#ff8a3c') + inf({ shape: 'big', skin: 'blood', horns: 'tall', eyes: 'blaze', mouth: 'maw', wing: 1, cracks: 1 }),
   infernals_carrionsovereign: () => glowMotes('#c0392b') + inf({ shape: 'big', skin: 'ash', horns: 'ram', eyes: 'hollow', mouth: 'maw', wing: 1, cracks: 1, brand: 1 }) + droplet(72, 150, '#8a2a2e') + droplet(128, 150, '#8a2a2e'),
+  infernals_gorgemaw: () => inf({ shape: 'round', skin: 'coal', horns: 'nub', eyes: 'round', mouth: 'maw', cracks: 1, brand: 1 }) + droplet(150, 150, '#ff8a3c'),
+  infernals_cindermarshal: () => glowMotes('#ffb14a') + inf({ shape: 'tall', skin: 'ember', horns: 'tall', eyes: 'blaze', mouth: 'grin', wing: 1, brand: 1 }),
   // CONSTRUCTS — assembly / redeploy
   constructs_scrapling: () => con({ shape: 'sm', skin: 'rust', head: 'box', eyes: 'wonky', mouth: 'slot', antenna: 'twin' }),
   constructs_sentinel: () => con({ shape: 'big', skin: 'steel', head: 'box', eyes: 'visor', mouth: 'grille', rivets: 1 }),

@@ -107,6 +107,31 @@ const goldens: Record<string, () => { a: CombatBoard; b: CombatBoard; seed: stri
     b: board([vanilla(3, 4), vanilla(2, 5)]),
     seed: 'gld-09',
   }),
+  // Phase 3 combat-visible mechanics — pin each new engine path byte-stably.
+  // Cindermarshal: startOfCombat leftmostAlly +4/+4 + Taunt (alliesAtMost gate satisfied).
+  'EV-GLD-10 cindermarshal leftmost buff': () => ({
+    a: board([vanilla(1, 100000), cu('infernals_cindermarshal', { hp: 100000 })]),
+    b: board([vanilla(0, 100000)]),
+    seed: 'gld-10',
+  }),
+  // Ossuary Titan: three escalating lifetimeDeaths tiers all crossed (scalar carried on the board).
+  'EV-GLD-11 ossuary tiered lifetime buff': () => ({
+    a: { units: [cu('revenants_ossuarytitan', { hp: 100000 })], playerTier: 1, lifetimeDeaths: 12 },
+    b: board([vanilla(0, 100000)]),
+    seed: 'gld-11',
+  }),
+  // Gravemonarch: 5 start-of-combat destroys (5 friendly deaths) → endOfCombat permanent multiply.
+  'EV-GLD-12 gravemonarch survive-a-near-wipe double': () => ({
+    a: board([
+      cu('revenants_gravemonarch', { hp: 100000, keywords: [] }),
+      ...Array.from({ length: 5 }, () => cu('wildkin_thornpup', { atk: 0, hp: 1 })),
+      ...['infernals_hollowpriest', 'infernals_pyrewalker', 'infernals_dreadmaw', 'sirens_maelstromcantor', 'infernals_hollowpriest'].map((id) =>
+        cu(id, { hp: 100 }),
+      ),
+    ]),
+    b: board([vanilla(0, 100000)]),
+    seed: 'gld-12',
+  }),
 };
 
 describe('EV-GLD — intra-impl determinism goldens (D4)', () => {

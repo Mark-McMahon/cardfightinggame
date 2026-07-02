@@ -307,4 +307,37 @@ describe('EV-WBK — combat writeback fold (§7.5, decision #38)', () => {
     expect(u.atk).toBe(0); // NOT -4 — §6.8 atk floor
     expect(u.hp).toBe(1); //  NOT -2 — §6.8 hp floor
   });
+
+  it('EV-WBK-10: the writeback-multiply extension folds a permanent multiplyStats onto the survivor (×factor) and compounds across combats', () => {
+    // Phase 3 seam extension: a combat-fired multiplyStats flagged permanent:true emits permanentFactor
+    // (the capped factor), and the fold multiplies the SURVIVING persistent instance by it — through the
+    // same §6.8 applyMultiply clamps, never the combat-inflated absolutes. Compounds like the buff fold.
+    const m = new Match('wbk10', seats(2));
+    const u = body('0u0'); // 2/3
+    u.grantedEffects = [
+      {
+        trigger: { type: 'startOfCombat' },
+        target: { selector: 'self' },
+        actions: [{ type: 'multiplyStats', factor: 2, permanent: true }],
+      },
+    ];
+    m.sessions[0].board = [u];
+    m.sessions[1].board = []; // instant loss for seat 1; seat 0's unit survives
+
+    m.resolveCombatPhase();
+    const perm = permStats(m.sessions[0].lastCombatLog!);
+    expect(perm).toHaveLength(1);
+    expect(perm[0].permanentFactor).toBe(2); // multiply carries a factor…
+    expect(perm[0].dAtk).toBeUndefined(); // …never a buff delta (a permanent event is EITHER, never both)
+    expect(m.sessions[0].board[0].atk).toBe(4); // 2 × 2 (persistent stats, not the combat absolutes)
+    expect(m.sessions[0].board[0].hp).toBe(6); // 3 × 2
+    expect(m.sessions[0].log.some((l) => l.includes('writeback: 0u0 keeps ×2'))).toBe(true);
+
+    m.resolveCombatPhase(); // next combat: the doubled stats are the STARTING stats, and double again
+    const snap = snapFor(m, 0);
+    expect(snap.units[0].atk).toBe(4);
+    expect(snap.units[0].hp).toBe(6);
+    expect(m.sessions[0].board[0].atk).toBe(8); // ×2 compounds
+    expect(m.sessions[0].board[0].hp).toBe(12);
+  });
 });

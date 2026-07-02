@@ -21,17 +21,27 @@
 //    same `applyBuff` combat's buffStats used (atk floored at 0, hp at 1, rounded), so a
 //    permanent DEBUFF emitted against buffed in-combat stats can never write atk<0/hp<1
 //    onto the persistent board (EV-WBK-09).
+//  • Phase 3 writeback-multiply extension: a combat-fired `multiplyStats` flagged `permanent:true`
+//    emits `permanent:true` + `permanentFactor` (the CAPPED factor). The fold multiplies the
+//    surviving persistent instance by that factor through the same `applyMultiply` clamps
+//    (multiplyFactorCap + statSanityBound), NOT the combat-inflated absolutes — so Grave Emperor's
+//    contested-condition double compounds across combats exactly like the buff fold (EV-WBK-10).
+//    A permanent event is EITHER a buff (dAtk/dHp) or a multiply (permanentFactor), never both.
 //
 // The fold is deterministic (pure function of its inputs; events replayed in log order with
 // the same `applyBuff` clamps combat used) and NEVER modifies the log it reads.
 
 import type { CombatEvent, UnitInstance } from '../types';
-import { applyBuff } from './effects';
+import { applyBuff, applyMultiply } from './effects';
 
 export interface WritebackApplication {
   uid: string;
-  dAtk: number;
-  dHp: number;
+  /** Present for a folded permanent BUFF (post-clamp deltas). */
+  dAtk?: number;
+  dHp?: number;
+  /** Present for a folded permanent MULTIPLY (Phase 3 extension): the capped factor applied to the
+   *  surviving persistent instance through the same §6.8 `applyMultiply` clamps combat used. */
+  factor?: number;
 }
 
 export interface WritebackResult {
@@ -78,29 +88,41 @@ export function foldPermanentBuffs(
   for (const ev of log) {
     if (ev.t !== 'stats' || ev.permanent !== true) continue;
     if (unitSide.get(ev.unitId) !== side) continue; // the other side's business
+    // Phase 3: a permanent event is EITHER a buff (dAtk/dHp) or a multiply (permanentFactor) — never both.
+    const isMultiply = ev.permanentFactor != null;
     const dAtk = ev.dAtk ?? 0;
     const dHp = ev.dHp ?? 0;
+    const factor = ev.permanentFactor ?? 1;
+    const desc = isMultiply ? `×${factor}` : `+${dAtk}/+${dHp}`;
     const inst = board.find((u) => u.uid === ev.unitId);
     if (!inst) {
       // Combat-summoned token (or otherwise non-persistent uid): defined, logged no-op (#38).
       result.tokenNoOps.push(ev.unitId);
       result.logLines.push(
-        `writeback: permanent buff (+${dAtk}/+${dHp}) on combat-summoned ${ev.unitId} discarded — tokens have no persistent instance`,
+        `writeback: permanent ${desc} on combat-summoned ${ev.unitId} discarded — tokens have no persistent instance`,
       );
       continue;
     }
     if (!survivorSet.has(ev.unitId)) {
-      // Died (and did not reborn): permanent buffs do not accrue to the fallen (#38).
-      result.logLines.push(
-        `writeback: permanent buff (+${dAtk}/+${dHp}) on ${ev.unitId} dropped — did not survive combat`,
-      );
+      // Died (and did not reborn): permanent stat changes do not accrue to the fallen (#38).
+      result.logLines.push(`writeback: permanent ${desc} on ${ev.unitId} dropped — did not survive combat`);
       continue;
     }
-    const s = applyBuff({ atk: inst.atk, hp: inst.hp }, dAtk, dHp);
-    inst.atk = s.atk;
-    inst.hp = s.hp;
-    result.applied.push({ uid: ev.unitId, dAtk, dHp });
-    result.logLines.push(`writeback: ${ev.unitId} keeps +${dAtk}/+${dHp} (permanent, → ${s.atk}/${s.hp})`);
+    if (isMultiply) {
+      // Multiply the SURVIVING persistent stats by the capped factor (the §6.8 applyMultiply clamps +
+      // statSanityBound), NOT the combat-inflated absolutes. Compounds across combats like the buff fold.
+      const s = applyMultiply({ atk: inst.atk, hp: inst.hp }, factor);
+      inst.atk = s.atk;
+      inst.hp = s.hp;
+      result.applied.push({ uid: ev.unitId, factor });
+      result.logLines.push(`writeback: ${ev.unitId} keeps ×${factor} (permanent, → ${s.atk}/${s.hp})`);
+    } else {
+      const s = applyBuff({ atk: inst.atk, hp: inst.hp }, dAtk, dHp);
+      inst.atk = s.atk;
+      inst.hp = s.hp;
+      result.applied.push({ uid: ev.unitId, dAtk, dHp });
+      result.logLines.push(`writeback: ${ev.unitId} keeps +${dAtk}/+${dHp} (permanent, → ${s.atk}/${s.hp})`);
+    }
   }
 
   return result;

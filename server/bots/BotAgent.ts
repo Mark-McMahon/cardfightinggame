@@ -23,6 +23,7 @@ import {
   getCard,
   hasBreakpoint,
   hasSpendGated,
+  hasContestedCondition,
   economy,
   Rng,
   type ActivatedAbilityState,
@@ -41,6 +42,13 @@ interface BuildFocus {
   targetAxes: Set<Axis>;
   /** committed tribe that is currently under-represented (splash balancing), if any. */
   underTribe: TribeId | null;
+}
+
+// A CONSUMPTION card (Gorgemaw, #44) proactively eats a chosen friendly on play, keeping its
+// stats and feeding the persistent lifetimeDeaths line. Detected from card DATA (a `destroyAlly`
+// action) so it stays config/content-driven — no card id is hardcoded in the bot.
+function isConsumption(cardId: string): boolean {
+  return getCard(cardId).effects.some((e) => e.actions.some((a) => a.type === 'destroyAlly'));
 }
 
 export class BotAgent {
@@ -84,10 +92,12 @@ export class BotAgent {
 
     const focus = this.buildFocus(priv, pub);
 
-    // 2) develop the board: play the strongest bench unit while there's room.
+    // 2) develop the board: play the strongest bench unit while there's room — with the ONE
+    // consumption-archetype (#44) adjustment handled in chooseDevelopment: a consumption body
+    // (Gorgemaw) is not played into an empty board (its eat would fizzle with no ally to consume).
     if (priv.board.length < economy.boardCap && priv.bench.length > 0) {
-      const best = this.bestBench(priv, pub, focus);
-      if (best) return { type: 'playUnit', unitUid: best.uid };
+      const play = this.chooseDevelopment(priv, pub, focus);
+      if (play) return { type: 'playUnit', unitUid: play };
     }
 
     // 2.5) spend the gem wallet (decision #39): deterministic greedy policy — doublers first
@@ -170,8 +180,12 @@ export class BotAgent {
     const axes = card.axis ?? [];
     for (const ax of axes) if (focus.targetAxes.has(ax)) s += this.weights.axisValue;
     if (axes.length >= 2 && axes.some((a) => focus.targetAxes.has(a))) s += this.weights.bridgeValue;
-    // spend-gated payoff cards (#39) are primary payoffs too — valued like breakpoint cards.
-    if (hasBreakpoint(cardId) || hasSpendGated(cardId)) s += this.weights.breakpointValue;
+    // spend-gated payoff cards (#39), contested-condition payoff cards (#40 corollary — e.g.
+    // Gravemonarch's survive-a-near-wipe double), and consumption cards (#44 — Gorgemaw eats a
+    // chaff body for stats + feeds the persistent lifetimeDeaths line) are all primary payoffs:
+    // value them like breakpoints so the bot BUYS + KEEPS them instead of dumping a 3/3 as chaff.
+    if (hasBreakpoint(cardId) || hasSpendGated(cardId) || hasContestedCondition(cardId) || isConsumption(cardId))
+      s += this.weights.breakpointValue;
     if (focus.underTribe && tribe === focus.underTribe) s += this.weights.splashBalanceBonus;
     return s;
   }
@@ -190,10 +204,12 @@ export class BotAgent {
     priv: PrivateState,
     _pub: PublicState,
     focus: BuildFocus,
+    excludeUid?: string,
   ): ClientUnit | null {
     let best: ClientUnit | null = null;
     let bestScore = -Infinity;
     for (const u of priv.bench) {
+      if (u.uid === excludeUid) continue;
       const sc = this.scoreUnit(u, focus) + this.rng.next() * 0.01;
       if (sc > bestScore) {
         bestScore = sc;
@@ -201,6 +217,26 @@ export class BotAgent {
       }
     }
     return best;
+  }
+
+  /**
+   * Pick which bench unit to play, or null when there's nothing to develop. Layered on "play the
+   * strongest bench unit" is ONE consumption-archetype (#44) adjustment: a consumption body
+   * (Gorgemaw) is not played into an EMPTY board — it needs another ally to eat, else the
+   * battlecry fizzles; so develop a normal body first and let the consumer eat next step.
+   * (Go-tall payoffs like Cindermarshal are deliberately NOT special-cased: deploying wide
+   * dominates in the current engine, so a bot never rationally holds narrow — the go-tall line
+   * is a documented Phase-4 board-shape concern, design-spec §11.2 / decision #47, not a
+   * Phase-3 bot behavior.)
+   */
+  private chooseDevelopment(priv: PrivateState, pub: PublicState, focus: BuildFocus): string | null {
+    const best = this.bestBench(priv, pub, focus);
+    if (!best) return null;
+    if (isConsumption(best.cardId) && priv.board.length === 0) {
+      const alt = this.bestBench(priv, pub, focus, best.uid);
+      if (alt && !isConsumption(alt.cardId)) return alt.uid;
+    }
+    return best.uid;
   }
 
   private bestBuy(
@@ -219,6 +255,8 @@ export class BotAgent {
         focus.committed.has(o.tribe) ||
         hasBreakpoint(o.cardId) ||
         hasSpendGated(o.cardId) ||
+        hasContestedCondition(o.cardId) ||
+        isConsumption(o.cardId) ||
         (getCard(o.cardId).axis ?? []).some((a) => focus.targetAxes.has(a));
       if (!worthwhile) continue;
       const sc = this.scoreOffer(o, focus) + this.rng.next() * 0.01;
@@ -250,8 +288,9 @@ export class BotAgent {
     // breakpoint hunt: assemble up to breakpointHuntTarget distinct payoff cards
     // (spend-gated payoff cards count as payoffs too, #39).
     const owned = new Set<string>();
-    for (const u of [...priv.board, ...priv.bench]) if (hasBreakpoint(u.cardId) || hasSpendGated(u.cardId)) owned.add(u.cardId);
-    const offered = priv.shop.some((o) => hasBreakpoint(o.cardId) || hasSpendGated(o.cardId));
+    for (const u of [...priv.board, ...priv.bench])
+      if (hasBreakpoint(u.cardId) || hasSpendGated(u.cardId) || hasContestedCondition(u.cardId) || isConsumption(u.cardId)) owned.add(u.cardId);
+    const offered = priv.shop.some((o) => hasBreakpoint(o.cardId) || hasSpendGated(o.cardId) || hasContestedCondition(o.cardId) || isConsumption(o.cardId));
     if (owned.size < this.weights.breakpointHuntTarget && !offered && this.rollsThisTurn < this.weights.breakpointHuntMaxRolls) {
       return true;
     }
@@ -313,16 +352,22 @@ export class BotAgent {
   }
 
   private bestTarget(priv: PrivateState): string | null {
-    const legal = priv.pendingTarget?.legalTargets ?? [];
+    const pt = priv.pendingTarget;
+    const legal = pt?.legalTargets ?? [];
     if (legal.length === 0) return null;
     const byUid = new Map<string, ClientUnit>();
     for (const u of [...priv.board, ...priv.bench]) byUid.set(u.uid, u);
+    // Consumption sources (Gorgemaw's destroyAlly) EAT the SMALLEST spare body — never the carry; the
+    // absorb keeps its stats, so sacrificing chaff is a strict upgrade. All other targeted abilities
+    // (Facetguard-style buffs) want the BIGGEST ally. Detect the sacrifice case from the source card.
+    const src = pt ? byUid.get(pt.sourceUid) : undefined;
+    const isSacrifice = src ? isConsumption(src.cardId) : false;
     let best: string | null = null;
-    let bestVal = -Infinity;
+    let bestVal = isSacrifice ? Infinity : -Infinity;
     for (const uid of legal) {
       const u = byUid.get(uid);
       const val = u ? u.atk + u.hp : 0;
-      if (val > bestVal) {
+      if (isSacrifice ? val < bestVal : val > bestVal) {
         bestVal = val;
         best = uid;
       }

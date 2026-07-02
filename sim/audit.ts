@@ -15,6 +15,7 @@ import {
   lintBreakpoints,
   hasBreakpoint,
   hasSpendGated,
+  hasContestedCondition,
   type UnitCard,
 } from '@cardgame/shared';
 
@@ -91,7 +92,10 @@ const BREAKPOINT_CONDITIONS = new Set([
   'tokensSummonedThisTurnAtLeast',
   'gemsThisTurnAtLeast',
   'deathsThisCombatAtLeast',
+  'lifetimeDeathsAtLeast', // Phase 3: Ossuary Titan's tiered persistent-death counter
   'countAllies',
+  // NB: `alliesAtMost` is deliberately NOT here — it is a go-tall GATE on a fixed conditional buff
+  // (Lone Vanguard), not a scaling counter, so it needs no breakpoint row.
 ]);
 
 /** A card carries a "primary breakpoint payoff" if it has a threshold-gated effect (a
@@ -119,10 +123,12 @@ export function breakpointAudit(): BreakpointAudit {
   const lint = lintBreakpoints();
   if (!lint.ok) v.push(...lint.errors);
 
-  // (2) coverage: every breakpoint-gated card is a registered row.
+  // (2) coverage: every threshold-gated primary payoff is registered as ONE of the three legal
+  //     payoff classes — a breakpoint row, a spend-gated ability (#39), or a contested-condition
+  //     payoff (#40 corollary: exponential-by-risk, e.g. Grave Emperor's survive-a-near-wipe double).
   for (const card of UNITS) {
-    if (carriesPrimaryPayoff(card) && !hasBreakpoint(card.id)) {
-      v.push(`primary payoff not registered as a breakpoint: ${card.id}`);
+    if (carriesPrimaryPayoff(card) && !hasBreakpoint(card.id) && !hasContestedCondition(card.id)) {
+      v.push(`primary payoff not registered (breakpoint / contested-condition): ${card.id}`);
     }
   }
 

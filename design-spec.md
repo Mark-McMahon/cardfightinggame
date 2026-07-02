@@ -385,18 +385,21 @@ interface TriggerSpec { type: TriggerType; tribe?: TribeId; threshold?: number; 
 ```
 
 **Selector** (WHO). [live]: `self`, `allAllies`, `randomAlly`,
-`highestStatAlly`, `lowestStatAlly`, `chosenAlly` (shop-resolved), `triggerSource`,
-`frontEnemy`, `highestStatEnemy` (biggest enemy by `stat` — Nullforge anti-tall neutralize).
-[reserved]: `nAllies`, `leftNeighbor`, `rightNeighbor`, `adjacentAllies`, `newestAlly`,
-`oldestAlly`, `randomEnemy`, `neighborsOfTarget` (cleave is handled directly in combat, not
-via this selector). `TargetSpec` = `{ selector, count?, filterTribe?, filterKeyword?,
-stat?, excludeSelf? }`. **Tie-break/default rules that are engine logic, not data** (§6.8).
+`highestStatAlly`, `lowestStatAlly`, `chosenAlly` (shop-resolved), `leftmostAlly`
+(POSITIONAL board-index-0 friendly — Phase 3 Cindermarshal; distinct from bornTurn
+`oldestAlly`), `triggerSource`, `frontEnemy`, `highestStatEnemy` (biggest enemy by `stat` —
+Nullforge anti-tall neutralize). [reserved]: `nAllies`, `leftNeighbor`, `rightNeighbor`,
+`adjacentAllies`, `newestAlly`, `oldestAlly`, `randomEnemy`, `neighborsOfTarget` (cleave is
+handled directly in combat, not via this selector). `TargetSpec` = `{ selector, count?,
+filterTribe?, filterKeyword?, stat?, excludeSelf? }`. **Tie-break/default rules that are
+engine logic, not data** (§6.8).
 
 **ActionType** (WHAT):
 ```ts
 type ActionType =
   | 'buffStats' | 'grantKeyword' | 'summon' | 'dealDamage' | 'giveGem'   // [live]
   | 'multiplyStats' | 'plantDeathrattle' | 'custom' | 'resetToBase'      // [live] (resetToBase = Nullforge strip-to-print)
+  | 'destroy' | 'destroyAlly' | 'absorbStats'                            // [live] destroy = D11 combat removal; destroyAlly/absorbStats = Phase 3 shop-phase consumption
   | 'gainGold' | 'refreshShop'                                           // [live, ACTIVATED-ONLY (#39, §6.6a): legal only in activated.actions, never in a triggered Effect]
   | 'setStats' | 'makeSpell' | 'discover' | 'sacrifice';                 // [reserved / no-op in engine]
 interface ActionSpec {
@@ -413,22 +416,33 @@ interface ActionSpec {
 ```
 `multiplyStats` is the exponential lever (Tuskers): per-application `factor` is hard-capped
 by `engines.tuskers.multiplyFactorCap`; the exponential reach comes only from applying it
-across *turns* (shop-fired copies persist and compound; combat-fired copies are ALWAYS
-this-combat-only — the §7.5 writeback folds only flagged `buffStats` deltas, never
-multiplies). `permanent` on a combat-fired `buffStats` is **live** (decision #38): the buff
-writes back onto surviving persistent instances after combat (§7.5); on shop-fired actions
-it has always meant a direct persistent mutation. `plantDeathrattle` attaches a deathrattle
-`Effect` to a target (Reefmourner bridge).
+across *turns* (shop-fired copies persist and compound). A combat-fired `multiplyStats` is
+this-combat-only UNLESS flagged `permanent:true` — the Phase-3 §7.5 writeback-multiply
+extension folds the capped factor onto surviving persistent instances (Gravemonarch); an
+absolute `setStats`/`resetToBase` can never be folded and stays this-combat-only.
+`permanent` on a combat-fired `buffStats` is **live** (decision #38): the buff writes back
+onto surviving persistent instances after combat (§7.5); on shop-fired actions it has always
+meant a direct persistent mutation. `plantDeathrattle` attaches a deathrattle `Effect` to a
+target (Reefmourner bridge). **Phase-3 CONSUMPTION (Infernals, shop-phase):** `destroyAlly`
+destroys a chosen friendly — removes it, returns its pool copy (like a sell), fires no
+combat/deathrattle, and increments the persistent `lifetimeFriendlyDeaths` (§7.5);
+`absorbStats` makes the SOURCE permanently gain the TARGET's CURRENT atk/hp (a golden target
+contributes its doubled stats; keywords are NOT transferred). Gorgemaw pairs them
+(`absorbStats` then `destroyAlly` — absorb reads the live target, then consumes it).
 
 **ConditionSpec** (optional gate):
 ```ts
 kind: 'countAllies' | 'gemsThisTurnAtLeast'                                    // [live] (gemsThisTurnAtLeast: engine+eval live, 0 card consumers since #39 — see §6.9)
     | 'battlecriesThisTurnAtLeast' | 'tokensSummonedThisTurnAtLeast' | 'deathsThisCombatAtLeast' // [live] manufactured-event breaks
+    | 'alliesAtMost' | 'lifetimeDeathsAtLeast'                                                    // [live] Phase 3: go-tall gate (Cindermarshal) + persistent-death breakpoint (Ossuary Titan)
     | 'hasTribe' | 'hasKeyword' | 'goldAtLeast' | 'tierAtLeast' | 'isGolden' | 'isToken';        // [reserved]
 value?; tribe?; keyword?;
 ```
-**Phase-scoping (engine rule):** combat context populates only `deathsThisCombat`; shop
-context populates `battlecries/tokens/gems`. A condition evaluated in the wrong phase reads
+**Phase-scoping (engine rule):** combat context populates `deathsThisCombat`, `countAllies`
+(start-of-combat count) and `lifetimeDeaths` (the fixed per-board scalar carried in on
+`CombatBoard.lifetimeDeaths`, §7.5); shop context populates `battlecries/tokens/gems` and
+`countAllies`. `alliesAtMost` is a ≤ gate (`countAllies ≤ value`); `lifetimeDeathsAtLeast`
+gates on the persistent friendly-death total. A condition evaluated in the wrong phase reads
 0/false silently. A missing or unknown condition evaluates **true**.
 
 ### 6.4 Aura (passive modifier) — the multipliers
@@ -497,12 +511,39 @@ type BreakpointCounter =
   | 'deaths' | 'revenantDeaths'          // combat: friendly / revenant deaths this combat
   | 'tokensThisTurn' | 'battlecries' | 'gemsThisTurn'  // shop: this-turn manufactured events
   | 'alliesAtStart'                      // minions controlled at start of combat
-  | 'shieldBreak';                       // this unit's own shield broke
+  | 'shieldBreak'                        // this unit's own shield broke
+  | 'lifetimeDeaths';                    // Phase 3: PERSISTENT per-player friendly-death total (Ossuary Titan — TIERED)
 ```
 
+A breakpoint row may carry a `tiers?: {threshold, atk, hp}[]` array for a **tiered** payoff:
+several discrete steps on one counter whose per-step payoffs ESCALATE (each ≥ the last → a
+step, not a line). **Ossuary Titan** (Phase 3) is the first tiered row — thresholds 4/8/12
+on `lifetimeDeaths`, payoffs +2/+2 → +3/+3 → +5/+5, firing one cumulative this-combat buff
+per crossed tier. The persistent counter accrues slowly across a whole game (every fight +
+every Gorgemaw sacrifice), so the tiers are a long-horizon investment rather than a per-fight
+ramp; the rising steps keep the non-linear shape (decision #45).
+
 **Lint (decision #22, §11.3c):** a test asserts every primary payoff is expressible as a
-discrete breakpoint and flags any per-unit scaling that lacks a threshold. **Since decision
-#39 the lint has a second legal class — spend-gated payoffs (§6.6a).**
+discrete breakpoint and flags any per-unit scaling that lacks a threshold. The lint now has
+**three** legal primary-payoff classes: breakpoints, spend-gated payoffs (§6.6a, decision
+#39), and contested-condition payoffs (§6.6b, decision #46).
+
+### 6.6b Contested-condition payoffs — the third legal payoff class (decision #46, #40 corollary)
+
+**The third legal primary-payoff class.** Decision #40 permits unbounded scaling where each
+step is bought with *a decision, a risk, OR a contested condition*. Breakpoints cover
+board-state thresholds; spend-gated abilities cover purchases; a **contested-condition
+payoff** covers the third — a payoff whose every step demands surviving a condition the
+opponent actively fights against, not accrued for free from your own board. Registered in a
+`contestedCondition` registry in `breakpoints.ts` (PARALLEL to `spendGated`), naming the
+combat condition and its engine-knob sizing. The §11.3c lint accepts a threshold-gated
+payoff WITHOUT a breakpoint row ONLY if it is registered here — a first-class classification,
+not a suppression (a payoff that is none of the three still fails the lint). **Gravemonarch**
+(Revenant T6, `revenants_gravemonarch`) is the first: `endOfCombat`, if 5+ friendlies died
+this combat AND it survived → permanently DOUBLE its stats (via the §7.5 writeback-multiply).
+Exponential, but each double is bought by surviving a near-wipe — the opponent contests it by
+finishing the kill (poison the 1-hp reborn body, out-tempo). Legal by construction under
+#22/#40.
 
 ### 6.6a Activated abilities — the spend-gated payoff class (decisions #39/#40)
 
@@ -582,7 +623,7 @@ interface KeywordDef { id; name; rulesText; }        // engine reads keyword *ti
 // DEFERRED stub: TavernSpell { id; name; cost; tier; effects; permanent; }
 ```
 Keyword *timing* lives in the combat engine (§7), not in data — data only tags which units
-carry a keyword. Canonical content: `shared/content/units.ts` (the 93 rows),
+carry a keyword. Canonical content: `shared/content/units.ts` (the 97 rows),
 `tribes.ts`, `keywords.ts`.
 
 ### 6.8 Code-only semantics (not derivable from the data rows)
@@ -632,31 +673,32 @@ the vocabulary is complete and pinned.
 Counts are actual usage across `units.ts` — a **drift tripwire**: a live count hitting 0 means
 it silently became reserved; a card needing something not listed means *stop and promote it*.
 
-- **Triggers — live (10):** `battlecry`(28) · `startOfCombat`(19) · `deathrattle`(18) ·
+- **Triggers — live (11):** `battlecry`(29) · `startOfCombat`(21) · `deathrattle`(19) ·
   `afterFriendlyDeaths`(8) · `endOfTurn`(6) · `onSell`(2) · `onAttack`(1) · `onShieldBreak`(1) ·
-  `onSummon`(1) · `afterFriendlyBattlecry`(1). *(#39: −3 `endOfTurn` — the doubler rows became
-  activated abilities; −1 `battlecry` — Goldgrin's rider moved behind Facetguard's gem cost.)*
-  *Reserved (0):* `onPurchase`, `onDamaged`, `onPlayTribe`, `onRefresh`, `onCast`,
-  `onSacrifice`, `onSpend`, `onTripleCreated`. (`onPurchase` has 0 consumers — reserved in §6.2.)
-- **Selectors — live (9), triggered effects:** `self`(31) · `allAllies`(28) · `chosenAlly`(11) ·
+  `onSummon`(1) · `afterFriendlyBattlecry`(1) · `endOfCombat`(1 — Phase 3 Gravemonarch, fires
+  for LIVING units at fight end). *Reserved (0):* `onPurchase`, `onDamaged`, `onPlayTribe`,
+  `onRefresh`, `onCast`, `onSacrifice`, `onSpend`, `onTripleCreated`.
+- **Selectors — live (10), triggered effects:** `self`(33) · `allAllies`(29) · `chosenAlly`(12) ·
   `randomAlly`(5) · `lowestStatAlly`(4) · `highestStatAlly`(2) · `frontEnemy`(2) ·
-  `highestStatEnemy`(1) · `triggerSource`(1). **Activated surface (§6.6a):** `self`(5) ·
-  `chosenAlly`(1). *Reserved:* `leftNeighbor`, `rightNeighbor`, `adjacentAllies`,
-  `newestAlly`, `oldestAlly`, `nAllies`, `randomEnemy`, `neighborsOfTarget` (cleave neighbors
-  are computed in combat, not via a selector).
-- **Actions — live, triggered effects:** `buffStats`(42) · `grantKeyword`(16) · `summon`(13) ·
-  `giveGem`(7) · `dealDamage`(3) · `plantDeathrattle`(1) · `resetToBase`(1) · `custom`(2)
-  · **`destroy` — PROMOTED from the `dealDamage: 999` idiom (4 uses), see D11.**
-  **Activated surface (§6.6a):** `multiplyStats`(3 — the purchased doubles; 0 *triggered*
-  consumers since #39, the combat-side clamp stays pinned by EV-ACT-MUL) · `buffStats`(1) ·
-  `grantKeyword`(1) · `gainGold`(1) · `refreshShop`(1). `gainGold`/`refreshShop` are
-  **activated-only** — a triggered Effect may never use them (EV-VOCAB-01).
-  *Reserved:* `setStats`, `makeSpell`, `discover`. *(`sacrifice` folded into `destroy`.)*
-- **Conditions — live (5):** `battlecriesThisTurnAtLeast`(9) · `countAllies`(7) ·
-  `deathsThisCombatAtLeast`(2) · `tokensSummonedThisTurnAtLeast`(1) · `gemsThisTurnAtLeast`(0 —
-  **status note, #39:** the doubler conditions became purchased activations, so the card count
-  is 0; kept LIVE deliberately (an explicit exception to the count-0 tripwire) because the
-  `gemsThisTurn` counter + condition remain implemented and pinned by EV-CND-01/03).
+  `leftmostAlly`(1 — Phase 3 positional index-0) · `highestStatEnemy`(1) · `triggerSource`(1).
+  **Activated surface (§6.6a):** `self`(5) · `chosenAlly`(1). *Reserved:* `leftNeighbor`,
+  `rightNeighbor`, `adjacentAllies`, `newestAlly`, `oldestAlly`, `nAllies`, `randomEnemy`,
+  `neighborsOfTarget` (cleave neighbors are computed in combat, not via a selector).
+- **Actions — live, triggered effects:** `buffStats`(45) · `grantKeyword`(17) · `summon`(13) ·
+  `giveGem`(7) · `destroy`(4) · `dealDamage`(3) · `custom`(2) · `plantDeathrattle`(1) ·
+  `resetToBase`(1) · `multiplyStats`(1 — Phase 3 Gravemonarch's `permanent:true` double, §7.5)
+  · **`destroyAlly`(1)** · **`absorbStats`(1)** — Phase 3 shop-phase CONSUMPTION (Gorgemaw).
+  **`destroy` is PROMOTED from the `dealDamage: 999` idiom, see D11.** **Activated surface
+  (§6.6a):** `multiplyStats`(3 — the purchased doubles) · `buffStats`(1) · `grantKeyword`(1) ·
+  `gainGold`(1) · `refreshShop`(1). `gainGold`/`refreshShop` are **activated-only** — a
+  triggered Effect may never use them (EV-VOCAB-01). *Reserved:* `setStats`, `makeSpell`,
+  `discover`. *(`sacrifice` folded into `destroy`.)*
+- **Conditions — live (7):** `battlecriesThisTurnAtLeast`(9) · `countAllies`(7) ·
+  `deathsThisCombatAtLeast`(3) · `tokensSummonedThisTurnAtLeast`(1) · `alliesAtMost`(1 — Phase 3
+  go-tall gate) · `lifetimeDeathsAtLeast`(1 — Phase 3 persistent-death breakpoint) ·
+  `gemsThisTurnAtLeast`(0 — **status note, #39:** the doubler conditions became purchased
+  activations, so the card count is 0; kept LIVE deliberately because the `gemsThisTurn` counter
+  + condition remain implemented and pinned by EV-CND-01/03).
   *Reserved:* `hasTribe`, `hasKeyword`, `goldAtLeast`, `tierAtLeast`, `isGolden`, `isToken`.
 - **Auras — live (exactly 3 (scope,modifier) shapes):** `(selfTribeAllies, damageMultiplier)`
   +`activeWhen` (Pale Lich) · `(yourBattlecries, triggerMultiplier)` (Echo Choir) ·
@@ -754,14 +796,21 @@ type CombatEvent =
   | { t:'attack'; side:'a'|'b'; attackerId; defenderId }
   | { t:'damage'; sourceId; targetId; amount; shieldBroken? }
   | { t:'keyword'; unitId; keyword; gained?; sourceId? }   // gained+sourceId ⇒ unit GAINED an ability
-  | { t:'stats'; unitId; atk; hp; sourceId?; permanent?; dAtk?; dHp? } // sourceId links a buff to its cause
+  | { t:'stats'; unitId; atk; hp; sourceId?; permanent?; dAtk?; dHp?; permanentFactor? } // sourceId links a buff to its cause; dAtk/dHp XOR permanentFactor (Phase 3)
   | { t:'death'; unitId } | { t:'deathrattle'; unitId }
   | { t:'summon'; ownerId; unitIds:string[]; slot }
   | { t:'combatEnd'; winner:'a'|'b'|'tie'; survivors:string[]; damageToLoser;
-      survivorsA?:string[]; survivorsB?:string[] };
+      survivorsA?:string[]; survivorsB?:string[]; deathsA?; deathsB? };  // deathsA/B (Phase 3): friendly-death totals per side
 ```
 `stats.sourceId` and `keyword.gained`/`sourceId` are additive and consumed by the replay
-for causality links.
+for causality links. **Phase 3 additions** (all additive; pre-existing logs byte-stable):
+`combatEnd.deathsA`/`deathsB` are each side's friendly-death totals (incl. tokens), folded
+by `Match` into the persistent per-player `lifetimeFriendlyDeaths` (§7.5 lifetime block).
+`CombatBoard` gains an optional `lifetimeDeaths` scalar — the controller's lifetime total
+carried IN on the snapshot so combat can gate `lifetimeDeathsAtLeast` payoffs (Ossuary
+Titan) with no ambient state (invariant 1b). A new `endOfCombat` trigger fires for LIVING
+units at fight end (survival-gated by construction — a dead unit does not fire), used by
+Gravemonarch's contested-condition double.
 
 **Combat→board writeback (decision #38, 2026-07-01 — closes the §7.6 #5 gap).**
 `stats.permanent` is **live**: a combat-fired `buffStats` whose ActionSpec has
@@ -793,11 +842,16 @@ never mistaken for a friendly token no-op. Fold rules:
   crash and never a new `CombatEvent`.
 - **Ghost boards never accrue** — the fold is simply not run for a dead player's snapshot
   side; the stored ghost `CombatBoard` and the dead player's session board stay frozen.
-- Only `buffStats` participates: in combat, `permanent` on `setStats`/`multiplyStats`/
-  `resetToBase` is **ignored** (an absolute write can't be disentangled from combat
-  damage); those stay this-combat-only. `grantKeyword` permanence is likewise **still
-  reserved** — the `keyword` event carries no permanence seam and keyword grants remain
-  this-combat-only (stats only in this phase).
+- **`buffStats` and (since Phase 3) `multiplyStats` participate.** A combat-fired
+  `multiplyStats` flagged `permanent:true` emits `permanent:true` + the additive
+  `permanentFactor` (the CAPPED factor); the fold multiplies the surviving persistent
+  instance by it through the same §6.8 `applyMultiply` clamps (`multiplyFactorCap` +
+  `statSanityBound`), NOT the combat-inflated absolutes — so it compounds across combats
+  like the buff fold (a permanent event is EITHER a `dAtk`/`dHp` buff OR a `permanentFactor`
+  multiply, never both). `permanent` on `setStats`/`resetToBase` is still **ignored** (an
+  absolute write can't be disentangled from combat damage); those stay this-combat-only.
+  `grantKeyword` permanence is likewise **still reserved** — the `keyword` event carries no
+  permanence seam and keyword grants remain this-combat-only.
 - **Deltas fold under the §6.8 stat clamps.** The fold replays each `dAtk`/`dHp` through
   the same `applyBuff` clamps combat's `buffStats` uses (atk floored at 0, hp at 1,
   rounded). This matters for permanent **debuffs**: the emitted delta is post-clamp
@@ -808,15 +862,25 @@ never mistaken for a friendly token no-op. Fold rules:
   mutate the persistent instance directly and emit no combat events) can never
   double-apply through it.
 
-Pinned by `EV-WBK-01..09` (`shared/engine/combatWriteback.test.ts`) + golden `EV-GLD-09`.
-Content note: **no shipped card uses combat-fired permanence yet** — the #38 audit gave
-every combat-fired `buffStats` an explicit `permanent:false` (EV-WBK-08 lints this), with
-one deliberate exemption: `wildkin_motherthorn` keeps `permanent:true` on its `onSummon`
-buff. `onSummon` does fire in combat, but the effect's `tokensSummonedThisTurnAtLeast`
-condition is **shop-scoped** (the counter reads 0 in combat), so it can never fire there —
-the EV-WBK-08 lint encodes exactly this shop-gated exemption rather than a blanket
-"explicit `permanent:false` everywhere". So closing the seam changed no live card
-behavior; later phases add intended persistent scalers explicitly.
+Pinned by `EV-WBK-01..10` (`shared/engine/combatWriteback.test.ts`) + goldens `EV-GLD-09`
+(buff seam) / `EV-GLD-12` (Gravemonarch multiply). Content note: the #38 audit gave every
+combat-fired `buffStats` an explicit `permanent:false` (EV-WBK-08 lints this); the sole
+`permanent:true` combat consumer is now **Gravemonarch's `endOfCombat` `multiplyStats`**
+(a contested-condition double, §6.6b). Mother Thorn keeps `permanent:true` on its `onSummon`
+buff, but that effect's `tokensSummonedThisTurnAtLeast` condition is **shop-scoped** (reads
+0 in combat), so it can never fire in combat — the EV-WBK-08 lint encodes exactly this
+shop-gated exemption for `buffStats`.
+
+**Persistent lifetime friendly deaths (Phase 3, decision #44).** `ShopSession` carries a
+per-player `lifetimeFriendlyDeaths` (private; NEVER reset between turns/rounds). **Counting
+rule:** the combat-scoped `deaths`/`revenantDeaths` counters stay per-fight; a shop sacrifice
+does NOT touch them; `lifetimeFriendlyDeaths` is the ONLY counter that both a shop-phase
+`destroyAlly` (Gorgemaw) AND combat friendly deaths increment. `Match.resolveCombatPhase`
+folds `combatEnd.deathsA`/`deathsB` into each LIVE player's total (GHOST boards never
+accrue). The value rides into the next combat on `CombatBoard.lifetimeDeaths` for
+`lifetimeDeathsAtLeast` gates (Ossuary Titan). Pinned by `EV-LFT-01..03` / `EV-OSS-*` /
+`EV-GRM-*` (`shared/engine/revenant-lifetime.test.ts`) + `EV-CON-*`
+(`shared/engine/consumption.test.ts`).
 
 ### 7.6 Resolved combat rules — divergence ledger (items 1–3, 5, 6 resolved in code)
 
@@ -891,14 +955,15 @@ data + engine vocabulary.
 Marquee ⭐ breakpoint cards per tribe live in `config/breakpoints.ts` (e.g. Mortarch
 `deaths≥3 once`, Pale Lich `revenantDeaths≥3 amp`, Chorus Tide `battlecries≥2`); the Tusker
 doublers are **spend-gated** rows in the same file's `spendGated` registry (#39, §6.6a).
-The full **93-row** roster is `shared/content/units.ts`;
-per-tribe counts (verified against the catalog): Revenants 13, Reefkin 12, **Tuskers 12**,
-Wildkin 11, Corsairs 10, Constructs 10, Sirens 9, Primordials 8, Infernals 8 (= 93; 87
-purchasable + 6 tokens). The +7 over the pre-audit slice are the §16 cards: Reefkin
-Tidebinder, Infernals Carrion Sovereign (T6), Constructs Nullforge + Aegis Prime (T6),
-Tuskers Tuskmonger, Sirens Maelstrom Cantor, Corsairs Quartermaster; the +3 on top of those
-are the decision-#39 Tusker gem sinks **Gemwright (T3), Facetguard (T3), Oreseeker (T2)**
-(normal pool copy counts).
+The full **97-row** roster is `shared/content/units.ts`;
+per-tribe counts (verified against the catalog): Revenants 15, Reefkin 12, **Tuskers 12**,
+Wildkin 11, Corsairs 10, Constructs 10, Infernals 10, Sirens 9, Primordials 8 (= 97; 91
+purchasable + 6 tokens). The +4 over the pre-Phase-3 slice are the consumption/lifetime
+cards: Infernals **Gorgemaw (T4)** + **Cindermarshal (T4)** and Revenants **Ossuary Titan
+(T5)** + **Gravemonarch (T6)**. The +7 before those were the §16 cards: Reefkin Tidebinder,
+Infernals Carrion Sovereign (T6), Constructs Nullforge + Aegis Prime (T6), Tuskers Tuskmonger,
+Sirens Maelstrom Cantor, Corsairs Quartermaster; and +3 the decision-#39 Tusker gem sinks
+**Gemwright (T3), Facetguard (T3), Oreseeker (T2)** (normal pool copy counts).
 
 ---
 
@@ -1153,6 +1218,18 @@ to repair.
   avg hero damage. Exactly reproducible because combat is pure. (`sim/micro.ts`)
 - **Macro (full-match) sim:** 8 bot configs + M matches → per unit/build/tribe pick rate,
   avg placement, win rate, "assembled the combo?" rate. (`sim/macro.ts`, `sim/metrics.ts`)
+- **Bot payoff coverage (so the macro sim actually EXERCISES marquee mechanics):** the bot
+  (`server/bots/BotAgent.ts`) values four primary-payoff classes so it buys, keeps, plays and
+  hunts them instead of dumping them as raw-stat chaff — breakpoints, spend-gated (#39),
+  contested-condition (#46), and **consumption** (#47: a `destroyAlly` card such as Gorgemaw;
+  it also refuses to play a consumer into an empty board, else the eat fizzles). **Known
+  coverage limitation (decision #47):** a **go-tall** payoff gated on `alliesAtMost` (fixed
+  conditional buff — Cindermarshal) is *unreachable* by any rational bot, because deploying
+  WIDE dominates in the current engine (empirically: 0 narrow deployments in 200 matches even
+  with the buff raised). Its EFFECT is validated by the deterministic EV-CON evals and its 4/5
+  body is measured normally; making the narrow line a *winning* choice depends on the Phase-4
+  board-shape / anti-wide tech, so the go-tall line is deferred there rather than exercised by
+  a speculative (inert) bot heuristic today.
 
 **11.3 Breakpoint balance-gate metrics (decision #29).** Thresholds in
 `shared/config/sim.ts`; the macro-sim asserts:
@@ -1162,12 +1239,16 @@ to repair.
 - **(b) Reachability (the gate)** — ≥ `splashReachTargetPct` (0.5) of *developed* 2-tribe
   splashes must hit two distinct breakpoints; else breakpoints are tuned too high and
   everyone mono-stacks.
-- **(c) Breakpoint lint** — every primary payoff must be a discrete config breakpoint **or a
-  registered SPEND-GATED payoff (decision #39/#40, §6.6a)**: a card whose primary payoff is a
-  purchased activated ability is legal iff it has a `spendGated` registry row whose cost
-  knobs resolve to positive config numbers (each step is bought, which satisfies the
-  breakpoint law's intent — a decision per step). Flag per-unit scaling without a threshold,
-  stat-growing activated abilities missing from the registry, and registry/catalog drift.
+- **(c) Breakpoint lint** — every primary payoff must be a discrete config breakpoint, **a
+  registered SPEND-GATED payoff (decision #39/#40, §6.6a)**, or **a registered
+  CONTESTED-CONDITION payoff (decision #46, §6.6b)**: a card whose primary payoff is a
+  purchased activated ability is legal iff it has a `spendGated` row whose cost knobs resolve
+  to positive config numbers (each step is bought); a card whose primary payoff is a
+  survive-the-contest double is legal iff it has a `contestedCondition` row naming the
+  condition and its positive engine-knob sizing (each step is a risk). Flag per-unit scaling
+  without a threshold, stat-growing activated abilities missing from the registry, and
+  registry/catalog drift. Note `alliesAtMost` is a go-tall GATE on a fixed conditional buff
+  (Cindermarshal), not a scaling counter, so it needs no row.
 - **(d) Non-linearity** — crossing a marquee threshold must improve placement by ≥
   `nonLinearityMinStepRatio` (1.5×) the sub-threshold slope: a step, not a line.
 
@@ -1208,13 +1289,17 @@ values** (that is what drifted before). Read the files for current numbers.
 - **`engines.ts`** — one block per tribe (the per-tribe knob sets), including the Round-6
   cap knobs (`endOfTurnTriggerMultiplierCap`, `battlecryTriggerMultiplierCap`,
   `undeadDamageAmpCap`/`Threshold`, `tokenDeathFloorAtk`/`CapAtk`, `plantedDeathrattleAtk`/
-  `Hp`, Tuskers `doublerFactor`/`multiplyFactorCap`, Sirens `burstDamage`, etc.) and the
+  `Hp`, Tuskers `doublerFactor`/`multiplyFactorCap`, Sirens `burstDamage`, etc.), the
   decision-#39 activated-ability price knobs (Tuskers `doubleBaseCost`, `doubleCostStep`,
-  `goldgrinGems`, `gemwrightCost`, `gemwrightGold`, `facetguardCost`, `oreseekerCost`).
-- **`breakpoints.ts`** — the `{ card, counter, threshold, once?, ...payoff }` list; the
-  authoritative source for every ⭐ payoff's numbers (§6.6). Also the **`spendGated`
-  registry** (`{ card, currency, costKnobs[] }`, decision #39/#40, §6.6a) — the second
-  legal primary-payoff class the §11.3c lint accepts.
+  `goldgrinGems`, `gemwrightCost`, `gemwrightGold`, `facetguardCost`, `oreseekerCost`), and
+  the Phase-3 knobs (Infernals `loneVanguardBuffAtk`/`Hp`/`loneVanguardAllyThreshold`;
+  Revenants `graveEmperorDeathThreshold`/`graveEmperorFactor`).
+- **`breakpoints.ts`** — the `{ card, counter, threshold, once?, tiers?, ...payoff }` list;
+  the authoritative source for every ⭐ payoff's numbers (§6.6; `tiers?` = Ossuary Titan's
+  escalating steps). Also the **`spendGated` registry** (`{ card, currency, costKnobs[] }`,
+  decision #39/#40, §6.6a) and the **`contestedCondition` registry** (`{ card, condition,
+  thresholdKnobs[] }`, decision #46, §6.6b) — the second and third legal primary-payoff
+  classes the §11.3c lint accepts.
 - **`sim.ts`** — the balance-gate thresholds for §11.3 (a)/(b)/(d).
 - **`systems.ts`** — `freezeIsFree` (active); **DEFERRED stubs**: trinket*, tavernSpell*,
   heroPower*.
@@ -1235,7 +1320,7 @@ cardfightinggame/
 ├─ shared/                      # imported by server, client, AND sim
 │  ├─ types/index.ts            # UnitCard, Effect, AuraSpec, CombatEvent, state, intents
 │  ├─ config/                   # economy match combat triples engines breakpoints sim systems bots
-│  ├─ content/                  # units.ts (93 rows), tribes.ts, keywords.ts  ← new units = new rows
+│  ├─ content/                  # units.ts (97 rows), tribes.ts, keywords.ts  ← new units = new rows
 │  └─ engine/                   # PURE, no IO:
 │     ├─ rng.ts                 #   seeded PRNG (mulberry32/FNV-1a, Fisher–Yates)
 │     ├─ combat.ts              #   resolveCombat(boardA,boardB,seed) -> CombatEvent[]
