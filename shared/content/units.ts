@@ -1355,12 +1355,12 @@ export const UNITS: UnitCard[] = [
     hp: 8,
     keywords: ['taunt'],
     axis: ['spoils'],
-    text: `Taunt. Battlecry: gain 3 gems. Once per turn: spend gems (${T.doubleBaseCost}, +${T.doubleCostStep} per double you've bought this game) to permanently DOUBLE this minion's stats (×${T.doublerFactor}). A tall carry — poison ignores its size.`,
+    text: `Taunt. Battlecry: gain ${T.gemtitanGems} gems. Once per turn: spend gems (${T.doubleBaseCost}, +${T.doubleCostStep} per double you've bought this game) to permanently DOUBLE this minion's stats (×${T.doublerFactor}). A tall carry — poison ignores its size.`,
     effects: [
       {
         trigger: { type: 'battlecry' },
         target: { selector: 'self' },
-        actions: [{ type: 'giveGem', amount: 3 }],
+        actions: [{ type: 'giveGem', amount: T.gemtitanGems }],
       },
     ],
     activated: {
@@ -1372,10 +1372,10 @@ export const UNITS: UnitCard[] = [
 
   {
     // ⭐ NEW audit build-around (Endorsed Pattern B — sell a body for gems, the flavor-perfect Tusker
-    // fuel). Each 2 gems costs a whole friendly body sold (self-limiting; you thin your board), turning
-    // the passive gem stream into an active decision that feeds the doubler's gemsThisTurn breakpoint.
-    // The gems only build a single tall carry → folds to POISON (size-agnostic) + a wide board out-tempos
-    // the board you sold down. Fires on `onSell` (another friendly was sold this shop turn).
+    // fuel). Each sale costs a whole friendly body (self-limiting; you thin your board), turning the
+    // passive gem stream into an active decision that fuels the PURCHASED doubler wallet (decision #39;
+    // there is no gemsThisTurn breakpoint anymore). The gems only build a single tall carry → folds to
+    // POISON (size-agnostic) + a wide board out-tempos the board you sold down. Fires on `onSell`.
     id: 'tuskers_tuskmonger',
     name: 'Tuskmonger',
     tribe: 'tuskers',
@@ -1384,12 +1384,12 @@ export const UNITS: UnitCard[] = [
     hp: 3,
     keywords: [],
     axis: ['spoils'],
-    text: 'After you sell another friendly minion, gain 2 gems.',
+    text: `After you sell another friendly minion, gain ${T.tuskmongerGems} gems.`,
     effects: [
       {
         trigger: { type: 'onSell' },
         target: { selector: 'self' },
-        actions: [{ type: 'giveGem', amount: 2 }],
+        actions: [{ type: 'giveGem', amount: T.tuskmongerGems }],
       },
     ],
   },

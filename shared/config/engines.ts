@@ -62,6 +62,8 @@ export interface EnginesConfig {
     doubleBaseCost: number; // decision #39: gem cost of the FIRST double this game
     doubleCostStep: number; // decision #39: cost increase per double already purchased (per game)
     goldgrinGems: number; // Goldgrin battlecry gem grant (decision #39: literal → knob)
+    gemtitanGems: number; // Gemtitan battlecry gem grant (#39 literal→knob pass, completed #43)
+    tuskmongerGems: number; // Tuskmonger onSell gem grant (#39 literal→knob pass, completed #43)
     gemwrightCost: number; // Gemwright: spend N gems → +gemwrightGold gold (the ONLY gem→gold bridge)
     gemwrightGold: number;
     facetguardCost: number; // Facetguard: spend N gems → chosen ally +gemDumpPayoff + Divine Shield
@@ -154,6 +156,8 @@ export const engines: EnginesConfig = {
     doubleBaseCost: 4, // decision #39: first double costs 4 gems…
     doubleCostStep: 2, // …then +2 gems per double already bought this game (shared escalator)
     goldgrinGems: 2,
+    gemtitanGems: 3,
+    tuskmongerGems: 2,
     gemwrightCost: 3,
     gemwrightGold: 1,
     facetguardCost: 2,

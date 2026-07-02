@@ -405,7 +405,9 @@ export function startShopPhase(s: ShopSession): OpResult {
 }
 
 export function endOfTurnPhase(s: ShopSession): OpResult {
-  // Pass 1: gem generators first, so gem-doublers see the full gemsThisTurn (EV-BP-19).
+  // Pass 1: gem generators (giveGem) resolve before any other endOfTurn effect so gems are credited
+  // to the wallet first. (Pre-#39 this fed the auto-doubler's gemsThisTurn gate; the doubler is now a
+  // shop-phase PURCHASED activation, but generators-first keeps end-of-turn ordering deterministic.)
   for (const u of [...s.board]) {
     for (const e of getCard(u.cardId).effects) {
       if (e.trigger.type !== 'endOfTurn') continue;
@@ -480,6 +482,10 @@ export function tierUp(s: ShopSession): OpResult {
 }
 
 export function playUnit(s: ShopSession, uid: string, toSlot?: number): OpResult {
+  // An outstanding chosenAlly target must be resolved first: a battlecry here would overwrite
+  // s.pendingTarget and silently void an already-PAID activation (Facetguard's gems), breaking the
+  // "an activation is a purchase, never fizzled" invariant (#39, §6.6a). Same guard as activateAbility.
+  if (s.pendingTarget) return { ok: false, error: 'resolve pending target first' };
   const idx = s.bench.findIndex((u) => u.uid === uid);
   if (idx < 0) return { ok: false, error: 'unit not on bench' };
   if (s.board.length >= economy.boardCap) return { ok: false, error: 'board full' };

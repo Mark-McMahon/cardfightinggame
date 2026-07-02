@@ -12,6 +12,7 @@ import {
   activateAbility,
   activatedCost,
   resolveTargetChoice,
+  playUnit,
   rollShop,
   boardToCombat,
   toPrivateState,
@@ -182,6 +183,34 @@ describe('EV-ABL — Facetguard (chosenAlly activation → pendingTarget machine
     // once per turn: a second activation this turn is rejected even with gems
     s.gems = 99;
     expect(activateAbility(s, facet.uid).error).toMatch(/already activated/);
+  });
+
+  it('EV-ABL-06b (#43): a PAID pending target cannot be silently voided — playUnit is rejected while one is armed', () => {
+    const s = fresh('abl06b');
+    startShopPhase(s);
+    const facet = put(s, 'tuskers_facetguard');
+    const ally = put(s, 'tuskers_grubtusk');
+    const bench = put(s, 'reefkin_brineling', 'bench'); // a chosenAlly battlecry unit on the bench
+    s.gems = T.facetguardCost;
+    // arm the PAID Facetguard pending (gems already spent — the purchase is the activation)
+    expect(activateAbility(s, facet.uid).ok).toBe(true);
+    expect(s.gems).toBe(0);
+    expect(s.pendingTarget!.sourceUid).toBe(facet.uid);
+    // playing another unit here would have overwritten the pending (fireBattlecry) and lost the gems.
+    const rej = playUnit(s, bench.uid);
+    expect(rej.ok).toBe(false);
+    expect(rej.error).toMatch(/resolve pending target first/);
+    // rejection mutated nothing: pending still Facetguard's, unit still benched, board unchanged
+    expect(s.pendingTarget!.sourceUid).toBe(facet.uid);
+    expect(s.bench.some((u) => u.uid === bench.uid)).toBe(true);
+    expect(s.board.some((u) => u.uid === bench.uid)).toBe(false);
+    // resolving the paid choice still lands its buff (the purchase was honored, not fizzled)
+    const [a0, h0] = [ally.atk, ally.hp];
+    expect(resolveTargetChoice(s, ally.uid).ok).toBe(true);
+    expect(ally.atk).toBe(a0 + T.gemDumpPayoffAtk);
+    expect(ally.keywords).toContain('divineShield');
+    // and now that the pending is cleared, the bench unit plays normally
+    expect(playUnit(s, bench.uid).ok).toBe(true);
   });
 });
 

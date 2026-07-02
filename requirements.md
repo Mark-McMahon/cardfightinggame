@@ -398,6 +398,23 @@ build from functional mechanics only; original names/text/art throughout.
     roster with no eliminations yet still fights an empty board (a free win) — both are latent
     and unreachable under 8-player bot-fill, deferred to a separate decision.
 
+### Multi-lane scaling rework (Round 9, cont.) — Phase 2 review fixes
+
+43. **`playUnit` rejects while a target choice is outstanding; Gemtitan/Tuskmonger gem grants
+    become config knobs. (2026-07-02; completes #39, upholds its §6.6a invariant.)** Two
+    adversarial-review fixes on the shipped spendable-gems work (#39). (a) **Bug:** `fireBattlecry`
+    (via `playUnit`) unconditionally overwrote `s.pendingTarget`, so playing a chosenAlly battlecry
+    while a **paid** activation's target was armed silently discarded that pending **and the spent
+    gems** — violating #39's "an activation is a purchase, never fizzled" rule. Fix: `playUnit` now
+    returns `{ok:false, error:'resolve pending target first'}` when a target is outstanding — the same
+    guard `activateAbility` already had, so any target choice must be resolved before a new one is
+    armed. Behavior change to a shop intent (previously accepted-then-voided; now rejected, mutates
+    nothing), pinned by a new EV-ABL regression test. (b) **Config-driven balance (invariant #4):**
+    Gemtitan's battlecry `+3 gems` and Tuskmonger's onSell `+2 gems` were hardcoded literals (and
+    duplicated in card text) while every sibling generator used a knob; the #39 literal→knob pass
+    missed them. Now `engines.tuskers.gemtitanGems`/`tuskmongerGems`, single-sourced into both the
+    effect and the interpolated text. No combat/determinism/privacy change; all evals green.
+
 ## Tribe name map (clean-room — never ship the reference names)
 | Reference (do NOT ship) | Original name | Identity |
 |---|---|---|
