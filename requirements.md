@@ -593,6 +593,124 @@ build from functional mechanics only; original names/text/art throughout.
     declarative data). **Note:** Cindermarshal's go-tall line (#47b) remains deferred — the gate-spread does
     not change the bot's fill-to-7 policy, so `alliesAtMost≤4` is still unreached in the macro sim.
 
+### Multi-lane scaling rework (Round 9, cont.) — Phase 5: magnetic merge + Forgemaster + Corsair gold
+
+54. **MAGNETIC merge system — un-deferred (reserved keyword → LIVE), NOT a new keyword (2026-07-02;
+    Phase 5; refines #24).** Decision #24 ("no new keywords") RESERVED `magnetic` for the Constructs merge;
+    Phase 5 promotes it to live — this is un-deferring a reserved system, **not** a new keyword. During the
+    SHOP phase a Magnetic minion on the bench MAY MERGE into a friendly Construct on the board (new
+    `merge` intent `{unitUid,targetUid}`) instead of being played standalone: the target Construct
+    PERMANENTLY gains the magnetic unit's CURRENT stats (`magneticStatsCarried`) and keywords
+    (`magneticKeywordsStack`; the `magnetic` tag itself never transfers), and the magnetic unit is
+    CONSUMED — NOT a death, NOT a sell — its pool copy does NOT return (triple-merge accounting). Optional:
+    standalone play is NEVER blocked. Server-authoritative validation (rejection mutates nothing): shop
+    phase, no outstanding pending target, `unitUid` a magnetic BENCH unit, `targetUid` a friendly CONSTRUCT
+    on the BOARD, per-unit merge cap not exceeded. **Storage model:** merged stats live in `inst.atk/hp`
+    beyond print, merged keywords in `inst.keywords`, and a new `UnitInstance.mergeCount` bounds the
+    per-unit cap (`engines.constructs.magneticMergeCap`=5, discrete → breakpoint law #22). **Nullforge
+    ruling (verified):** `resetToBase` recomputes atk/hp from PRINTED stats, so it STRIPS the merged stats;
+    it is stat-only and does NOT touch keywords, so **merged keywords PERSIST through Nullforge** (a
+    documented ruling, EV-MAG-06). **Golden:** a golden magnetic unit merges its DOUBLED live stats
+    (EV-MAG-02). **Poison** one-shots the merged tower regardless of size (stat-agnostic, EV-MAG-07). New
+    Magnetic Constructs (clean-room §0-checked): **Boltfitter** T2 2/2, **Alloy Rig** T4 4/4 + Divine Shield
+    (renamed from the working title "Plasteel Rig" — "Plasteel" is a Warhammer 40k/Dune material, avoided
+    per §0), **Omega Chassis** T5 5/5 + Taunt. EV-KW-MAG (reserved-no-op pin) RETIRED → replaced by the
+    EV-MAG family + golden EV-GLD-15. Custom-handler registry stays EXACTLY 2 (all declarative).
+
+55. **Forgemaster — persistent per-player Sentinel modifier (2026-07-02; Phase 5).** New Construct T4 3/5
+    (clean-room §0: a generic occupational compound, not a reference-game card/hero — cleared). "Your
+    Sentinels have +`engines.constructs.forgemasterSentinelBuff`(=1)/+1, this game; stacks per Forgemaster
+    played." A NEW per-player PERSISTENT counter `ShopSession.forgemastersPlayed` (private) is incremented in
+    `playUnit` when a Forgemaster is played to board, and is NEVER decremented — the stack is
+    lifetime-per-copy-played and SURVIVES the Forgemaster's sale/death (recorded rule; EV-FRG-02). It rides
+    into combat on a new `CombatBoard.forgemastersPlayed` scalar (the Phase-3 lifetimeDeaths pattern —
+    `resolveCombat` signature UNCHANGED, determinism holds). Applied at Sentinel CREATION: every summoned
+    Sentinel (all three sites — Foundry deathrattle / Titanforge startOfCombat / Aegis Prime deathrattle —
+    are IN COMBAT) gains +buff×stacks (EV-FRG-03, golden EV-GLD-16). **Detection is content-driven:** the
+    card carries a `yourSentinels`/`statBuffOnEvent` aura MARKER (promoted reserved→live, the #52 pattern) —
+    NOT a board-read passive; `playUnit` reads the marker to bump the counter. Combat identifies the buffed
+    token via `engines.constructs.forgemasterSentinelId` (a config content-pointer, cf. techInjection.cardIds).
+
+56. **Corsair GOLD-economy cards — gold ONLY, currencies stay separate (2026-07-02; Phase 5; upholds the
+    gold≠gems hard rule).** Four clean-room Corsairs, every number a config knob (`engines.corsairs`).
+    **Bursar** T2 2/2: battlecry queues `bursarGold`(=2) via the new `gainGoldNextTurn` action into a new
+    private single-accumulator `ShopSession.delayedGold`, DELIVERED at the start of the next shop phase and
+    clamped to the effective cap (EV-GOLD-01). **Fence** T3 3/3: a `yourEconomy`/`sellRefundSet` aura raises
+    the sell refund to `fenceSellRefund`(=2) while on board (non-stacking: helper takes the max; reverts on
+    leave; EV-GOLD-04). **Moneylender** T3 2/4: a `yourEconomy`/`goldNextTurnIfRich` aura — at end of turn,
+    if unspent gold ≥ `moneylenderThreshold`(=3), queues `moneylenderGold`(=1) ONCE (presence-based,
+    non-stacking; EV-GOLD-02). **Vault Keeper** T4 3/5 Taunt: a `yourEconomy`/`goldCapSet` aura raises the
+    EFFECTIVE gold cap to `vaultKeeperGoldCap`(=13) while on board; reverts on leave (EV-GOLD-03).
+    **Sub-decisions recorded:** (a) delayed gold is a SINGLE accumulator — multiple Bursars each queue their
+    own (stacking), Moneylender adds once (non-stacking) — clamped to the (possibly Vault-Keeper-raised) cap
+    at DELIVERY time. (b) One `effectiveGoldCap(s)` helper (query-at-read-time over `yourEconomy` auras) is
+    used by the income clamp AND every gold gain (delayed delivery + Gemwright's gem→gold bridge), so it
+    reverts automatically when Vault Keeper leaves. (c) `effectiveSellRefund(s)` mirrors it for Fence.
+    **Churn-loop accounting (EV-GOLD-05):** a buy(3g)/sell(2g-with-Fence) cycle STRICTLY loses 1 gold, so it
+    cannot mint infinite money (bounded by finite per-turn gold); Fence only changes a GOLD number and
+    Tuskmonger only makes gems, so gold/gems stay SEPARATE — the ONLY bridge remains Gemwright (gems→gold,
+    one-way). **Judgment call:** with Fence the Tuskmonger churn converts gold→gems more efficiently (1g:2
+    gems) but remains lossy, self-limiting (each cycle spends a body + net gold), and bounded; gems only fuel
+    the poison-beatable Tusker doubler — watched by the sim hoarding diagnostic, not a new bridge.
+
+57. **Reachability restored by CREDITING the new payoffs (not by gate relaxation); #47b/#53 status
+    (2026-07-02; Phase 5).** The 8 new pool cards diluted the EV-BAL-B reachability metric to 48.4% on the
+    canonical `run` 200-match report (below the 50% floor, exactly the razor-thin margin #53 flagged). The
+    #53-suggested gate relaxations (7→6 / 6→5 on `alliesAtStart` full-board cards) were tried and had ZERO
+    effect — the metric is limited by breakpoint OWNERSHIP DENSITY on splash boards, not by those thresholds
+    — and they flagged units OP, so they were REVERTED (Phase-4 gates unchanged). The principled fix, matching
+    the #39 precedent (a purchased spend-gated ability counts toward reachability), is to CREDIT the assembled
+    MAGNETIC merge tower (`mergeCount>0`) as a primary payoff in the harness — added to `breakpointsHit` as a
+    synthetic id (`constructs_magnetic_merge`, never a catalog card, so it never collides with the ⭐ registry).
+    Result: reachability 52.6% PASS (headroom restored above the 50.2% baseline). **CORRECTION (see #58):** the
+    Forgemaster stack (`forgemastersPlayed>0`) was ALSO credited (`constructs_forgemaster_stack`) in the first
+    cut, but instrumentation showed it fires in only ~1/1600 macro player-games (dead in the macro sim) so its
+    credit was VACUOUS (removing it moved the gate 0.00pp — 52.59% either way); that credit was REMOVED — the
+    52.6% pass rests entirely on the merge tower, which fires 116/1600. **Bot policy:** a deterministic
+    `bestMerge` (committed Construct build → merge the lowest-uid magnetic bench unit into the biggest under-cap
+    tower) fires the go-tall consolidation line (EV-SIM-MAG-01); the new cards get NO breakpoint-sized scoring
+    bump (over-valuing them crowds real breakpoints off splash boards — the cause of an interim gate failure),
+    reaching combat as ordinary on-tribe bodies. **#47(b) (Cindermarshal go-tall) NOT closed:** magnetic merge
+    is a Construct-tribe consolidation tool, so it makes CONSTRUCT boards go-narrow (the anti-wide tech #47b
+    pointed at now exists + is bot-exercised), but Cindermarshal is an INFERNAL card and the bot does not build
+    Infernal+Construct-narrow with it deployed, so `alliesAtMost≤4` on Cindermarshal specifically stays
+    unreached — the deferral MOVES to final validation as a documented sim-coverage gap (design-spec §11.2).
+    **#53 CLOSED:** the flagged EV-BAL-B headroom is restored (52.6%), so the "restore the margin before
+    shipping gate-tightening content" obligation is met. **Sim vs baseline:** Infernals (avgP 4.57) + Revenants
+    (4.28) are NOT bottom-two (bottom-two are primordials 5.53 / wildkin 5.91, the pre-existing weak tribes);
+    Constructs improved (3.70 vs 4.01 baseline — driven by the MAGNETIC MERGE line, see #58 correction, NOT
+    Forgemaster synergy); Corsairs stable (4.34). Titanforge is soft-flagged OP (avgP 2.30, a diagnostic not a
+    gate — its strength is its OWN on-summon Sentinel body + `alliesAtStart` payoff, NOT the near-never-played
+    Forgemaster stack; poison/Nullforge/width still counter it).
+
+58. **Forgemaster macro-sim coverage GAP + reachability-credit correction (2026-07-02; Phase 5,
+    review fix — refines #55/#57).** A review of the #57 payoff-crediting found two problems, both fixed
+    here WITHOUT balance number-tuning (per the standing "document drift, don't tune" rule):
+    (a) **The `constructs_forgemaster_stack` reachability credit was VACUOUS.** Instrumenting a 200-match
+    (1600 player-game) macro run through the real Match+BotAgent: `constructs_forgemaster` appears in shop
+    in ~209 player-games and is bought/owned in ~101, yet `forgemastersPlayed>0` in only **1** player-game —
+    bots buy the 3/5 body but its deliberately-small (no-payoff-bump, #57) valuation leaves it BENCHED and
+    later sold, never developed to board, so the persistent counter never increments. The credit therefore
+    contributed ~1 datapoint to n=656 and did nothing to validate the Forgemaster→Sentinel combat scalar.
+    **FIX:** the credit is REMOVED from `sim/harness.ts` (measured 0.00pp effect — reachability is 52.59%
+    with or without it); the 52.6% EV-BAL-B pass now rests ENTIRELY on the magnetic merge tower (116/1600).
+    Forgemaster's combat scalar stays PINNED by the determinism + property evals (EV-FRG-01..03, EV-GLD-16),
+    and its macro-sim non-coverage is now a DOCUMENTED gap (design-spec §11.2), exactly like the #47(b)
+    Cindermarshal go-tall gap — NOT number-tuned away (raising its valuation to force it onto board is the
+    very move that broke EV-BAL-B in #57's interim). (b) **False causal claim corrected.** The #57 report
+    attributed the Constructs placement gain (4.01→3.70) and Titanforge's avgP 2.30 to "Forgemaster→Sentinel
+    synergy"; with Forgemaster played in only 1/1600 games that is impossible — the gain is the MAGNETIC MERGE
+    line (116/1600 towers) and Titanforge's strength is its own on-summon Sentinel body + `alliesAtStart`
+    payoff. #57's text is corrected in place and this entry records the measurement. (c) **EV-SIM-P5-02
+    hardened:** the coverage guard now asserts a minimum firing RATE for the merge tower (≥20/640 player-games
+    on the `run` seed, vs an observed ~40) instead of the previous fragile "≥1 player ever assembled it"
+    existence check (which a single event — the Gorgemaw lesson — could green-light); the Forgemaster half of
+    that guard is dropped as a documented gap. (d) **Ratification flag (final validation):** the merge-tower
+    reachability credit is a metric-CLASS extension that landed alongside the content it helps validate; it is
+    principled (a real assembled go-tall payoff, 116/1600, cap=5 reached, mirroring the #39 spend-gated
+    precedent) but a human should explicitly RATIFY at final validation that the merge tower is a legitimate
+    primary payoff rather than a goalpost move. Flagged in `sim/harness.ts` + design-spec §11.2.
+
 ## Tribe name map (clean-room — never ship the reference names)
 | Reference (do NOT ship) | Original name | Identity |
 |---|---|---|

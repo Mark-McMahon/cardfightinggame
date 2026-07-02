@@ -26,8 +26,12 @@ describe('EV-INV-PRIV — public/private channel split', () => {
 
     // no private field KEY appears ANYWHERE in the serialized public state (match `"key":`, not values —
     // e.g. the phase value "shop" is legitimately public). `abilities` = activated-ability state (#39).
+    // Phase 5: the delayed-gold queue, the persistent forgemaster count, and per-unit merge counts are
+    // PRIVATE session state and must never surface on the public channel (decision #54/#55/#56).
+    m.sessions[0].delayedGold = 4;
+    m.sessions[0].forgemastersPlayed = 2;
     const pub = JSON.stringify(m.state);
-    for (const key of ['gold', 'gems', 'shop', 'bench', 'board', 'hand', 'lastCombatLog', 'discover', 'pendingTarget', 'log', 'baseIncome', 'abilities']) {
+    for (const key of ['gold', 'gems', 'shop', 'bench', 'board', 'hand', 'lastCombatLog', 'discover', 'pendingTarget', 'log', 'baseIncome', 'abilities', 'delayedGold', 'forgemastersPlayed', 'mergeCount']) {
       expect(pub.includes(`"${key}":`), `public state leaks key ${key}`).toBe(false);
     }
 

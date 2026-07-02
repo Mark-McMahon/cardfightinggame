@@ -52,7 +52,7 @@ export const breakpoints: BreakpointsConfig = {
     // generator / a summon-battlecry), not one autopilot Brambleling. tokenAtk/tokenHp only.
     { card: 'wildkin_motherthorn', counter: 'tokensThisTurn', threshold: 3, tokenAtk: 2, tokenHp: 2 },
     { card: 'wildkin_thornwarden', counter: 'alliesAtStart', threshold: 5, once: true, atk: 2, hp: 4 }, // Phase 4 gate-spread: STAYS at 5 (the low-width anchor of the diversified alliesAtStart ladder 5/6/7, decision #48)
-    { card: 'wildkin_grovelord', counter: 'alliesAtStart', threshold: 7, once: true, atk: 2, hp: 2 }, // Phase 4 gate-spread: 5→7 — a FULL-BOARD payoff (decision #48). Balance-risk noted: nerfs an already-weak line; no compensating tuning this PR (rework rule)
+    { card: 'wildkin_grovelord', counter: 'alliesAtStart', threshold: 7, once: true, atk: 2, hp: 2 }, // Phase 4 gate-spread: 5→7 — a FULL-BOARD payoff (decision #48). Balance-risk noted: nerfs an already-weak line; no compensating tuning this PR (rework rule). Phase 5 (#57): a 7→6 relaxation was tried to restore EV-BAL-B headroom and REVERTED (zero effect on the metric)
     { card: 'wildkin_packmother', counter: 'deaths', threshold: 2, atk: 2, hp: 2 }, // each-N (existing avenge); hp aligned to as-shipped card payoff (engines.wildkin.avengePayoff = 2/2)
     { card: 'wildkin_brackentide', counter: 'battlecries', threshold: 2, summonUnitId: 'wildkin_thornpup', summonCount: 2 },
     // ── Revenants / DEATHS ──
@@ -106,7 +106,7 @@ export const breakpoints: BreakpointsConfig = {
     //    cleave) + poison. Reuses `battlecries` (each play) and `alliesAtStart` (went wide). ──
     { card: 'primordials_stormcaller', counter: 'battlecries', threshold: 2, atk: 2, hp: 1 },
     { card: 'primordials_tempest', counter: 'alliesAtStart', threshold: 6, once: true, atk: 2 }, // Phase 4 gate-spread: 5→6 (mid-width, decision #48)
-    { card: 'primordials_worldspark', counter: 'alliesAtStart', threshold: 7, once: true, grantKeyword: 'cleave' }, // Phase 4 gate-spread: 5→7 — FULL-BOARD cleave grant (decision #48). Balance-risk noted (see Grovelord); no compensating tuning this PR
+    { card: 'primordials_worldspark', counter: 'alliesAtStart', threshold: 7, once: true, grantKeyword: 'cleave' }, // Phase 4 gate-spread: 5→7 — FULL-BOARD cleave grant (decision #48). Balance-risk noted (see Grovelord); no compensating tuning this PR. Phase 5 (#57): a 7→6 relaxation was tried + REVERTED (zero effect on EV-BAL-B; reachability restored via harness payoff-credit instead)
     // ── Sirens / SPELLCRAFT: a second POISON home + start-of-combat burst. Counter: divine-shield
     //    walls (blank the poison instance) + being out-tempo'd. Reuses `battlecries`. ──
     { card: 'sirens_deepchanter', counter: 'battlecries', threshold: 2, atk: 2, hp: 2 },

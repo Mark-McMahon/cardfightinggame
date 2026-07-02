@@ -58,6 +58,7 @@ export {
   tierUp,
   playUnit,
   moveUnit,
+  mergeUnit,
   activateAbility,
   activatedCost,
   resolveTargetChoice,
@@ -65,6 +66,7 @@ export {
   startShopPhase,
   endOfTurnPhase,
   boardToCombat,
+  effectiveGoldCap,
   toPrivateState,
 } from './shop';
 export type { OpResult, ShopSession, SessionOpts } from './shop';

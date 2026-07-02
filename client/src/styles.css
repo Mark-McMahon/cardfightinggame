@@ -395,6 +395,8 @@ input {
 .discover-card .unit:hover { z-index: 10; }
 .dragwrap.dragging, .bslot.dragging { opacity: 0.35; }
 .board-row.drop-over { background: #2c2011; }
+/* magnetic merge target (decision #54): drag a magnetic bench unit onto a friendly Construct */
+.bslot.merge-over { outline: 2px dashed var(--good, #7fe0ff); outline-offset: 2px; border-radius: 8px; }
 .drop-marker {
   flex: 0 0 4px; align-self: stretch; min-height: var(--card-h); border-radius: 3px;
   background: var(--accent); box-shadow: 0 0 10px var(--accent);

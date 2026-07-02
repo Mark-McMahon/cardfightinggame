@@ -204,6 +204,25 @@ export function runMatch(seed: string, seats: SeatSpec[]): MatchResult {
       for (const [cardId, uses] of Object.entries(s.abilityUses)) {
         if (uses > 0 && hasSpendGated(cardId)) per[p.seat].breakpointsHit.add(cardId);
       }
+      // Phase 5 (#54): the MAGNETIC merge tower is an assembled PRIMARY PAYOFF (a go-tall
+      // consolidation body) — credit it toward the reachability gate exactly as #39 credits a
+      // PURCHASED spend-gated ability. A splash that assembled a merged tower HAS reached a primary
+      // payoff. Synthetic id (not a catalog card) so it never collides with the breakpoints.list ⭐
+      // registry. FLAGGED for final-validation ratification (#58): this metric extension landed with
+      // the same content it helps validate, so a human must ratify the merge tower as a legitimate
+      // primary payoff — it clears empirically (116/1600 player-games on the canonical `run` seed,
+      // per-unit cap=5 reached), matching the #39 spend-gated precedent, so it is a payoff-CLASS
+      // extension, not a goalpost move.
+      //
+      // The Forgemaster Sentinel-stack (#55) is DELIBERATELY NOT credited here. Measured through the
+      // real Match+BotAgent it fires in only ~1/1600 macro player-games (bots buy the 3/5 body, but
+      // its no-payoff-bump valuation — kept small on purpose so it can't crowd real breakpoints off
+      // splash builds, #57 — leaves it benched and later sold, never developed to board). A credit
+      // would be VACUOUS: removing it moved the gate 0.00pp (52.59% either way on the `run` seed). Its
+      // combat scalar (`forgemastersPlayed` → Sentinel buff) is instead PINNED by the determinism +
+      // property evals (EV-FRG-01..03, EV-GLD-16); the macro-sim non-coverage is a DOCUMENTED gap
+      // (#58, design-spec §11.2), NOT number-tuned away — matching the #47(b) Cindermarshal precedent.
+      if (s.board.some((u) => (u.mergeCount ?? 0) > 0)) per[p.seat].breakpointsHit.add('constructs_magnetic_merge');
       // track peak developed board + max tier
       const rec = per[p.seat];
       rec.maxTier = Math.max(rec.maxTier, s.tier);

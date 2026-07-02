@@ -574,6 +574,11 @@ const RECIPES: Record<string, () => string> = {
   constructs_titanforge: () => con({ shape: 'big', skin: 'steel', head: 'box', eyes: 'dual', mouth: 'grille', cog: 1, rivets: 1, antenna: 'twin' }),
   constructs_nullforge: () => glowMotes('#9fb4c9') + con({ shape: 'wide', skin: 'iron', head: 'dome', eyes: 'cyclops', mouth: 'grid', antenna: 'dish', cog: 1 }),
   constructs_aegisprime: () => glowMotes('#d8eefc') + con({ shape: 'big', skin: 'steel', head: 'box', eyes: 'visor', mouth: 'grille', rivets: 1, shield: 1, antenna: 'dish', cog: 1 }),
+  // Phase 5 MAGNETIC merge sources + Forgemaster.
+  constructs_boltfitter: () => con({ shape: 'sm', skin: 'bronze', head: 'box', eyes: 'dual', mouth: 'grid', antenna: 'rod' }),
+  constructs_alloyrig: () => con({ shape: 'wide', skin: 'steel', head: 'box', eyes: 'visor', mouth: 'grid', rivets: 1, shield: 1 }),
+  constructs_omegachassis: () => con({ shape: 'big', skin: 'iron', head: 'box', eyes: 'dual', mouth: 'grid', antenna: 'twin', rivets: 1 }),
+  constructs_forgemaster: () => con({ shape: 'round', skin: 'steel', head: 'dome', eyes: 'visor', mouth: 'grille', antenna: 'twin', cog: 1 }),
   // TUSKERS — spoils / exponential doubler
   tuskers_gemsnout: () => tsk({ shape: 'sm', skin: 'boar', tusk: 'small', eyes: 'greedy', gem: 1, gemCol: '#4fb36a' }),
   tuskers_tuskhoarder: () => tsk({ shape: 'round', skin: 'hide', tusk: 'small', eyes: 'greedy', gem: 1, hoard: 1 }),
@@ -619,6 +624,11 @@ const RECIPES: Record<string, () => string> = {
   corsairs_seaqueen: () => cor({ shape: 'tall', skin: 'navy', hat: 'tricorne', mouth: 'smile', shield: 1, reborn: 1 }),
   corsairs_dreadnought: () => cor({ shape: 'big', skin: 'brine', hat: 'tricorne', beard: 1, eyepatch: 1, mouth: 'grin', scar: 1, reborn: 1 }),
   corsairs_quartermaster: () => cor({ shape: 'round', skin: 'brine', hat: 'tricorne', beard: 1, eyepatch: 1, mouth: 'smile', reborn: 1 }) + droplet(150, 150, '#e8c45a'),
+  // Phase 5 GOLD-economy Corsairs (gold-coin motif to read as the money crew).
+  corsairs_bursar: () => cor({ shape: 'sm', skin: 'tan', hat: 'bandana', bandanaCol: '#2e7d55', mouth: 'smile' }) + droplet(150, 150, '#e8c45a'),
+  corsairs_fence: () => cor({ shape: 'round', skin: 'ash', hat: 'bandana', bandanaCol: '#4a3f6b', eyes: 'fierce', mouth: 'grin' }) + droplet(52, 150, '#e8c45a'),
+  corsairs_moneylender: () => cor({ shape: 'tall', skin: 'tan', hat: 'tricorne', beard: 1, mouth: 'smile' }) + droplet(150, 150, '#e8c45a'),
+  corsairs_vaultkeeper: () => cor({ shape: 'big', skin: 'navy', hat: 'tricorne', beard: 1, eyepatch: 1, mouth: 'smile', shield: 1 }) + droplet(52, 150, '#e8c45a'),
 };
 
 // Generic per-tribe fallback for any unit with no specific recipe (e.g. a non-catalog

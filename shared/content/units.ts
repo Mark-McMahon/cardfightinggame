@@ -1261,6 +1261,69 @@ export const UNITS: UnitCard[] = [
     ],
   },
 
+  // ─── Constructs MAGNETIC merge (Phase 5, decision #54 — reserved keyword → live) ────────────────
+  // A magnetic minion may be MERGED into a friendly Construct during the shop (the `merge` intent):
+  // the tower PERMANENTLY gains the magnetic unit's current stats + keywords and the magnetic unit is
+  // CONSUMED (not a death/sell; pool copy does not return, like a triple). Optional — magnetic units also
+  // play standalone. A go-tall CONSOLIDATION tool; folds to POISON (one-shots the tower, stat-agnostic),
+  // Nullforge (strips the merged stats back to print), and WIDTH (one tall body is out-actioned). Per-unit
+  // merge cap = engines.constructs.magneticMergeCap (discrete → breakpoint law #22). No new keyword/handler.
+  {
+    id: 'constructs_boltfitter',
+    name: 'Boltfitter',
+    tribe: 'constructs',
+    tier: 2,
+    atk: 2,
+    hp: 2,
+    keywords: ['magnetic'],
+    axis: ['assembly'],
+    text: 'Magnetic. (Play it, or merge it into a friendly Construct to hand over its stats.)',
+    effects: [],
+  },
+  {
+    id: 'constructs_alloyrig',
+    name: 'Alloy Rig',
+    tribe: 'constructs',
+    tier: 4,
+    atk: 4,
+    hp: 4,
+    keywords: ['magnetic', 'divineShield'],
+    axis: ['assembly', 'endure'],
+    text: 'Magnetic. Divine Shield. (Merge to hand a Construct its stats AND Divine Shield.)',
+    effects: [],
+  },
+  {
+    id: 'constructs_omegachassis',
+    name: 'Omega Chassis',
+    tribe: 'constructs',
+    tier: 5,
+    atk: 5,
+    hp: 5,
+    keywords: ['magnetic', 'taunt'],
+    axis: ['assembly', 'endure'],
+    text: 'Magnetic. Taunt. (Merge to hand a Construct its stats AND Taunt.)',
+    effects: [],
+  },
+  {
+    // ⭐ NEW (Phase 5, decision #55) — the persistent Sentinel modifier. Each Forgemaster you PLAY adds a
+    // GAME-LONG +1/+1 stack to every FUTURE Sentinel at its combat creation (Foundry/Titanforge/Aegis).
+    // The stack SURVIVES this Forgemaster's sale/death (a lifetime per-copy-played counter). Modeled as a
+    // `yourSentinels`/`statBuffOnEvent` aura MARKER (a persistent-counter marker, NOT a board-read passive —
+    // §6.4): playUnit reads the marker to bump the private `forgemastersPlayed` counter, which rides into
+    // combat on the CombatBoard scalar. Folds to POISON/TALL exactly like the Sentinels it buffs.
+    id: 'constructs_forgemaster',
+    name: 'Forgemaster',
+    tribe: 'constructs',
+    tier: 4,
+    atk: 3,
+    hp: 5,
+    keywords: [],
+    axis: ['assembly'],
+    text: `Your Sentinels have +${engines.constructs.forgemasterSentinelBuff}/+${engines.constructs.forgemasterSentinelBuff}, this game (stacks per Forgemaster played).`,
+    effects: [],
+    auras: [{ scope: 'yourSentinels', modifier: { kind: 'statBuffOnEvent', value: engines.constructs.forgemasterSentinelBuff } }],
+  },
+
   // ═══════════════════════════ TUSKERS — SPOILS (purchased doubler, decision #39) ═══
   // Gem greed: hoard SPENDABLE gems each shop turn, then BUY doubles for a carry. The
   // doubler is an ACTIVATED ability (once per turn per minion): pay the shared escalating
@@ -2057,6 +2120,69 @@ export const UNITS: UnitCard[] = [
         actions: [{ type: 'buffStats', atk: 2, hp: 2, permanent: true }],
       },
     ],
+  },
+
+  // ─── Corsairs GOLD economy (Phase 5, decision #56 — gold ONLY; gold/gems stay separate) ──────────
+  // Four tempo-economy bodies: delayed gold (Bursar), a raised sell refund (Fence), conditional
+  // delayed gold (Moneylender), and a raised gold cap (Vault Keeper). Every number is a config knob.
+  // A buy(3g)/sell(≤2g) churn STRICTLY loses gold, so no loop mints infinite money; gems (Tuskmonger)
+  // stay a separate currency (the ONLY bridge remains Gemwright, gems→gold, one-way).
+  {
+    id: 'corsairs_bursar',
+    name: 'Bursar',
+    tribe: 'corsairs',
+    tier: 2,
+    atk: 2,
+    hp: 2,
+    keywords: [],
+    axis: ['tempo'],
+    text: `Battlecry: gain ${C.bursarGold} gold at the start of your next turn.`,
+    effects: [
+      {
+        trigger: { type: 'battlecry' },
+        target: { selector: 'self' },
+        actions: [{ type: 'gainGoldNextTurn', amount: C.bursarGold }],
+      },
+    ],
+  },
+  {
+    id: 'corsairs_fence',
+    name: 'Fence',
+    tribe: 'corsairs',
+    tier: 3,
+    atk: 3,
+    hp: 3,
+    keywords: [],
+    axis: ['tempo'],
+    text: `Your minions sell for ${C.fenceSellRefund} gold.`,
+    effects: [],
+    auras: [{ scope: 'yourEconomy', modifier: { kind: 'sellRefundSet', value: C.fenceSellRefund } }],
+  },
+  {
+    id: 'corsairs_moneylender',
+    name: 'Moneylender',
+    tribe: 'corsairs',
+    tier: 3,
+    atk: 2,
+    hp: 4,
+    keywords: [],
+    axis: ['tempo'],
+    text: `End of turn: if you have ${C.moneylenderThreshold}+ unspent gold, gain ${C.moneylenderGold} gold next turn.`,
+    effects: [],
+    auras: [{ scope: 'yourEconomy', modifier: { kind: 'goldNextTurnIfRich', value: C.moneylenderGold } }],
+  },
+  {
+    id: 'corsairs_vaultkeeper',
+    name: 'Vault Keeper',
+    tribe: 'corsairs',
+    tier: 4,
+    atk: 3,
+    hp: 5,
+    keywords: ['taunt'],
+    axis: ['tempo', 'endure'],
+    text: `Taunt. While on your board, your gold cap is ${C.vaultKeeperGoldCap}.`,
+    effects: [],
+    auras: [{ scope: 'yourEconomy', modifier: { kind: 'goldCapSet', value: C.vaultKeeperGoldCap } }],
   },
 ];
 

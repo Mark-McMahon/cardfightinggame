@@ -121,11 +121,11 @@ hardcoded in logic. §7.6 records where the current code falls short of (2) and 
 **Goals**
 - One 8-seat room, joinable by short code, fillable with bots.
 - Full shop → combat → placement loop with freeze and triple/upgrade.
-- **Nine original tribes; 93 unit definitions** (87 purchasable + 6 tokens) across tiers
-  1–6, exercising 5 live keywords (`taunt`/`divineShield`/`poison`/`reborn`/`cleave`;
-  `magnetic` reserved) and the breakpoint content model (§6.6). The design law of
-  "breakpoints over linear stacking" (§6.6, decision #22) is the through-line. (Count
-  includes the 7 cards added by the §16 audit; per-tribe breakdown in §8.)
+- **Nine original tribes; 107 unit definitions** (101 purchasable + 6 tokens) across tiers
+  1–6, exercising all **6 live keywords** (`taunt`/`divineShield`/`poison`/`reborn`/`cleave`/
+  `magnetic` — the last un-deferred by the Phase-5 Constructs merge, decision #54) and the
+  breakpoint content model (§6.6). The design law of "breakpoints over linear stacking"
+  (§6.6, decision #22) is the through-line. (Per-tribe breakdown in §8.)
 - Seeded, server-authoritative combat with a client replay of a server event log.
 - Heuristic, tribe- and axis-aware bots usable as both seat-fillers and simulator agents.
 - Config-driven balance + a headless **micro (combat)** and **macro (full-match)**
@@ -141,8 +141,9 @@ hardcoded in logic. §7.6 records where the current code falls short of (2) and 
   space for them (§6.7, §12.6); they are deferred, not designed-out.
 - **No ranked/MMR, cosmetics, monetization, friend lists, or cross-region matchmaking.**
 - **No mobile-native client.** Web (React + Vite) only.
-- **`magnetic` keyword is reserved** (Constructs' merge) but not yet resolved by the
-  engine; Constructs currently ship via death/assembly breakpoints, not merge.
+- ~~**`magnetic` keyword is reserved**~~ **RESOLVED (Phase 5, decision #54):** the Constructs
+  MERGE system is live — a Magnetic minion may merge into a friendly Construct in the shop (§4.2,
+  §5, §8). Constructs also still ship death/assembly breakpoints; merge is an additional go-tall line.
 
 ---
 
@@ -198,6 +199,7 @@ with a reason. The intent set (`shared/types` `Intent`):
 | `tierUp` | Raise shop tier, unlocking higher-tier units next roll. | escalating, see §5 |
 | `playUnit` | Move a bench unit onto the board (≤ `boardCap`). Triggers **battlecry**. | — |
 | `moveUnit` | Reorder units on the board (positioning). | — |
+| `merge` | **(Phase 5, #54)** MERGE a MAGNETIC bench unit into a friendly Construct on the board: the tower permanently gains the magnetic unit's stats + keywords; the magnetic unit is consumed (no pool return). Optional — standalone `playUnit` is always allowed. | — |
 | `targetChoice` | Resolve a pending targeted battlecry **or targeted activated ability** (player picks the target). | — |
 | `discoverPick` | Resolve a Discover (pick 1 of 3). | — |
 | `activate` | Buy a board unit's **activated ability** with gems (decision #39, §6.6a). Once per turn per minion; board units only. | gem cost per card (§6.6a) |
@@ -343,6 +345,26 @@ Rules of the two-currency system:
 - Cost knobs live in `engines.tuskers` (`doubleBaseCost`, `doubleCostStep`, `gemwrightCost`,
   `gemwrightGold`, `facetguardCost`, `oreseekerCost`, `goldgrinGems`).
 
+**Corsair GOLD economy (decision #56, Phase 5) — gold ONLY, currencies stay separate.** Four
+Corsair cards add gold-tempo levers; every number is a config knob in `engines.corsairs`:
+- **Delayed-gold queue.** A single private accumulator `ShopSession.delayedGold`, delivered at
+  the START of the next shop phase (then cleared) and clamped to the **effective** gold cap.
+  **Bursar** (battlecry, action `gainGoldNextTurn`) queues `bursarGold`; multiple Bursars each
+  queue their own (stacking). **Moneylender** (end-of-turn `yourEconomy`/`goldNextTurnIfRich`
+  aura) queues `moneylenderGold` ONCE if unspent gold ≥ `moneylenderThreshold` (presence-based,
+  non-stacking).
+- **Effective gold cap.** `effectiveGoldCap(s) = max(economy.goldCap, Vault Keeper's
+  vaultKeeperGoldCap)` — a query-at-read-time helper over `yourEconomy`/`goldCapSet` auras
+  (**Vault Keeper**), so it reverts the instant Vault Keeper leaves the board. The income clamp
+  **and every gold gain** (delayed-gold delivery + Gemwright's gem→gold bridge) use it.
+- **Sell refund.** `effectiveSellRefund(s) = max(economy.sellRefund, Fence's fenceSellRefund)`
+  over `yourEconomy`/`sellRefundSet` auras (**Fence**), non-stacking (max), reverts on leave.
+- **The gold/gems wall holds.** These touch only GOLD; no gold→gems path is added. A
+  buy(`buyCost`=3)/sell(`fenceSellRefund`=2) churn STRICTLY loses gold each cycle, so it is
+  bounded (cannot mint money); the Fence+Tuskmonger loop converts gold→gems only lossily and
+  self-limitingly (a spent body + net gold per cycle) — watched by the hoarding diagnostic, never
+  a new bridge (the ONLY bridge stays Gemwright, gems→gold, one-way).
+
 ---
 
 ## 6. Card / unit data model
@@ -366,7 +388,8 @@ type TribeId = 'wildkin' | 'reefkin' | 'infernals' | 'tuskers' | 'primordials'
              | 'sirens' | 'revenants' | 'constructs' | 'corsairs';   // all nine shipped
 
 type Keyword = 'taunt' | 'divineShield' | 'poison' | 'reborn' | 'cleave' | 'magnetic';
-//  [live] taunt, divineShield, poison, reborn, cleave.   [reserved] magnetic (Constructs merge).
+//  [live] taunt, divineShield, poison, reborn, cleave, magnetic (Phase 5 Constructs SHOP-phase merge,
+//  #54 — a merge tag with no COMBAT effect; the merge itself is a shop reducer op, §4.2/§8).
 ```
 
 **`Axis`** — the static, categorical "which manufactured-event lane a card feeds" glyph
@@ -472,15 +495,27 @@ change how *other* effects resolve, queried by the resolver:
 
 ```ts
 interface AuraSpec {
-  scope: 'selfTribeAllies' | 'yourEndOfTurn' | 'yourBattlecries' | 'leftmost' // [live]
-       | 'allAllies' | 'yourGems' | 'yourSpells' | 'shopCostTribe';       // [reserved]
-  modifier: { kind: 'triggerMultiplier' | 'damageMultiplier' | 'attackBuff' // [live]
-                  | 'costReduction' | 'gemValueAdd' | 'spellPowerAdd' | 'statBuffOnEvent'; // [reserved]
+  scope: 'selfTribeAllies' | 'yourEndOfTurn' | 'yourBattlecries' | 'leftmost'            // [live]
+       | 'yourSentinels' | 'yourEconomy'                                                 // [live] Phase 5
+       | 'allAllies' | 'yourGems' | 'yourSpells' | 'shopCostTribe';                      // [reserved]
+  modifier: { kind: 'triggerMultiplier' | 'damageMultiplier' | 'attackBuff'              // [live]
+                  | 'statBuffOnEvent'                                                     // [live] Phase 5 (Forgemaster)
+                  | 'goldCapSet' | 'sellRefundSet' | 'goldNextTurnIfRich'                 // [live] Phase 5 (gold economy)
+                  | 'costReduction' | 'gemValueAdd' | 'spellPowerAdd';                    // [reserved]
               value: number; tribe?: TribeId; };
   stacks?: boolean;                                    // stacking → multiply; non-stacking → max
   activeWhen?: { counter: 'deaths' | 'revenantDeaths'; threshold: number }; // combat-side breakpoint gate
 }
 ```
+**Phase 5 aura families (all query-at-read-time, so they revert when the bearer leaves).**
+**`yourSentinels`/`statBuffOnEvent`** (Forgemaster, #55) is a PERSISTENT-COUNTER MARKER, not a
+board-read passive: `playUnit` reads the marker to increment the private `forgemastersPlayed`
+counter (never decremented — survives sale/death), which rides into combat on the
+`CombatBoard.forgemastersPlayed` scalar and buffs every summoned Sentinel by `value` × stacks at
+its creation (§7). **`yourEconomy`** (gold cards, #56) is a SHOP-read player-economy modifier —
+`goldCapSet` (Vault Keeper → effective gold cap), `sellRefundSet` (Fence → sell refund),
+`goldNextTurnIfRich` (Moneylender → end-of-turn delayed gold). All are ignored by the combat aura
+queries (§5).
 `activeWhen` converts an always-on multiplier into a **breakpoint** — the aura is inert
 until the bearer's side reaches `threshold` of `counter`. This is how Pale Lich's damage
 amp is contained (§6.6). **POSITIONAL aura (`leftmost` + `attackBuff`, decision #52).** A
@@ -721,7 +756,9 @@ it silently became reserved; a card needing something not listed means *stop and
 - **Actions — live, triggered effects:** `buffStats`(45) · `grantKeyword`(17) · `summon`(13) ·
   `giveGem`(7) · `destroy`(4) · `dealDamage`(3) · `custom`(2) · `plantDeathrattle`(1) ·
   `resetToBase`(1) · `multiplyStats`(1 — Phase 3 Gravemonarch's `permanent:true` double, §7.5)
-  · **`destroyAlly`(1)** · **`absorbStats`(1)** — Phase 3 shop-phase CONSUMPTION (Gorgemaw).
+  · **`destroyAlly`(1)** · **`absorbStats`(1)** — Phase 3 shop-phase CONSUMPTION (Gorgemaw)
+  · **`gainGoldNextTurn`(1 — Phase 5 Bursar):** a triggered SHOP action queuing gold for the START
+  of the next shop phase (delayed queue, §5); no combat effect.
   **`destroy` is PROMOTED from the `dealDamage: 999` idiom, see D11.** **Activated surface
   (§6.6a):** `multiplyStats`(3 — the purchased doubles) · `buffStats`(1) · `grantKeyword`(1) ·
   `gainGold`(1) · `refreshShop`(1). `gainGold`/`refreshShop` are **activated-only** — a
@@ -734,12 +771,16 @@ it silently became reserved; a card needing something not listed means *stop and
   activations, so the card count is 0; kept LIVE deliberately because the `gemsThisTurn` counter
   + condition remain implemented and pinned by EV-CND-01/03).
   *Reserved:* `hasTribe`, `hasKeyword`, `goldAtLeast`, `tierAtLeast`, `isGolden`, `isToken`.
-- **Auras — live (exactly 4 (scope,modifier) shapes):** `(selfTribeAllies, damageMultiplier)`
+- **Auras — live (8 (scope,modifier) shapes):** `(selfTribeAllies, damageMultiplier)`
   +`activeWhen` (Pale Lich) · `(yourBattlecries, triggerMultiplier)` (Echo Choir) ·
   `(yourEndOfTurn, triggerMultiplier)` summon-scoped §6.8 (Grovecaller) · `(leftmost, attackBuff)`
-  POSITIONAL, Phase 4 (Vanguard Pennant — leftmost friendly +atk, query-at-read-time, capped).
+  POSITIONAL, Phase 4 (Vanguard Pennant — leftmost friendly +atk, query-at-read-time, capped) ·
+  **`(yourSentinels, statBuffOnEvent)` Phase 5 (Forgemaster — persistent-counter marker, §6.4)** ·
+  **`(yourEconomy, goldCapSet)` Phase 5 (Vault Keeper)** · **`(yourEconomy, sellRefundSet)` Phase 5
+  (Fence)** · **`(yourEconomy, goldNextTurnIfRich)` Phase 5 (Moneylender)** — the three `yourEconomy`
+  shapes are SHOP-read economy modifiers (§5), ignored by combat aura queries.
   *Reserved scopes:* `allAllies`, `yourGems`, `yourSpells`, `shopCostTribe`. *Reserved modifiers:*
-  `costReduction`, `gemValueAdd`, `spellPowerAdd`, `statBuffOnEvent`.
+  `costReduction`, `gemValueAdd`, `spellPowerAdd`.
 
 **`destroy` (the one promotion in current content — pins the load-bearing semantics the
 `dealDamage: 999` idiom hid; D11):** removes the target; **counts as a friendly death and fires
@@ -814,6 +855,12 @@ Deaths are **simultaneous (D1)**. On each resolution pass:
    config board cap (`economy.boardCap`), excess summons are dropped (logged). Each summon
    fires `onSummon` for living friendlies. The attack pointer stays consistent across
    removals/insertions.
+   - **Forgemaster Sentinel buff (Phase 5, #55):** at CREATION, a summoned Sentinel (cardId =
+     `engines.constructs.forgemasterSentinelId`) gains +`forgemasterSentinelBuff`/+`forgemasterSentinelBuff`
+     × the controller's `forgemastersPlayed` count (read from the `CombatBoard.forgemastersPlayed`
+     scalar carried IN, never ambient). All three Sentinel summon sites (Foundry deathrattle,
+     Titanforge start-of-combat, Aegis Prime deathrattle) are IN COMBAT, so this is where the
+     stack applies; a combat-only stat bump on a token (not a §7.5 permanent — tokens don't persist).
 
 Loop until a pass finds no further deaths (guarded at 64 iterations against pathological
 deathrattle chains).
@@ -988,16 +1035,19 @@ data + engine vocabulary.
 | Tuskers | gem greed → PURCHASED exponential doubler + gem sinks (#39) | `giveGem` wallet + activated abilities (§6.6a): escalating `multiplyStats` doubles (capped), `gainGold` bridge, `refreshShop`, chosenAlly shield |
 | Primordials | play-count → wide cleave splash | `battlecries`/`alliesAtStart` breakpoints → `buffStats` / grant `cleave` |
 | Sirens | poison home + start-of-combat burst | `startOfCombat`→`dealDamage`, `battlecries` breakpoints, board `poison` |
-| Constructs | assembly / reassemble | `deaths`/`alliesAtStart` breakpoints → `summon` (magnetic reserved) |
-| Corsairs | on-buy tempo, sticky reborn/shield width, positional front-buff | `alliesAtStart` breakpoints, reborn/divine-shield width, `leftmost` positional aura (Vanguard Pennant) |
+| Constructs | assembly / reassemble + **MAGNETIC merge** | `deaths`/`alliesAtStart` breakpoints → `summon`; **`merge` intent** (magnetic bench unit → Construct tower, #54); **Forgemaster** `yourSentinels` persistent Sentinel-stack (#55) |
+| Corsairs | on-buy tempo, sticky reborn/shield width, positional front-buff, **gold economy** | `alliesAtStart` breakpoints, reborn/divine-shield width, `leftmost` positional aura (Vanguard Pennant); **gold cards** (#56): `gainGoldNextTurn` (Bursar) + `yourEconomy` auras (Fence/Moneylender/Vault Keeper) |
 
 Marquee ⭐ breakpoint cards per tribe live in `config/breakpoints.ts` (e.g. Mortarch
 `deaths≥3 once`, Pale Lich `revenantDeaths≥3 amp`, Chorus Tide `battlecries≥2`); the Tusker
 doublers are **spend-gated** rows in the same file's `spendGated` registry (#39, §6.6a).
-The full **99-row** roster is `shared/content/units.ts`;
-per-tribe counts (verified against the catalog): Revenants 16, Reefkin 12, **Tuskers 12**,
-Corsairs 11, Wildkin 11, Constructs 10, Infernals 10, Sirens 9, Primordials 8 (= 99; 93
-purchasable + 6 tokens). The +2 over the Phase-3 slice are the Phase-4 POSITIONAL cards:
+The full **107-row** roster is `shared/content/units.ts`;
+per-tribe counts (verified against the catalog): Revenants 16, **Corsairs 15**, **Constructs 14**,
+Reefkin 12, **Tuskers 12**, Wildkin 11, Infernals 10, Sirens 9, Primordials 8 (= 107; 101
+purchasable + 6 tokens). The **+8 over the Phase-4 slice are the Phase-5 cards:** Constructs
+**Boltfitter (T2), Alloy Rig (T4), Omega Chassis (T5)** (magnetic merge sources, #54) +
+**Forgemaster (T4)** (#55); Corsairs **Bursar (T2), Fence (T3), Moneylender (T3), Vault Keeper
+(T4)** (gold economy, #56). The +2 before those were the Phase-4 POSITIONAL cards:
 Corsairs **Vanguard Pennant (T2, `leftmost` aura)** + Revenants **Last Rites Drummer (T3,
 `adjacentAllies` deathrattle)**. The +4 before those were the consumption/lifetime
 cards: Infernals **Gorgemaw (T4)** + **Cindermarshal (T4)** and Revenants **Ossuary Titan
@@ -1061,11 +1111,13 @@ transcribe — reference them); these are the *signatures*, which are the eval s
 - **Combat event schema:** the `CombatEvent` union in §7.5 (canonical in `shared/types`). This
   is the primary black-box observation surface for combat evals.
 - **Shop reducer:** the exported ops in `shared/engine/shop.ts` — `buyUnit, sellUnit, rollShop,
-  freezeShop, unfreezeShop, tierUp, playUnit, moveUnit, activateAbility, resolveTargetChoice,
+  freezeShop, unfreezeShop, tierUp, playUnit, moveUnit, mergeUnit, activateAbility, resolveTargetChoice,
   resolveDiscoverPick, startShopPhase, endOfTurnPhase, boardToCombat` — each returning
   `OpResult = { ok: boolean; error?: string; triples?: string[] }`. *(`activateAbility` +
   the `activate` intent member are the decision-#39 ADDITIVE extension of this pinned
-  contract; the cost helper `activatedCost(session, card)` is exported beside it.)*
+  contract; the cost helper `activatedCost(session, card)` is exported beside it. `mergeUnit` +
+  the `merge` intent member are the decision-#54 ADDITIVE extension; `effectiveGoldCap(session)`
+  is exported beside it for the decision-#56 gold-cap plumbing.)*
 - **Intent application (accept/reject):** `Match.applyIntent(seat: number, intent: Intent):
   OpResult` (`shared/engine/match.ts`). A rejected intent returns `{ ok:false, error }` and
   mutates nothing — the observation surface for all validation evals.
@@ -1274,7 +1326,18 @@ to repair.
   (the `alliesAtStart` 5/6/7 gate-spread, decision #48) diversified WIDTH but did NOT change the
   bot's fill-to-`boardCap` policy, so `alliesAtMost≤4` is still unreached in the macro sim — the
   #47(b) deferral **persists** into a later phase (an anti-wide tech / a narrow-restraint bot line
-  is still the prerequisite, and neither shipped here).
+  is still the prerequisite, and neither shipped here). **Phase-5 status (decision #54/#55/#58):** the
+  **MAGNETIC merge tower** IS exercised — the bot's deterministic `bestMerge` consolidates a magnetic
+  bench unit onto a Construct tower, and an assembled tower (`mergeCount>0`) is credited toward the
+  reachability gate (§11.3b) as a primary payoff, mirroring the #39 spend-gated precedent (116/1600
+  player-games on the canonical `run` seed, per-unit cap=5 reached; **flagged for final-validation
+  ratification** that this payoff-class extension is legitimate rather than a goalpost move, #58). The
+  **Forgemaster Sentinel-stack (#55)** is a SECOND documented coverage gap: bots buy the 3/5 body but
+  its deliberately-small valuation (a payoff bump would crowd real breakpoints off splash builds and
+  break EV-BAL-B, #57) leaves it benched and sold, so `forgemastersPlayed>0` fires in only ~1/1600
+  macro player-games. It is therefore NOT credited to reachability (a credit would be vacuous — 0.00pp
+  effect); its combat scalar is pinned by the EV-FRG-01..03 + EV-GLD-16 determinism/property evals, and
+  the macro-sim non-coverage is deferred to final validation rather than number-tuned away (#58).
 
 **11.3 Breakpoint balance-gate metrics (decision #29).** Thresholds in
 `shared/config/sim.ts`; the macro-sim asserts:
@@ -1338,9 +1401,11 @@ values** (that is what drifted before). Read the files for current numbers.
   decision-#39 activated-ability price knobs (Tuskers `doubleBaseCost`, `doubleCostStep`,
   `goldgrinGems`, `gemwrightCost`, `gemwrightGold`, `facetguardCost`, `oreseekerCost`), and
   the Phase-3 knobs (Infernals `loneVanguardBuffAtk`/`Hp`/`loneVanguardAllyThreshold`;
-  Revenants `graveEmperorDeathThreshold`/`graveEmperorFactor`), and the Phase-4 POSITIONAL
+  Revenants `graveEmperorDeathThreshold`/`graveEmperorFactor`), the Phase-4 POSITIONAL
   knobs (Corsairs `leftmostAttackBuff`/`leftmostAttackBuffCap` — Vanguard Pennant's `leftmost`
-  aura, decision #52).
+  aura, decision #52), and the **Phase-5 knobs** (Constructs `magneticMergeCap` (#54),
+  `forgemasterSentinelBuff`/`forgemasterSentinelId` (#55); Corsairs `bursarGold`,
+  `moneylenderThreshold`/`moneylenderGold`, `fenceSellRefund`, `vaultKeeperGoldCap` (#56)).
 - **`breakpoints.ts`** — the `{ card, counter, threshold, once?, tiers?, ...payoff }` list;
   the authoritative source for every ⭐ payoff's numbers (§6.6; `tiers?` = Ossuary Titan's
   escalating steps). Also the **`spendGated` registry** (`{ card, currency, costKnobs[] }`,
@@ -1439,9 +1504,11 @@ ships. Validate content/numbers (config + sim) before animating cards.
 6. **DSL erosion.** Keep the escape-hatch rare (§6.5). Prefer new declarative vocabulary
    over handlers, but note each addition widens the engine's semantic surface (§6.8) — the
    thing a regen must reproduce.
-7. **Reserved-vs-live drift.** ~half the DSL is reserved scaffolding (§6). Either wire the
-   deferred systems (spells/gold/gems-spend/magnetic/hero powers) or prune them, so the
-   spec keeps describing the shipped game.
+7. **Reserved-vs-live drift.** Some DSL remains reserved scaffolding (§6). Either wire the
+   deferred systems (spells/hero powers) or prune them, so the spec keeps describing the shipped
+   game. **Progress:** gems-spend (#39), then **magnetic merge (#54)**, the **Forgemaster
+   `statBuffOnEvent` marker (#55)** and the **`gainGoldNextTurn`/`yourEconomy` gold economy (#56)**
+   are now LIVE with evals — the reserved set shrank accordingly (§6.9).
 8. **Colyseus state size.** Keep the public schema lean; push heavy/private data on the
    direct channel.
 9. **Clean-room discipline (§0).** All names/text reviewed before any public build; the

@@ -13,13 +13,16 @@ const LIVE = {
   triggers: new Set(['battlecry', 'deathrattle', 'startOfCombat', 'endOfCombat', 'endOfTurn', 'afterFriendlyDeaths', 'onSell', 'onAttack', 'onShieldBreak', 'onSummon', 'afterFriendlyBattlecry']),
   // Phase 4: `adjacentAllies` promoted to LIVE (Last Rites Drummer, §6.3/§7.3).
   selectors: new Set(['self', 'allAllies', 'chosenAlly', 'leftmostAlly', 'adjacentAllies', 'randomAlly', 'lowestStatAlly', 'highestStatAlly', 'frontEnemy', 'highestStatEnemy', 'triggerSource']),
-  actions: new Set(['buffStats', 'grantKeyword', 'summon', 'dealDamage', 'giveGem', 'multiplyStats', 'plantDeathrattle', 'resetToBase', 'custom', 'destroy', 'destroyAlly', 'absorbStats', 'gainGold', 'refreshShop']),
+  // Phase 5: `gainGoldNextTurn` promoted to LIVE (Corsair Bursar delayed gold, decision #56).
+  actions: new Set(['buffStats', 'grantKeyword', 'summon', 'dealDamage', 'giveGem', 'gainGoldNextTurn', 'multiplyStats', 'plantDeathrattle', 'resetToBase', 'custom', 'destroy', 'destroyAlly', 'absorbStats', 'gainGold', 'refreshShop']),
   // `gemsThisTurnAtLeast` stays LIVE as engine vocabulary (EV-CND-01/03) though #39 left it
   // with 0 card consumers (the doublers became purchased activations) — see §6.9.
   conditions: new Set(['countAllies', 'battlecriesThisTurnAtLeast', 'gemsThisTurnAtLeast', 'deathsThisCombatAtLeast', 'tokensSummonedThisTurnAtLeast', 'alliesAtMost', 'lifetimeDeathsAtLeast']),
   // Phase 4: `leftmost` scope + `attackBuff` modifier promoted to LIVE (Vanguard Pennant, §6.4).
-  auraScopes: new Set(['selfTribeAllies', 'yourBattlecries', 'yourEndOfTurn', 'leftmost']),
-  auraModifiers: new Set(['damageMultiplier', 'triggerMultiplier', 'attackBuff']),
+  // Phase 5: `yourSentinels` (Forgemaster) + `yourEconomy` (gold cards) scopes; `statBuffOnEvent`
+  // (Forgemaster) + `goldCapSet`/`sellRefundSet`/`goldNextTurnIfRich` (gold cards) modifiers → LIVE.
+  auraScopes: new Set(['selfTribeAllies', 'yourBattlecries', 'yourEndOfTurn', 'leftmost', 'yourSentinels', 'yourEconomy']),
+  auraModifiers: new Set(['damageMultiplier', 'triggerMultiplier', 'attackBuff', 'statBuffOnEvent', 'goldCapSet', 'sellRefundSet', 'goldNextTurnIfRich']),
 };
 // #39: gainGold/refreshShop are live ONLY inside `activated.actions` (the activated-ability
 // resolver); no triggered Effect may use them — asserted below.
@@ -30,7 +33,8 @@ const RESERVED = {
   actions: new Set(['setStats', 'makeSpell', 'discover', 'sacrifice']),
   conditions: new Set(['hasTribe', 'hasKeyword', 'goldAtLeast', 'tierAtLeast', 'isGolden', 'isToken']),
   auraScopes: new Set(['allAllies', 'yourGems', 'yourSpells', 'shopCostTribe']),
-  auraModifiers: new Set(['costReduction', 'gemValueAdd', 'spellPowerAdd', 'statBuffOnEvent']),
+  // Phase 5: `statBuffOnEvent` moved reserved→live (Forgemaster).
+  auraModifiers: new Set(['costReduction', 'gemValueAdd', 'spellPowerAdd']),
 };
 const DESTROY_MAGNITUDE = 100; // the retired `dealDamage: 999` idiom; real dealDamage amounts are ≤ ~3
 

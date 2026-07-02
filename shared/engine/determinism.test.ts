@@ -145,6 +145,29 @@ const goldens: Record<string, () => { a: CombatBoard; b: CombatBoard; seed: stri
     b: board([vanilla(50, 100000)]),
     seed: 'gld-14',
   }),
+  // Phase 5 combat-visible mechanics — pin each new engine path byte-stably.
+  // Magnetic MERGE tower (a Construct carrying merged stats + a merged divineShield) vs Nullforge —
+  // pins the resetToBase-strips-stats / keyword-persists interaction on a merged body.
+  'EV-GLD-15 magnetic merged tower vs Nullforge (stat strip, keyword persists)': () => ({
+    a: board([cu('constructs_cogling', { atk: 12, hp: 12, keywords: ['divineShield'] })]),
+    b: board([cu('constructs_nullforge'), cu('corsairs_ironclad', { keywords: [], atk: 3, hp: 100000 })], 5),
+    seed: 'gld-15',
+  }),
+  // Forgemaster stack: a start-of-combat Sentinel summon on a board with forgemastersPlayed=3 → the
+  // summoned Sentinel is created +3/+3 (reads the CombatBoard scalar). Pins the summon+buff payload.
+  'EV-GLD-16 forgemaster-buffed summoned sentinel': () => ({
+    a: {
+      units: [
+        cu('constructs_cogling', {
+          effects: [{ trigger: { type: 'startOfCombat' }, target: { selector: 'self' }, actions: [{ type: 'summon', summonUnitId: 'constructs_sentinel', summonCount: 1 }] }],
+        }),
+      ],
+      playerTier: 5,
+      forgemastersPlayed: 3,
+    },
+    b: board([vanilla(0, 100000)]),
+    seed: 'gld-16',
+  }),
 };
 
 describe('EV-GLD — intra-impl determinism goldens (D4)', () => {

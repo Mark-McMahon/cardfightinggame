@@ -13,7 +13,8 @@ export type TribeId =
   | 'constructs'
   | 'corsairs';
 
-/** Slice uses: taunt, divineShield, poison, reborn, cleave. (magnetic deferred.) */
+/** Slice uses: taunt, divineShield, poison, reborn, cleave. `magnetic` is LIVE since Phase 5
+ *  (Constructs merge system, decision #54 — un-deferred a RESERVED keyword, not a new one). */
 export type Keyword =
   | 'taunt'
   | 'divineShield'
@@ -130,6 +131,8 @@ export type ActionType =
   | 'absorbStats' // Phase 3 (shop-phase): the SOURCE permanently gains the TARGET's CURRENT atk/hp
   // (reads live instance stats — a golden target contributes its doubled stats). Keywords NOT transferred.
   | 'giveGem'
+  | 'gainGoldNextTurn' // Phase 5 (decision #56, Corsair Bursar): queue `amount` gold, delivered at the
+  // START of the controller's NEXT shop phase (clamped to the effective gold cap). Shop-only; no combat effect.
   | 'makeSpell'
   | 'gainGold' // LIVE in the activated-ability resolver only (decision #39): gold clamped to goldCap
   | 'refreshShop' // LIVE in the activated-ability resolver only (decision #39): free reroll (clears freeze)
@@ -220,6 +223,13 @@ export interface AuraSpec {
     | 'yourEndOfTurn'
     | 'leftmost' // Phase 4 POSITIONAL aura (§6.4): the LEFTMOST friendly (board index 0) on the
     // bearer's side. Query-at-read-time in combat, so a reposition/death moves the bonus for free.
+    | 'yourSentinels' // Phase 5 (decision #55, Forgemaster): a PERSISTENT-COUNTER marker, NOT a board-read
+    // passive. Each time a bearer is PLAYED, the controller's `forgemastersPlayed` counter increments
+    // (never decrements — survives the bearer's sale/death); at Sentinel CREATION in combat every summoned
+    // Sentinel gains +value/+value per counted stack (rides in on the CombatBoard `forgemastersPlayed` scalar).
+    | 'yourEconomy' // Phase 5 (decision #56): a SHOP-read player-economy modifier (Fence sell refund, Vault
+    // Keeper gold cap, Moneylender delayed gold). Query-at-read-time in the shop, so it reverts when the
+    // bearer leaves the board. NEVER read in combat (the combat aura queries ignore this scope).
     | 'yourGems'
     | 'yourSpells'
     | 'shopCostTribe';
@@ -229,10 +239,17 @@ export interface AuraSpec {
       | 'damageMultiplier'
       | 'attackBuff' // Phase 4 (§6.4): flat +`value` ATTACK applied by a positional aura (Vanguard
       // Pennant). Combat-only, read live at strike time; capped by a config knob (engines.corsairs).
+      | 'goldCapSet' // Phase 5 (Vault Keeper): while any bearer is on the board, the controller's EFFECTIVE
+      // gold cap is `max(economy.goldCap, value)`. Non-stacking (helper takes the max). Query-at-read-time.
+      | 'sellRefundSet' // Phase 5 (Fence): while any bearer is on the board, minions sell for `max(economy
+      // .sellRefund, value)`. Non-stacking (max). Query-at-read-time (reverts when the last Fence leaves).
+      | 'goldNextTurnIfRich' // Phase 5 (Moneylender): at END OF TURN, if the controller holds ≥
+      // `engines.corsairs.moneylenderThreshold` unspent gold, queue `value` delayed gold. Presence-based +
+      // non-stacking (fires ONCE regardless of how many bearers are on the board).
       | 'costReduction'
       | 'gemValueAdd'
       | 'spellPowerAdd'
-      | 'statBuffOnEvent';
+      | 'statBuffOnEvent'; // Phase 5 (Forgemaster, with scope `yourSentinels`): promoted reserved→live.
     value: number;
     tribe?: TribeId;
   };
@@ -292,6 +309,13 @@ export interface UnitInstance {
   keywords: Keyword[]; // current keyword set (base + granted-permanent)
   bornTurn: number; // for newest/oldest ordering
   grantedEffects?: Effect[]; // Round-6: deathrattles planted by Reefmourner (permanent, §16.3 #5)
+  /**
+   * Phase 5 (decision #54): number of MAGNETIC merges this instance (a friendly Construct) has absorbed.
+   * Bounds the per-unit merge cap (`engines.constructs.magneticMergeCap`). The merged STATS live in
+   * `atk`/`hp` beyond print (so Nullforge `resetToBase` strips them); merged KEYWORDS live in `keywords`
+   * (a stat-strip does NOT touch them → they persist through Nullforge). Undefined ⇒ 0 merges.
+   */
+  mergeCount?: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -324,6 +348,13 @@ export interface CombatBoard {
    * holds: same (boards, seed) — including this scalar — → identical log.
    */
   lifetimeDeaths?: number;
+  /**
+   * Phase 5 (decision #55, Forgemaster): the controller's PERSISTENT count of Forgemasters PLAYED this
+   * game (never decremented; survives sale/death), carried IN on the board snapshot (never ambient —
+   * invariant 1b). Combat reads it at Sentinel CREATION so every summoned Sentinel gains
+   * +`engines.constructs.forgemasterSentinelBuff` × this scalar. Defaults to 0. Determinism holds.
+   */
+  forgemastersPlayed?: number;
 }
 
 export interface BoardSnapshot {
@@ -431,6 +462,8 @@ export type Intent =
   | { type: 'tierUp' }
   | { type: 'playUnit'; unitUid: string; toSlot?: number } // bench → board
   | { type: 'moveUnit'; unitUid: string; toSlot: number } // reorder on board
+  | { type: 'merge'; unitUid: string; targetUid: string } // Phase 5 (decision #54): MERGE a MAGNETIC bench
+  // unit into a friendly Construct on the board (consumes the magnetic unit; tower keeps its stats/keywords)
   | { type: 'targetChoice'; targetUid: string } // resolve pending targeted battlecry / activated ability
   | { type: 'discoverPick'; optionIndex: number }
   | { type: 'activate'; unitUid: string } // buy a board unit's activated ability with gems (decision #39)

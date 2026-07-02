@@ -57,7 +57,8 @@ spendable gems + purchased doublers; EV-ECO-14 was rewritten and Group M / EV-AB
 | EV-KW-RBN | reborn unit dies once, has buffs + is golden | returns once, own slot, **1 HP**, reborn stripped, at **base card atk (×2 if golden)**, buffs dropped, **after** its deathrattle | P | reborn |
 | EV-KW-CLV | attacker with cleave, defender has L+R neighbors | neighbors take `atk·cleaveDefault`(=1.0), rounded; center takes full | P | cleave |
 | EV-KW-CLV-DS | cleaving attacker breaks a defender's divine shield whose `onShieldBreak` summons/inserts a unit | **(D3ii)** cleave neighbors are computed against the **post-insert** enemy line (recomputed, not a stale index) | P | cleave×shieldBreak |
-| EV-KW-MAG | any board carrying `magnetic` | `magnetic` produces **no** engine effect (reserved); asserts no shipped purchasable relies on it | P | magnetic (reserved) |
+| EV-KW-MAG | **RETIRED (Phase 5, #54)** — `magnetic` is now LIVE (Constructs merge). Replaced by the **EV-MAG family** (§P) + golden EV-GLD-15. | — | — |
+| EV-KW-MAG-BODY | a magnetic minion in COMBAT | magnetic is a SHOP-phase merge tag with NO combat effect — a magnetic body fights identically to a vanilla one | P | magnetic (combat no-op) |
 
 ## C. Death / deathrattle / summon / avenge — COMBAT
 
@@ -225,6 +226,8 @@ stat-growing activated ability is registered SPEND-GATED with real positive cost
 | EV-BAL-F | `sim/web.test.ts` | anti-degeneracy floor holds (every scaling line has a reachable counter that connects) | B | §16 gate |
 | EV-BAL-G | macro-sim | fraction of combats hitting `maxCombatSteps` (stale combat) below a flag threshold | B | §11.3 outputs |
 | EV-SIM-CONS-01 | macro-sim (`sim/consumptionCoverage.test.ts`) | the bot VALUES a consumption payoff (Gorgemaw) so it reaches combat (players>0), not dumped as raw-stat chaff — the mechanic is exercised in the macro sim, not dead | SIM | §11.2 bot coverage, #47 |
+| EV-SIM-MAG-01 | `sim/phase5Coverage.test.ts` (BotAgent) | the bot's deterministic `bestMerge` emits a `merge` intent for a committed Construct build (magnetic bench unit → biggest under-cap tower) — the go-tall consolidation line fires | SIM | §11.2, #54 |
+| EV-SIM-P5-02 | macro-sim (`sim/phase5Coverage.test.ts`) | across a macro run the magnetic merge tower is assembled at a healthy RATE (≥20/640 player-games, credited to reachability per the #39 spend-gated precedent) — a minimum-RATE guard, not mere existence. Forgemaster is NOT guarded here (fires ~1/1600 — a documented macro-sim coverage gap #58/§11.2; pinned by EV-FRG/EV-GLD-16 instead) | SIM | §11.2, #54, #58 |
 
 ## K. Determinism goldens (thin, intra-impl) — G, generated after D1–D3 (D4: not cross-impl)
 
@@ -233,6 +236,7 @@ stat-growing activated ability is registered SPEND-GATED with real positive cost
 | EV-GLD-01..09 | one fixed (boards, seed) each spanning: swarm mirror; poison-vs-shield; reborn chain; Pale-Lich amp crossing; Tusker doubler across turns; cleave with neighbors; Bonepiper replay; Pallbearer double; a combat-fired **permanent** buff (writeback seam — pins the `permanent`/`dAtk`/`dHp` + `survivorsA/B` payload) | byte-identical `CombatEvent[]` (the reference log). **Regenerated from the chosen-intent engine; the log is a lock, never the spec.** | G |
 | EV-GLD-10/11/12 (Phase 3) | Cindermarshal leftmost buff; Ossuary Titan tiered lifetime buff (`CombatBoard.lifetimeDeaths=12`); Gravemonarch survive-a-near-wipe double (5 start-of-combat destroys → `endOfCombat` permanent multiply) | byte-identical `CombatEvent[]` — pins the `leftmostAlly`/`lifetimeDeaths`/`endOfCombat` + `permanentFactor`/`deathsA/B` payloads | G |
 | EV-GLD-13/14 (Phase 4) | Vanguard Pennant positional aura (leftmost +atk, recompute on the front's death); Last Rites Drummer `adjacentAllies` deathrattle → Reborn on ±1 neighbors | byte-identical `CombatEvent[]` — pins the `leftmost`/`attackBuff` strike-read + `adjacentAllies` settled-board payloads | G |
+| EV-GLD-15/16 (Phase 5) | magnetic merged tower vs Nullforge (resetToBase strips merged STATS, merged divineShield persists); a start-of-combat Sentinel summon on a board with `forgemastersPlayed=3` (+3/+3 buff at creation) | byte-identical `CombatEvent[]` — pins the merged-body resetToBase + the `forgemastersPlayed`-scalar summon buff payloads | G |
 
 ## L. Combat→board writeback fold (§7.5, decision #38) — COMBAT + MATCH (`shared/engine/combatWriteback.test.ts`)
 
@@ -292,6 +296,32 @@ by late game, a Facetguard-split lands under half, poison still beats the double
 the growth loop is deterministic. `sim/metrics.ts hoardingDiagnostic` reports the unspent-wallet
 distribution — output only, never a gate.)*
 
+## P. Magnetic merge system (Phase 5, decision #54) — SHOP / INTENT / COMBAT (`shared/engine/magnetic.test.ts`)
+
+| id | fixture | asserted property | layer | covers |
+|---|---|---|---|---|
+| EV-MAG-01 | merge Alloy Rig (magnetic+DS) into a Cogling | tower gains the magnetic unit's CURRENT stats + keywords (NOT the `magnetic` tag); `mergeCount`++; magnetic unit consumed (off bench, pool copy NOT returned) | SHOP | merge stats/keywords + triple-accounting |
+| EV-MAG-02 | merge a GOLDEN magnetic unit | the tower gains the DOUBLED live stats (reads live instance stats) | SHOP | golden merge |
+| EV-MAG-03 | not-on-bench / not-magnetic / target-not-Construct / target-not-on-board | each rejected `{ok:false}` and mutates NOTHING (server-authoritative) | INTENT | validation/no-mutation |
+| EV-MAG-04 | play a magnetic minion standalone | standalone `playUnit` is ALWAYS allowed; keeps the `magnetic` tag on the board | SHOP | optional-merge |
+| EV-MAG-05 | merge up to `magneticMergeCap`, then once more | merges up to the cap succeed; beyond is refused (unit stays on bench); standalone play never blocked by the cap | INTENT | per-unit cap |
+| EV-MAG-06 | merged tower (with a merged Divine Shield) vs Nullforge | `resetToBase` strips the merged STATS to print; the merged Divine Shield PERSISTS (stat-only reset) — a hit still breaks it | COMBAT | Nullforge strip ruling |
+| EV-MAG-07 | a big merged tower vs a poison minion | poison one-shots the tower regardless of size (stat-agnostic) | COMBAT | poison counters merge |
+| EV-MAG-08 | `merge` via `Match.applyIntent` | routes as a validated intent (accept applies stats; bad uid rejected) | INTENT | intent wiring |
+
+## Q. Forgemaster + Corsair gold economy (Phase 5, #55/#56) — SHOP / COMBAT / STATE (`shared/engine/forgemaster-gold.test.ts`)
+
+| id | fixture | asserted property | layer | covers |
+|---|---|---|---|---|
+| EV-FRG-01 | play two Forgemasters | `forgemastersPlayed` increments per copy played (stacks); rides into combat on `boardToCombat().forgemastersPlayed` | SHOP | persistent counter |
+| EV-FRG-02 | play a Forgemaster, then SELL it | the counter is NOT decremented (survives sale/death) | SHOP | lifetime-per-copy rule |
+| EV-FRG-03 | start-of-combat Sentinel summon with `forgemastersPlayed` 0 vs 3 | 0 stacks → no buff event; 3 stacks → the summoned Sentinel is created +3·buff/+3·buff (read from the CombatBoard scalar) | COMBAT | Sentinel stack buff |
+| EV-GOLD-01 | play a Bursar | gold delivered at the START of the NEXT turn (delayed queue), not this turn; clamped to the effective cap | SHOP | delayed gold (Bursar) |
+| EV-GOLD-02 | two Moneylenders, gold below then at the threshold | queues `moneylenderGold` ONCE only when rich (presence-based, NON-stacking) | SHOP | delayed gold (Moneylender) |
+| EV-GOLD-03 | Vault Keeper on/off board; a late-round income | effective gold cap raised to `vaultKeeperGoldCap` (income clamps to it); reverts to `economy.goldCap` when it leaves | SHOP | effective gold cap |
+| EV-GOLD-04 | sell with/without Fence; two Fences | sell refund raised to `fenceSellRefund` while a Fence is on board (NON-stacking); reverts on leave | INTENT | Fence sell refund |
+| EV-GOLD-05 | Fence + Tuskmonger buy/sell churn | each buy(3)/sell(2) cycle STRICTLY loses gold (bounded — no infinite money); gems accrue as a SEPARATE currency (only Gemwright bridges) | SHOP | churn-loop accounting |
+
 ---
 
 # Coverage manifest
@@ -307,7 +337,7 @@ Every card / keyword / breakpoint counter / economy rule / invariant → the eva
 | poison | EV-KW-PSN-01, EV-KW-PSN-02, EV-KW-DS-02 |
 | reborn | EV-KW-RBN, EV-ADJ-01 (granted by Last Rites Drummer's `adjacentAllies` deathrattle) |
 | cleave | EV-KW-CLV, EV-BP-24 (grant) |
-| magnetic (reserved) | EV-KW-MAG |
+| magnetic (LIVE, #54 — Constructs merge) | EV-MAG-01..08, EV-KW-MAG-BODY (combat no-op), EV-GLD-15 |
 
 ## Breakpoint counters (8)
 | counter | fails-if-broken |
@@ -321,7 +351,10 @@ Every card / keyword / breakpoint counter / economy rule / invariant → the eva
 | shieldBreak | EV-BP-10, EV-KW-DS-01 |
 | lifetimeDeaths (Phase 3) | EV-OSS-01..03, EV-LFT-01..03, EV-GLD-11 |
 
-## Cards (99) — by coverage mechanism
+## Cards (107) — by coverage mechanism
+- **8 Phase-5 cards** → Constructs **Boltfitter/Alloy Rig/Omega Chassis** (magnetic sources, #54) →
+  EV-MAG-01..08 + EV-SIM-MAG-01; **Forgemaster** (#55) → EV-FRG-01..03 + EV-GLD-16 + EV-SIM-P5-02;
+  Corsairs **Bursar/Fence/Moneylender/Vault Keeper** (gold economy, #56) → EV-GOLD-01..05.
 - **2 Phase-4 POSITIONAL cards** → Vanguard Pennant (Corsair T2, `leftmost` aura) → EV-AUR-06 +
   golden EV-GLD-13; Last Rites Drummer (Revenant T3, `adjacentAllies` deathrattle) → EV-ADJ-01 +
   golden EV-GLD-14.

@@ -6,7 +6,6 @@ import {
   getCard,
   combat as combatCfg,
   triples,
-  UNITS,
   type CombatUnit,
   type CombatBoard,
   type CombatEvent,
@@ -167,20 +166,16 @@ describe('EV-KW — keywords', () => {
     expect(byType(evs, 'damage').some((e) => e.sourceId === cleaver.uid && e.targetId === insertedUid && e.amount === splash)).toBe(true);
   });
 
-  it('EV-KW-MAG: magnetic is a reserved no-op in the engine and no shipped card relies on it', () => {
-    // (1) source: no card carries `magnetic` nor grants it
-    for (const card of UNITS) {
-      expect(card.keywords).not.toContain('magnetic');
-      for (const eff of card.effects)
-        for (const act of eff.actions) if (act.type === 'grantKeyword') expect(act.keyword).not.toBe('magnetic');
-    }
-    // (2) engine: a magnetic-tagged body fights exactly like a vanilla one (no extra events, no crash)
+  // EV-KW-MAG (the reserved-no-op pin) is RETIRED (Phase 5, decision #54): `magnetic` is now LIVE — the
+  // Constructs merge system. Its behavior is pinned by the EV-MAG family (shared/engine/magnetic.test.ts)
+  // + the determinism golden EV-GLD-15. As a combat body, a magnetic minion still fights identically to a
+  // vanilla one (magnetic is a SHOP-phase merge tag, no combat effect) — pinned here so that stays true.
+  it('EV-KW-MAG-BODY: a magnetic body has no COMBAT effect (magnetic is a shop-phase merge tag)', () => {
     const magnetic = cu('corsairs_ironclad', { keywords: ['magnetic'], effects: [], atk: 3, hp: 20 });
     const foe = vanilla(2, 20);
     const evs = resolveCombat(board([magnetic]), board([foe]), SEED);
     expect(byType(evs, 'combatEnd').length).toBe(1);
     expect(byType(evs, 'keyword').some((e) => e.keyword === 'magnetic')).toBe(false);
-    // magnetic did not alter the basic trade
     expect(byType(evs, 'damage').some((e) => e.sourceId === magnetic.uid && e.amount === magnetic.atk)).toBe(true);
   });
 });

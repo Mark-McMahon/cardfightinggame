@@ -25,6 +25,7 @@ import {
   hasSpendGated,
   hasContestedCondition,
   economy,
+  engines,
   Rng,
   type ActivatedAbilityState,
   type Axis,
@@ -91,6 +92,12 @@ export class BotAgent {
     }
 
     const focus = this.buildFocus(priv, pub);
+
+    // 1.5) MAGNETIC merge (#54): consolidate a magnetic bench unit into a Construct tower on the board
+    // (a go-tall/anti-wide line). Placed BEFORE development so magnetic units feed the tower rather than
+    // being played standalone once a tower exists. Deterministic (biggest under-cap tower, tie → uid).
+    const merge = this.bestMerge(priv);
+    if (merge) return { type: 'merge', unitUid: merge.unitUid, targetUid: merge.targetUid };
 
     // 2) develop the board: play the strongest bench unit while there's room — with the ONE
     // consumption-archetype (#44) adjustment handled in chooseDevelopment: a consumption body
@@ -186,6 +193,10 @@ export class BotAgent {
     // value them like breakpoints so the bot BUYS + KEEPS them instead of dumping a 3/3 as chaff.
     if (hasBreakpoint(cardId) || hasSpendGated(cardId) || hasContestedCondition(cardId) || isConsumption(cardId))
       s += this.weights.breakpointValue;
+    // Phase 5 (#54–56): the magnetic sources / Forgemaster / gold Corsairs are NOT breakpoints, so they
+    // get NO payoff bump — over-valuing them crowds real breakpoints out of splash builds and breaks the
+    // load-bearing EV-BAL-B reachability gate. They still reach combat as ordinary on-tribe bodies (base
+    // synergy scoring) and the magnetic MERGE line is exercised by the dedicated `bestMerge` policy.
     if (focus.underTribe && tribe === focus.underTribe) s += this.weights.splashBalanceBonus;
     return s;
   }
@@ -237,6 +248,27 @@ export class BotAgent {
       if (alt && !isConsumption(alt.cardId)) return alt.uid;
     }
     return best.uid;
+  }
+
+  /**
+   * MAGNETIC merge policy (#54, deterministic): for a committed Construct build (≥3 Constructs owned),
+   * merge the lowest-uid magnetic BENCH unit into the biggest under-cap Construct TOWER on the board
+   * (ties → lowest uid). Returns null if there is no tower yet (develop one first) or no magnetic unit.
+   * Standalone play is never forced — a magnetic unit with no tower falls through to normal development.
+   */
+  private bestMerge(priv: PrivateState): { unitUid: string; targetUid: string } | null {
+    const constructs = [...priv.board, ...priv.bench].filter((u) => u.tribe === 'constructs').length;
+    if (constructs < 3) return null; // only a committed Construct build consolidates
+    const mag = priv.bench
+      .filter((u) => u.keywords.includes('magnetic'))
+      .sort((a, b) => (a.uid < b.uid ? -1 : 1))[0];
+    if (!mag) return null;
+    const cap = engines.constructs.magneticMergeCap;
+    const tower = priv.board
+      .filter((u) => u.tribe === 'constructs' && (u.mergeCount ?? 0) < cap)
+      .sort((a, b) => b.atk + b.hp - (a.atk + a.hp) || (a.uid < b.uid ? -1 : 1))[0];
+    if (!tower) return null;
+    return { unitUid: mag.uid, targetUid: tower.uid };
   }
 
   private bestBuy(

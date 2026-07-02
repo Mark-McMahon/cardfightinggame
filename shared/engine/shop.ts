@@ -68,6 +68,11 @@ export interface ShopSession {
   lifetimeFriendlyDeaths: number; // Phase 3: PERSISTENT per-player friendly-death total (private). NEVER reset
   // between turns/rounds. Incremented by shop-phase destroys (Maw's destroyAlly) AND by friendly deaths
   // counted from each combat log (Match.resolveCombatPhase). Rides into combat on the CombatBoard scalar.
+  forgemastersPlayed: number; // Phase 5 (decision #55): PERSISTENT count of Forgemasters PLAYED this game
+  // (private). Incremented in playUnit; NEVER decremented (survives the Forgemaster's sale/death). Rides
+  // into combat on the CombatBoard scalar to buff every summoned Sentinel.
+  delayedGold: number; // Phase 5 (decision #56): gold QUEUED by Bursar/Moneylender, delivered (and cleared)
+  // at the START of the next shop phase, clamped to the effective gold cap (private).
   discover: { reason: string; options: string[] } | null;
   pendingTarget: PendingTargetInternal | null;
   lastCombatLog: PrivateState['lastCombatLog'];
@@ -103,6 +108,8 @@ export function createShopSession(seat: number, opts: SessionOpts = {}): ShopSes
     battlecriesThisTurn: 0,
     tokensThisTurn: 0,
     lifetimeFriendlyDeaths: 0,
+    forgemastersPlayed: 0,
+    delayedGold: 0,
     discover: null,
     pendingTarget: null,
     lastCombatLog: null,
@@ -148,6 +155,43 @@ function tierUpCost(s: ShopSession): number {
   const base = economy.tierUpBaseCost[s.tier] ?? 0;
   const skips = Math.max(0, s.round - s.lastTierUpRound);
   return Math.max(0, base - economy.tierUpDiscountPerTurn * skips);
+}
+
+// ── Phase 5 economy auras (yourEconomy scope) — query-at-read-time over the current board ──────────
+// These are SHOP-read player-economy modifiers (Fence/Vault Keeper/Moneylender). Non-stacking is
+// enforced by taking the MAX over bearers, so multiple copies never compound; they revert the instant
+// the last bearer leaves the board (invariant 4: config-driven, no hardcoded literals in logic).
+
+function economyAuraMax(s: ShopSession, kind: 'goldCapSet' | 'sellRefundSet', base: number): number {
+  let v = base;
+  for (const u of s.board) {
+    for (const a of getCard(u.cardId).auras ?? []) {
+      if (a.scope === 'yourEconomy' && a.modifier.kind === kind) v = Math.max(v, a.modifier.value);
+    }
+  }
+  return v;
+}
+
+/** The controller's EFFECTIVE gold cap: `max(economy.goldCap, Vault Keeper cap)` (decision #56). The
+ *  income clamp AND every gold gain (delayed-gold delivery + Gemwright's gem→gold bridge) read this. */
+export function effectiveGoldCap(s: ShopSession): number {
+  return economyAuraMax(s, 'goldCapSet', economy.goldCap);
+}
+
+/** The controller's effective sell refund: `max(economy.sellRefund, Fence refund)` (decision #56). */
+function effectiveSellRefund(s: ShopSession): number {
+  return economyAuraMax(s, 'sellRefundSet', economy.sellRefund);
+}
+
+/** True iff any board unit carries a Moneylender `goldNextTurnIfRich` aura (presence-based, decision #56). */
+function hasMoneylender(s: ShopSession): boolean {
+  return s.board.some((u) => (getCard(u.cardId).auras ?? []).some((a) => a.scope === 'yourEconomy' && a.modifier.kind === 'goldNextTurnIfRich'));
+}
+
+/** True iff a card is a Forgemaster — detected from DATA (its `yourSentinels` aura marker), not a
+ *  hardcoded id (decision #55). Used by playUnit to increment the persistent forgemastersPlayed counter. */
+function isForgemasterCard(cardId: string): boolean {
+  return (getCard(cardId).auras ?? []).some((a) => a.scope === 'yourSentinels');
 }
 
 // ── effect resolution (shop side) ──────────────────────────────────────────────────
@@ -256,6 +300,9 @@ function resolveShopEffect(
       summonShop(s, source, action.summonUnitId, (action.summonCount ?? 1) * summonMult);
     } else if (action.type === 'giveGem') {
       giveGemShop(s, action.amount ?? 0);
+    } else if (action.type === 'gainGoldNextTurn') {
+      // Phase 5 (Bursar): queue gold for the START of the next shop phase (delivered + clamped there).
+      s.delayedGold += action.amount ?? 0;
     } else {
       for (const t of targets) {
         const found = findUnit(s, t.uid);
@@ -433,8 +480,16 @@ function drawFreshShop(s: ShopSession): void {
 
 export function startShopPhase(s: ShopSession): OpResult {
   s.round += 1;
-  s.baseIncome = baseIncomeForRound(s.round);
+  // Phase 5: income + delayed-gold delivery both clamp to the EFFECTIVE cap (Vault Keeper raises it).
+  // The board persists across turns, so effectiveGoldCap reflects a Vault Keeper still present here.
+  const cap = effectiveGoldCap(s);
+  s.baseIncome = baseIncomeForRound(s.round, cap);
   s.gold = s.baseIncome;
+  if (s.delayedGold > 0) {
+    // deliver Bursar/Moneylender delayed gold, then clear the queue (spec §5).
+    s.gold = Math.min(cap, s.gold + s.delayedGold);
+    s.delayedGold = 0;
+  }
   s.gemsThisTurn = 0;
   s.abilityUsedThisTurn = []; // once-per-turn activation gates reset (#39); the WALLET (s.gems) persists
   s.battlecriesThisTurn = 0;
@@ -472,6 +527,11 @@ export function endOfTurnPhase(s: ShopSession): OpResult {
       resolveShopEffect(s, u, e, undefined, summonMult);
     }
   }
+  // Pass 3 (Phase 5, Moneylender): presence-based + NON-STACKING — if ANY Moneylender is on board and
+  // the controller holds ≥ moneylenderThreshold unspent gold, queue moneylenderGold ONCE (not per copy).
+  if (hasMoneylender(s) && s.gold >= engines.corsairs.moneylenderThreshold) {
+    s.delayedGold += engines.corsairs.moneylenderGold;
+  }
   return { ok: true };
 }
 
@@ -491,9 +551,12 @@ export function sellUnit(s: ShopSession, uid: string): OpResult {
   const found = findUnit(s, uid);
   if (!found) return { ok: false, error: 'unit not found' };
   const card = getCard(found.inst.cardId);
+  // Phase 5: the refund is the EFFECTIVE refund (Fence raises it). Computed BEFORE removal so selling any
+  // minion while a Fence is on board — including the Fence itself — refunds the Fence value.
+  const refund = effectiveSellRefund(s);
   if (found.where === 'board') s.board.splice(found.index, 1);
   else s.bench.splice(found.index, 1);
-  s.gold += economy.sellRefund;
+  s.gold += refund;
   if (!card.isToken && !found.inst.golden) returnCopy(s.pool, found.inst.cardId);
   // D5: onSell fires only when selling a purchasable BODY (not a token).
   if (!card.isToken) fireOnSell(s);
@@ -540,6 +603,9 @@ export function playUnit(s: ShopSession, uid: string, toSlot?: number): OpResult
   const inst = s.bench.splice(idx, 1)[0];
   const slot = toSlot != null ? Math.max(0, Math.min(toSlot, s.board.length)) : s.board.length;
   s.board.splice(slot, 0, inst);
+  // Phase 5 (decision #55): playing a Forgemaster increments the PERSISTENT stack counter (never
+  // decremented — survives its later sale/death). Each play counts as 1 (a golden Forgemaster too).
+  if (isForgemasterCard(inst.cardId)) s.forgemastersPlayed += 1;
   fireBattlecry(s, inst);
   return { ok: true };
 }
@@ -549,6 +615,48 @@ export function moveUnit(s: ShopSession, uid: string, toSlot: number): OpResult 
   if (idx < 0) return { ok: false, error: 'unit not on board' };
   const [inst] = s.board.splice(idx, 1);
   s.board.splice(Math.max(0, Math.min(toSlot, s.board.length)), 0, inst);
+  return { ok: true };
+}
+
+/**
+ * Phase 5 (decision #54) MAGNETIC merge. During the shop phase, a Magnetic minion on the bench may be
+ * MERGED into a friendly Construct on the board instead of played standalone: the target Construct
+ * PERMANENTLY gains the magnetic unit's CURRENT stats (a golden magnetic unit contributes its DOUBLED
+ * stats — reads live instance stats) and its keywords (governed by magneticStatsCarried /
+ * magneticKeywordsStack); the magnetic unit is CONSUMED — NOT a death, NOT a sell — and its pool copy
+ * does NOT return (like a triple merge). Server-authoritative validation (a rejection mutates NOTHING):
+ * shop phase (enforced by the caller), no outstanding pending target, unitUid a MAGNETIC unit on the
+ * BENCH, targetUid a friendly CONSTRUCT on the BOARD, and the target's per-unit merge cap not exceeded.
+ * Standalone play is never blocked; only merging beyond the cap is refused. Merged STATS live in
+ * atk/hp (so Nullforge resetToBase strips them); merged KEYWORDS persist (a stat-strip never touches
+ * them). `magnetic` itself is NOT copied onto the tower (it is the "can be merged" tag, not a combat kw).
+ */
+export function mergeUnit(s: ShopSession, unitUid: string, targetUid: string): OpResult {
+  if (s.pendingTarget) return { ok: false, error: 'resolve pending target first' };
+  const benchIdx = s.bench.findIndex((u) => u.uid === unitUid);
+  if (benchIdx < 0) return { ok: false, error: 'magnetic unit not on bench' };
+  const mag = s.bench[benchIdx];
+  if (!mag.keywords.includes('magnetic')) return { ok: false, error: 'unit is not magnetic' };
+  const tgt = s.board.find((u) => u.uid === targetUid);
+  if (!tgt) return { ok: false, error: 'target not on board' };
+  if (getCard(tgt.cardId).tribe !== 'constructs') return { ok: false, error: 'target is not a Construct' };
+  if ((tgt.mergeCount ?? 0) >= engines.constructs.magneticMergeCap) return { ok: false, error: 'merge cap reached' };
+
+  // commit (all validation passed).
+  if (engines.constructs.magneticStatsCarried) {
+    const st = applyBuff({ atk: tgt.atk, hp: tgt.hp }, mag.atk, mag.hp);
+    tgt.atk = st.atk;
+    tgt.hp = st.hp;
+  }
+  if (engines.constructs.magneticKeywordsStack) {
+    for (const kw of mag.keywords) {
+      if (kw === 'magnetic') continue; // the merge tag never transfers to the tower
+      if (!tgt.keywords.includes(kw)) tgt.keywords.push(kw);
+    }
+  }
+  tgt.mergeCount = (tgt.mergeCount ?? 0) + 1;
+  s.bench.splice(benchIdx, 1); // consumed — pool copy does NOT return (triple-merge accounting), no onSell
+  s.log.push(`merged ${getCard(mag.cardId).name} into ${getCard(tgt.cardId).name} (merges → ${tgt.mergeCount})`);
   return { ok: true };
 }
 
@@ -670,8 +778,8 @@ export function activateAbility(s: ShopSession, uid: string): OpResult {
   for (const action of spec.actions) {
     switch (action.type) {
       case 'gainGold':
-        // the ONE gem→gold bridge (one-way; never above goldCap — spec §5).
-        s.gold = Math.min(economy.goldCap, s.gold + (action.amount ?? 0));
+        // the ONE gem→gold bridge (one-way; never above the EFFECTIVE cap — Vault Keeper raises it, §5).
+        s.gold = Math.min(effectiveGoldCap(s), s.gold + (action.amount ?? 0));
         break;
       case 'refreshShop': {
         // free reroll: identical draw path to rollShop (same seeded session Rng + tech injection),
@@ -717,7 +825,7 @@ export function resolveDiscoverPick(s: ShopSession, optionIndex: number): OpResu
 /** Convert the current board into a CombatBoard for resolveCombat (spec §9.7). The persistent
  *  lifetimeFriendlyDeaths rides in as the CombatBoard scalar (Phase 3, Ossuary Titan). */
 export function boardToCombat(s: ShopSession): CombatBoard {
-  return toCombatBoard(s.board, s.tier, s.lifetimeFriendlyDeaths);
+  return toCombatBoard(s.board, s.tier, s.lifetimeFriendlyDeaths, s.forgemastersPlayed);
 }
 
 // ── projection to the private channel (owner-only) ──────────────────────────────────

@@ -70,6 +70,7 @@ interface Side {
   revenantDeaths: number;
   tokenDeaths: number;
   lifetimeDeaths: number; // Phase 3: persistent friendly-death total carried IN on the CombatBoard (fixed all fight)
+  forgemastersPlayed: number; // Phase 5: persistent Forgemasters-played count carried IN (buffs summoned Sentinels)
   primedDouble: boolean; // Pallbearer: next friendly dier's deathrattle fires twice
 }
 
@@ -136,6 +137,7 @@ function makeSide(id: 'a' | 'b', board: CombatBoard): Side {
     revenantDeaths: 0,
     tokenDeaths: 0,
     lifetimeDeaths: board.lifetimeDeaths ?? 0,
+    forgemastersPlayed: board.forgemastersPlayed ?? 0,
     primedDouble: false,
   };
 }
@@ -700,6 +702,21 @@ function applyCombatAction(
   }
 }
 
+/** Phase 5 (decision #55): buff a freshly-summoned Sentinel by the controller's Forgemaster stack
+ *  (+forgemasterSentinelBuff/+forgemasterSentinelBuff × forgemastersPlayed). Reads the persistent count
+ *  from the Side scalar carried IN on the CombatBoard (never ambient). Mutates the fighter in place;
+ *  returns true iff it applied (so the caller emits a stats event). A combat-only stat bump on a token. */
+function applyForgemasterBuff(side: Side, f: Fighter): boolean {
+  const stacks = side.forgemastersPlayed;
+  if (stacks <= 0) return false;
+  if (f.cardId !== engines.constructs.forgemasterSentinelId) return false;
+  const delta = stacks * engines.constructs.forgemasterSentinelBuff;
+  const st = applyBuff({ atk: f.atk, hp: f.hp }, delta, delta);
+  f.atk = st.atk;
+  f.hp = st.hp;
+  return true;
+}
+
 function resolveSummon(
   ctx: Ctx,
   side: Side,
@@ -710,18 +727,25 @@ function resolveSummon(
 ): void {
   if (!summonUnitId) return;
   const summoned: Fighter[] = [];
+  const forgeBuffed: Fighter[] = []; // Phase 5: summoned Sentinels that got the Forgemaster stack buff
   let at = clampIndex(anchorIndex, side.units.length);
   const slot = at;
   for (let k = 0; k < count; k++) {
     if (side.units.length >= economy.boardCap) break; // over-cap summons dropped (logged)
     const uid = `sum#${++ctx.summonSeq}`;
     const f = fighterFromCard(summonUnitId, uid);
+    if (applyForgemasterBuff(side, f)) forgeBuffed.push(f); // mutates f's stats in place (no event yet)
     insertAt(side, at, f);
     summoned.push(f);
     at++;
   }
   if (summoned.length === 0) return;
   ctx.events.push({ t: 'summon', ownerId: source.uid, unitIds: summoned.map((u) => u.uid), slot });
+  // Emit the Forgemaster stack buff AFTER the summon event (replay legibility; combat-only, so the §7.5
+  // fold ignores it — no permanent:true marker). The stats already reflect the buff when the unit acts.
+  for (const f of forgeBuffed) {
+    ctx.events.push({ t: 'stats', unitId: f.uid, atk: f.atk, hp: f.hp, sourceId: source.uid });
+  }
   // onSummon fires for living friendlies (the summoned unit is the trigger source).
   for (const f of summoned) {
     for (const u of [...side.units]) {

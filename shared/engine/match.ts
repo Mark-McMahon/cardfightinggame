@@ -13,6 +13,7 @@ import {
   createShopSession,
   endOfTurnPhase,
   freezeShop,
+  mergeUnit,
   moveUnit,
   playUnit,
   resolveDiscoverPick,
@@ -147,6 +148,9 @@ export class Match {
         break;
       case 'moveUnit':
         res = moveUnit(s, intent.unitUid, intent.toSlot);
+        break;
+      case 'merge':
+        res = mergeUnit(s, intent.unitUid, intent.targetUid);
         break;
       case 'targetChoice':
         res = resolveTargetChoice(s, intent.targetUid);

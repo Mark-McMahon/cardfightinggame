@@ -95,6 +95,16 @@ export interface EnginesConfig {
   constructs: {
     magneticStatsCarried: boolean;
     magneticKeywordsStack: boolean;
+    // Phase 5 (decision #54) MAGNETIC merge system (reserved→live). A friendly Construct may absorb up
+    // to `magneticMergeCap` magnetic units (discrete per-unit cap → breakpoint law #22; standalone play
+    // is NEVER blocked, only merging beyond the cap is refused).
+    magneticMergeCap: number;
+    // Phase 5 (decision #55) Forgemaster: per-Forgemaster-PLAYED buff applied to every future Sentinel at
+    // its combat creation (+forgemasterSentinelBuff/+forgemasterSentinelBuff × forgemastersPlayed stacks).
+    forgemasterSentinelBuff: number;
+    // content pointer (single-sources which summoned token the Forgemaster stack buffs; card-id refs in
+    // config are the established pattern — cf. systems.techInjection.cardIds, breakpoints summonUnitId).
+    forgemasterSentinelId: string;
     mechDeathTokenAtk: number;
     mechDeathTokenHp: number;
   };
@@ -107,6 +117,13 @@ export interface EnginesConfig {
     // an unbounded per-unit scaler (breakpoint law #22 — not a primary scaling counter).
     leftmostAttackBuff: number;
     leftmostAttackBuffCap: number;
+    // Phase 5 (decision #56) GOLD-economy cards (gold ONLY; gold/gems stay separate — the churn loop is
+    // bounded because a buy(3g)/sell(≤2g) cycle strictly LOSES gold, so it cannot mint infinite money).
+    bursarGold: number; // Bursar battlecry: gold delivered at the START of the next shop turn (delayed queue)
+    moneylenderThreshold: number; // Moneylender end-of-turn gate: unspent gold needed to queue next-turn gold
+    moneylenderGold: number; // Moneylender payoff: delayed gold queued (once — non-stacking)
+    fenceSellRefund: number; // Fence: minions sell for this while a Fence is on board (overrides economy.sellRefund)
+    vaultKeeperGoldCap: number; // Vault Keeper: effective gold cap while a Vault Keeper is on board
   };
 }
 
@@ -206,6 +223,9 @@ export const engines: EnginesConfig = {
   constructs: {
     magneticStatsCarried: true,
     magneticKeywordsStack: true,
+    magneticMergeCap: 5, // a tower absorbs ≤5 merges (discrete cap; poison/Nullforge/width still counter it)
+    forgemasterSentinelBuff: 1, // +1/+1 per Forgemaster played, to every future Sentinel (this game)
+    forgemasterSentinelId: 'constructs_sentinel',
     mechDeathTokenAtk: 1,
     mechDeathTokenHp: 1,
   },
@@ -215,5 +235,10 @@ export const engines: EnginesConfig = {
     costReductionAmount: 1,
     leftmostAttackBuff: 2, // Vanguard Pennant: your leftmost minion has +2 attack (positional)
     leftmostAttackBuffCap: 4, // two pennants max out here — a fixed slot buff, never a runaway lever
+    bursarGold: 2, // Bursar: +2 gold at the start of your next turn (delayed)
+    moneylenderThreshold: 3, // Moneylender: needs ≥3 unspent gold at end of turn…
+    moneylenderGold: 1, // …to queue +1 gold next turn (non-stacking)
+    fenceSellRefund: 2, // Fence: your minions sell for 2 (vs base 1) — a buy(3)/sell(2) churn still loses 1g/cycle
+    vaultKeeperGoldCap: 13, // Vault Keeper: effective gold cap 13 while on board (vs base 10)
   },
 };

@@ -41,6 +41,7 @@ export function Shop() {
   const [dropSlot, setDropSlot] = useState<number | null>(null);
   const [boardOver, setBoardOver] = useState(false);
   const [sellOver, setSellOver] = useState(false);
+  const [mergeOverUid, setMergeOverUid] = useState<string | null>(null);
 
   if (!priv || !pub) return <div className="center dim">Loading shop…</div>;
 
@@ -79,7 +80,19 @@ export function Shop() {
     setDropSlot(null);
     setBoardOver(false);
     setSellOver(false);
+    setMergeOverUid(null);
   };
+
+  // ── magnetic merge (decision #54): drag a MAGNETIC bench unit onto a friendly Construct on the board
+  // to MERGE (instead of playing it standalone). Maps onto the `merge` intent; a non-magnetic drag or a
+  // non-Construct target falls through to the normal board drop (play / reorder). ───────────────────
+  const draggedMagneticBench = (): ClientUnit | undefined => {
+    const d = dragRef.current;
+    if (!d || d.from !== 'bench' || !d.uid) return undefined;
+    const u = priv.bench.find((b) => b.uid === d.uid);
+    return u && u.keywords.includes('magnetic') ? u : undefined;
+  };
+  const canMergeOnto = (u: ClientUnit): boolean => !!draggedMagneticBench() && u.tribe === 'constructs';
 
   // insertion slot on the board from the pointer x, using the live slot rects.
   const slotFromX = (x: number): number => {
@@ -272,10 +285,27 @@ export function Shop() {
                   ref={(el) => {
                     slotRefs.current[i] = el;
                   }}
-                  className={'bslot' + (draggingKey === u.uid ? ' dragging' : '')}
+                  className={'bslot' + (draggingKey === u.uid ? ' dragging' : '') + (mergeOverUid === u.uid ? ' merge-over' : '')}
                   draggable={!pending && shopLive}
                   onDragStart={startDrag({ from: 'board', uid: u.uid }, u.uid)}
                   onDragEnd={endDrag}
+                  onDragOver={(e) => {
+                    if (shopLive && canMergeOnto(u)) {
+                      e.preventDefault();
+                      e.stopPropagation(); // take priority over the board-row reorder/play drop
+                      setMergeOverUid(u.uid);
+                    }
+                  }}
+                  onDragLeave={() => setMergeOverUid((cur) => (cur === u.uid ? null : cur))}
+                  onDrop={(e) => {
+                    const d = dragRef.current;
+                    if (shopLive && canMergeOnto(u) && d?.uid) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      sendIntent({ type: 'merge', unitUid: d.uid, targetUid: u.uid });
+                      endDrag();
+                    }
+                  }}
                   onClick={clickBoard(u)}
                 >
                   <Card model={unitToModel(u)} className={pending && legal.has(u.uid) ? 'legal' : ''} />

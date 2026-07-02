@@ -70,8 +70,9 @@ export function toShopOffer(cardId: string): ShopOffer {
   };
 }
 
-/** Current base income for a round (spec §5): goldStart, +goldPerTurn each round, capped. */
-export function baseIncomeForRound(round: number): number {
+/** Current base income for a round (spec §5): goldStart, +goldPerTurn each round, capped. The cap
+ *  defaults to `economy.goldCap` but callers pass the EFFECTIVE cap (Phase 5 Vault Keeper raises it). */
+export function baseIncomeForRound(round: number, cap: number = economy.goldCap): number {
   const income = economy.goldStart + Math.max(0, round - 1) * economy.goldPerTurn;
-  return Math.min(economy.goldCap, income);
+  return Math.min(cap, income);
 }
