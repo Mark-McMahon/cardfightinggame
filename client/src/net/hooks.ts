@@ -29,3 +29,20 @@ export function useToasts(): ToastItem[] {
 export function useRoom(): ConnInfo {
   return useSlice((s) => s.conn);
 }
+
+// Touch/no-hover detection (§10). On a coarse/no-hover pointer, HTML5 drag-and-drop is unavailable and
+// a tap fires the click *with* a sticky `:hover`, so tap-to-buy fires while the player only meant to
+// read the card. Scenes use this to switch to a tap-to-INSPECT model (a deliberate Buy/Play/Sell in the
+// inspect sheet) instead of tap-to-act. Subscribed via matchMedia so plugging in a mouse re-renders.
+const TOUCH_QUERY = '(hover: none), (pointer: coarse)';
+export function useIsTouch(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia(TOUCH_QUERY);
+      mq.addEventListener('change', cb);
+      return () => mq.removeEventListener('change', cb);
+    },
+    () => window.matchMedia(TOUCH_QUERY).matches,
+    () => false, // SSR fallback (unused — this is a Vite SPA)
+  );
+}

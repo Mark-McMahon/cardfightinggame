@@ -953,6 +953,27 @@ build from functional mechanics only; original names/text/art throughout.
     the extended EV-ECO-10 (`shop-triple.test.ts`): a buffed copy among the three now yields a golden at
     `2×base + the buff`, and the fully-vanilla case still asserts `base × goldenStatMultiplier`.
 
+### Mobile input (Round 15) — touch tap-to-inspect, no logic/engine change
+
+70. **On a touch/no-hover pointer, a card tap INSPECTS (opens a bottom sheet) instead of buying/playing;
+    the purchase moves to a deliberate Buy/Play/Sell button (2026-07-02; spec §10; client-only —
+    `net/hooks.ts` `useIsTouch`, `scenes/Shop.tsx`, `components.tsx` `CardTipBody`, `styles.css`).** The
+    user hit this on a phone: trying to *read* a shop card bought it, because hover (the read affordance)
+    and HTML5 drag-and-drop are mouse-only, and on touch a tap fires the click *with* a sticky `:hover` —
+    so tap-to-read and tap-to-buy were the same gesture. Options weighed: (a) two-tap confirm on the card
+    itself — rejected, a stray double-tap still buys; (b) long-press to inspect — rejected as finicky/
+    undiscoverable; (c) **tap-to-inspect + an explicit action button — chosen.** A tap opens a fixed
+    **inspect sheet** rendering the *same* `CardTipBody` the desktop hover tooltip uses (single-sourced, so
+    the read is identical) with the zone-appropriate action(s); the in-place hover tip is suppressed on
+    touch inside the shop so it can't paint over the sheet. **Scope, deliberately minimal (user: "don't do
+    a whole mobile rework"):** input model only — no layout/engine/intent change (invariant 1 intact: the
+    sheet sends the same `buy`/`playUnit`/`sell` ops), desktop hover+click+drag untouched, and `pending`
+    target-picking still resolves on tap (that tap *is* the deliberate act). Slot-precise placement /
+    reordering still needs a mouse drag; the sheet covers the buy/play/sell that were otherwise impossible
+    on touch. Detection is a `matchMedia('(hover: none), (pointer: coarse)')` subscription, so plugging in a
+    mouse flips back to the desktop paths live. Verified in an emulated mobile Playwright context: a tap
+    opens the sheet and spends no gold / adds no unit; the Buy button then purchases.
+
 ## Tribe name map (clean-room — never ship the reference names)
 | Reference (do NOT ship) | Original name | Identity |
 |---|---|---|

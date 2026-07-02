@@ -1222,6 +1222,21 @@ off `--card-scale` at narrower widths so a full 7-wide board never wraps or over
 tooltips use `display:none` (not `visibility:hidden`) so a right-edge card's tip can't silently widen
 the page into a horizontal scrollbar; the hand's tips open leftward for the same reason.
 
+**Touch input — tap to INSPECT, not to act (decision #70).** Hover and HTML5 drag-and-drop are
+mouse-only: on a coarse/no-hover pointer a tap fires the click *with* a sticky `:hover`, so tapping a
+card to *read* it also bought it. On touch (`useIsTouch()`, a `matchMedia('(hover: none), (pointer:
+coarse)')` subscription in `net/hooks.ts`) the card tap is repurposed to **inspect**: it opens a fixed
+bottom **inspect sheet** carrying that card's full text — the *same* `CardTipBody` the desktop hover
+tooltip renders, single-sourced — plus a **deliberate action button** (Buy for a shop offer, Play/Sell
+for a hand unit, Sell for a board unit). The in-place hover tip is suppressed on touch inside the shop
+(`@media (hover: none)`) so the off-screen side tooltip doesn't paint over the sheet. This is still
+presentation over the same intents (invariant #1): the sheet buttons send exactly the `buy` / `playUnit`
+/ `sell` ops the desktop click paths do, and target-picking is exempt (while a `pending` effect wants a
+target, tapping a legal unit still resolves it — that tap *is* the deliberate act). Reaching a specific
+board slot / reordering still needs drag (mouse); the sheet covers the buy/play/sell that were otherwise
+impossible on touch. The tapped card carries an `.inspecting` selection ring; a tap on bare felt or the
+sheet's ✕ dismisses it.
+
 **Battlefield — the dusk arena (§10 reskin).** The combat overlay renders as a **battlefield at
 dusk**: a full twilight sky (deep-indigo zenith grading down through a violet band to a burning
 **ember horizon**), a distant ridge silhouette, and an earthen field with drifting ambient embers —
@@ -1416,6 +1431,16 @@ just-eliminated loser) watch the final fight, then flips to `finished` (revealin
 routing clients to Results). Entering `finished` directly at resolve would skip the last combat
 entirely — the client would jump straight to the results screen. The continuing case instead calls
 `beginShop` from the same callback.
+
+**Results — the winner's victory lap (`client/src/scenes/Results.tsx`).** Above the final placements,
+the *winner* sees **their own winning board** — a static, arc-laid row of the roster that took the
+match, rendered with the same `Card` token + `arcVars` arc as the shop board (single-sourced from
+`components.tsx`). It reads the winner's `privateState.board`, which persists in the store at
+`finished` and already carries combat's permanent buffs folded in (§7.5) — so no server change and no
+new message. Two-channel privacy (invariant #3) means a client only ever holds its **own** board, so
+this is the winner viewing their winning roster, not losers viewing the winner's board; showing the
+winner's board to everyone would require a new server-side `finished`-time broadcast. The panel caps
+width and scrolls internally so a full 7-wide board never bleeds a horizontal page scrollbar.
 
 **Contextual counters (decision #27).** Show a manufactured-event counter (deaths / tokens
 / battlecries / gems) **only when you own a card that consumes it** — never an always-on

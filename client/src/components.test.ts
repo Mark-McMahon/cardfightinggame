@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { PublicState, Pairing } from '@cardgame/shared';
-import { sideForSeat, resolveOpponent } from './components';
+import { sideForSeat, resolveOpponent, arcVars } from './components';
 
 // sideForSeat is the fix for the empty/wiped-board replay mirror (§10): the viewer's combat side must
 // come from the synced pairing, NEVER from their board uids (which are empty for a wiped board and so
@@ -36,5 +36,18 @@ describe('sideForSeat — combat side from the pairing, not the board', () => {
     // seat 6 is on side 'b'; its opponent is seat 1 (side 'a') — the two derivations must not disagree.
     expect(sideForSeat(p, 6)).toBe('b');
     expect(resolveOpponent(p, 6)?.seat).toBe(1);
+  });
+});
+
+// arcVars is the shared board-arc layout helper (§10) used by BOTH the shop board and the Results
+// winning-board — the row bows symmetrically about its centre (centre slot lifted least, wings most).
+describe('arcVars — symmetric distance-from-centre for the board arc', () => {
+  const dist = (i: number, n: number) => (arcVars(i, n) as Record<string, number>)['--dist'];
+  it('centres a 7-wide board: 3,2,1,0,1,2,3', () => {
+    expect([0, 1, 2, 3, 4, 5, 6].map((i) => dist(i, 7))).toEqual([3, 2, 1, 0, 1, 2, 3]);
+  });
+  it('a lone unit sits flat (dist 0), and even boards straddle the centre', () => {
+    expect(dist(0, 1)).toBe(0);
+    expect([dist(0, 2), dist(1, 2)]).toEqual([0.5, 0.5]);
   });
 });

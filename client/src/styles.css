@@ -505,6 +505,11 @@ input {
 .combat-controls { width: 100%; max-width: 1200px; margin-top: 14px; }
 .combat-controls .scrub { flex: 1; min-width: 120px; accent-color: var(--accent); cursor: pointer; }
 .win { color: var(--good); } .loss { color: var(--bad); } .tie { color: var(--dim); }
+/* Results — the winner's victory-lap board (their post-final-combat roster, §10). Reuses the shop's
+   arc/token styling (.board-row/.arc-slot); the panel caps width and scrolls internally so a wide
+   7-wide board never bleeds a horizontal page scrollbar (same discipline as the shop tabletop). */
+.win-board { max-width: min(1120px, 94vw); overflow-x: auto; }
+.win-board .wb-row { justify-content: center; padding-top: calc(var(--board-arc-step) * 2.5); }
 .discover-modal { position: fixed; inset: 0; background: #120d09cc; z-index: 45; display: flex; align-items: center; justify-content: center; }
 .discover-card { background: var(--panel); border: 1px solid var(--accent); border-radius: 2px; padding: 20px; }
 .hpbar { height: 5px; background: #0006; border-radius: 3px; overflow: hidden; margin-top: 3px; }
@@ -590,6 +595,39 @@ input {
 /* granted-this-game effects (e.g. a poison buff) called out apart from the printed card */
 .card-tip .tip-added { margin-top: 4px; border-top: 1px solid var(--line); padding-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .card-tip .tip-added-hd { flex-basis: 100%; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #7ee081; font-weight: 700; }
+
+/* TOUCH INSPECT (§10) — on a no-hover pointer a tap opens the bottom inspect sheet (below), so suppress
+   the in-place hover tip inside the shop tabletop: a tap leaves a sticky :hover that would otherwise
+   paint the side-opening tip (off-screen on a phone) on top of the sheet. `.inspecting` is the tapped
+   card's selection ring so it's clear which card the sheet describes. Combat's hover tip is untouched. */
+.unit.inspecting { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), 0 0 14px #e0a82e88; }
+@media (hover: none) {
+  .match-main.tabletop .unit:hover .card-tip { display: none; }
+}
+
+/* the bottom inspect sheet: a fixed action bar carrying the tapped card's full text + a deliberate
+   Buy / Play / Sell, so reading a card never buys it. Only mounted on touch (Shop gates on useIsTouch). */
+.inspect-sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 200;
+  display: flex; align-items: flex-end; gap: 12px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, #241c34f2, #14101ff7);
+  border-top: 2px solid var(--accent);
+  box-shadow: 0 -10px 30px -8px #000c;
+  animation: sheetIn 0.14s ease both;
+}
+@keyframes sheetIn { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
+/* reuse every .card-tip child style, but strip the tooltip's floating-box chrome so it lays out inline */
+.inspect-tip {
+  position: static; display: block; width: auto; flex: 1 1 auto; min-width: 0;
+  padding: 0; border: none; background: none; box-shadow: none; pointer-events: auto;
+}
+.inspect-sheet .ins-actions { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; }
+.inspect-sheet .ins-actions .ctl-btn { white-space: nowrap; padding: 10px 18px; }
+.inspect-sheet .ins-close {
+  position: absolute; top: 8px; right: 10px; width: 30px; height: 30px; padding: 0;
+  font-size: 15px; line-height: 1; border-radius: 50%; background: var(--panel2); color: var(--dim);
+}
 
 /* activated ability (decision #39) — a gem-cost button pinned under a board card */
 .ability-btn {

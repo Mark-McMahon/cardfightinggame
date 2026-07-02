@@ -9,12 +9,12 @@
 // Buttons remain the fallback (click a shop card to buy, a bench card to play; econ controls are buttons).
 
 import { useRef, useState } from 'react';
-import type { DragEvent, CSSProperties, ReactNode } from 'react';
+import type { DragEvent, MouseEvent, CSSProperties, ReactNode } from 'react';
 import type { ClientUnit, ShopOffer, Intent, ActivatedAbilityState } from '@cardgame/shared';
 import { economy, UNITS } from '@cardgame/shared';
-import { usePrivateState, usePublicState, useRoom } from '../net/hooks';
+import { usePrivateState, usePublicState, useRoom, useIsTouch } from '../net/hooks';
 import { sendIntent, buyThenPlay } from '../net/game';
-import { Card, Standings, StatBadge, unitToModel, offerToModel, resolveOpponent } from '../components';
+import { Card, CardTipBody, Standings, StatBadge, unitToModel, offerToModel, resolveOpponent, arcVars } from '../components';
 
 // decision #27: a resource counter shows only when you own a card that consumes it. Since #39
 // the gem CONSUMERS are the activated-ability cards (the wallet's spenders) — read from the
@@ -35,10 +35,6 @@ interface DragPayload {
 // (invariant #4: no gameplay number is hardcoded, and presentation magnitudes are single-sourced
 // too). CSS reads these vars and multiplies them by its tokens, so the whole curve reshapes from
 // one place. `n` is the row length; `i` this card's slot.
-function arcVars(i: number, n: number): CSSProperties {
-  const center = (n - 1) / 2;
-  return { ['--i' as string]: i, ['--dist' as string]: Math.abs(i - center) } as CSSProperties;
-}
 function fanVars(i: number, n: number): CSSProperties {
   const center = (n - 1) / 2;
   return { ['--off' as string]: (i - center).toFixed(3), ['--dist' as string]: Math.abs(i - center) } as CSSProperties;
@@ -57,10 +53,18 @@ function HeroCrest({ name, seat }: { name: string; seat: number | null }): React
   );
 }
 
+// On a touch/no-hover pointer, a tap first SELECTS a card (opening the inspect sheet) rather than
+// buying/playing it — the destructive act moves to a deliberate button. `sel` names the inspected card
+// by zone + identity (index for a shop offer, uid for an owned unit) and is re-resolved on every render
+// so it self-dismisses if the card is gone (sold, bought, rolled away). See §10.
+type Selection = { zone: 'shop'; index: number } | { zone: 'bench' | 'board'; uid: string };
+
 export function Shop() {
   const priv = usePrivateState();
   const pub = usePublicState();
   const conn = useRoom();
+  const isTouch = useIsTouch();
+  const [sel, setSel] = useState<Selection | null>(null);
 
   const dragRef = useRef<DragPayload | null>(null);
   const slotRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -189,12 +193,60 @@ export function Shop() {
     if (shopLive && pending && legal.has(u.uid)) sendIntent({ type: 'targetChoice', targetUid: u.uid });
   };
 
+  // ── touch: tap to INSPECT, not to act ────────────────────────────────────────────
+  // On a no-hover pointer a plain tap opens the inspect sheet instead of firing buy/play (the accidental
+  // purchase). Target-picking is exempt: while a `pending` effect wants a target, tapping a legal unit IS
+  // the deliberate act, so it still resolves it. On a mouse these fall through to the desktop handlers.
+  const tapOffer = (i: number) => (e: MouseEvent) => {
+    if (!isTouch) return clickOffer(i)();
+    e.stopPropagation();
+    if (pending || !shopLive) return;
+    setSel({ zone: 'shop', index: i });
+  };
+  const tapBench = (u: ClientUnit) => (e: MouseEvent) => {
+    if (!isTouch) return clickBench(u)();
+    e.stopPropagation();
+    if (!shopLive) return;
+    if (pending) {
+      if (legal.has(u.uid)) sendIntent({ type: 'targetChoice', targetUid: u.uid });
+      return;
+    }
+    setSel({ zone: 'bench', uid: u.uid });
+  };
+  const tapBoard = (u: ClientUnit) => (e: MouseEvent) => {
+    if (!isTouch) return clickBoard(u)();
+    e.stopPropagation();
+    if (pending) {
+      if (shopLive && legal.has(u.uid)) sendIntent({ type: 'targetChoice', targetUid: u.uid });
+      return;
+    }
+    setSel({ zone: 'board', uid: u.uid });
+  };
+
+  // Act on the inspected card, then close the sheet. Guarded exactly like the desktop click paths.
+  const doSel = (i: Intent) => () => {
+    if (shopLive) sendIntent(i);
+    setSel(null);
+  };
+
   const intent = (i: Intent) => () => {
     if (shopLive) sendIntent(i);
+    setSel(null);
   };
 
   const boardN = priv.board.length;
   const handN = priv.bench.length;
+
+  // Re-resolve the inspected card each render so the sheet self-dismisses when its card leaves that zone
+  // (bought, sold, played, or rolled away). `selModel` is null ⇒ no sheet. Never open the sheet during a
+  // pending target-pick (tapping units picks the target then) or while the shop is frozen for combat.
+  const selUnit = sel?.zone === 'bench' ? priv.bench.find((u) => u.uid === sel.uid) : sel?.zone === 'board' ? priv.board.find((u) => u.uid === sel.uid) : undefined;
+  const selOffer = sel?.zone === 'shop' ? priv.shop[sel.index] : undefined;
+  const selModel = selUnit ? unitToModel(selUnit) : selOffer ? offerToModel(selOffer) : null;
+  const showSheet = isTouch && shopLive && !pending && !!sel && !!selModel;
+  // is this card the one currently inspected (⇒ gets the selection ring)?
+  const inspShop = (i: number): boolean => showSheet && sel?.zone === 'shop' && sel.index === i;
+  const inspUid = (uid: string): boolean => showSheet && (sel?.zone === 'bench' || sel?.zone === 'board') && sel.uid === uid;
 
   return (
     <div className={'match-main tabletop' + (shopLive ? '' : ' shop-frozen')}>
@@ -232,8 +284,9 @@ export function Shop() {
 
       {/* The tabletop surface — one continuous felt/wood table (no boxed panels): a tavern shelf up
           top (drag a minion DOWN to buy), the curved board as the focal felt, and a hero dock + a
-          fanned hand along the bottom. Every intent is exactly as before; this is presentation only. */}
-      <div className="table">
+          fanned hand along the bottom. Every intent is exactly as before; this is presentation only.
+          A tap on the bare felt (touch) dismisses the inspect sheet — card taps stopPropagation. */}
+      <div className="table" onClick={() => isTouch && setSel(null)}>
         {/* TAVERN SHELF — the shop counter you drag from; doubles as the sell target while dragging a
             board/bench unit up here (drop to sell). */}
         <div
@@ -291,9 +344,9 @@ export function Shop() {
                   draggable={!pending && shopLive}
                   onDragStart={startDrag({ from: 'shop', shopIndex: i }, key)}
                   onDragEnd={endDrag}
-                  onClick={clickOffer(i)}
+                  onClick={tapOffer(i)}
                 >
-                  <Card model={offerToModel(o)} className={affordable && !pending ? 'clickable' : ''} />
+                  <Card model={offerToModel(o)} className={(affordable && !pending ? 'clickable' : '') + (inspShop(i) ? ' inspecting' : '')} />
                 </div>
               );
             })}
@@ -349,9 +402,9 @@ export function Shop() {
                         endDrag();
                       }
                     }}
-                    onClick={clickBoard(u)}
+                    onClick={tapBoard(u)}
                   >
-                    <Card model={unitToModel(u)} className={pending && legal.has(u.uid) ? 'legal' : ''} />
+                    <Card model={unitToModel(u)} className={(pending && legal.has(u.uid) ? 'legal' : '') + (inspUid(u.uid) ? ' inspecting' : '')} />
                     {/* activated ability (decision #39): buy with gems, once per turn per minion */}
                     {ability && (
                       <button
@@ -397,15 +450,52 @@ export function Shop() {
                   draggable={!pending}
                   onDragStart={startDrag({ from: 'bench', uid: u.uid }, u.uid)}
                   onDragEnd={endDrag}
-                  onClick={clickBench(u)}
+                  onClick={tapBench(u)}
                 >
-                  <Card model={unitToModel(u)} className={pending && legal.has(u.uid) ? 'legal' : !pending && !boardFull ? 'clickable' : ''} />
+                  <Card model={unitToModel(u)} className={(pending && legal.has(u.uid) ? 'legal' : !pending && !boardFull ? 'clickable' : '') + (inspUid(u.uid) ? ' inspecting' : '')} />
                 </div>
               ))}
             </div>
           </div>
         </div>
       </div>
+
+      {/* INSPECT SHEET (touch, §10) — tapping a card opens this bottom panel instead of buying it. It
+          reuses the exact hover-tooltip body (CardTipBody) so the read is identical to desktop, and the
+          act is a DELIBERATE button: Buy for a shop offer, Play/Sell for a hand unit, Sell for a board
+          unit. Its own click stops propagation so it doesn't dismiss itself; the bare-felt tap does. */}
+      {showSheet && sel && selModel && (
+        <div className="inspect-sheet" role="dialog" aria-label={`${selModel.name} — inspect`} onClick={(e) => e.stopPropagation()}>
+          <button className="ins-close" onClick={() => setSel(null)} aria-label="close">
+            ✕
+          </button>
+          <div className="card-tip inspect-tip">
+            <CardTipBody model={selModel} />
+          </div>
+          <div className="ins-actions">
+            {sel.zone === 'shop' && (
+              <button className="ctl-btn primary" disabled={!canAfford(economy.buyCost) || benchFull} onClick={doSel({ type: 'buy', shopIndex: sel.index })}>
+                {benchFull ? 'Hand full' : <>Buy <span className="ctl-cost">{economy.buyCost}</span></>}
+              </button>
+            )}
+            {sel.zone === 'bench' && (
+              <>
+                <button className="ctl-btn primary" disabled={boardFull} onClick={doSel({ type: 'playUnit', unitUid: sel.uid })}>
+                  {boardFull ? 'Board full' : 'Play'}
+                </button>
+                <button className="ctl-btn" onClick={doSel({ type: 'sell', unitUid: sel.uid })}>
+                  Sell <span className="ctl-cost">+{economy.sellRefund}</span>
+                </button>
+              </>
+            )}
+            {sel.zone === 'board' && (
+              <button className="ctl-btn" onClick={doSel({ type: 'sell', unitUid: sel.uid })}>
+                Sell <span className="ctl-cost">+{economy.sellRefund}</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* DISCOVER modal (triple reward etc.) — a shop-phase reward; never over the combat freeze */}
       {shopLive && priv.discover && (

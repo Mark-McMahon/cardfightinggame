@@ -32,6 +32,14 @@ export function offerToModel(o: ShopOffer): CardModel {
   return { cardId: o.cardId, name: o.name, tribe: o.tribe, tier: o.tier, atk: o.atk, hp: o.hp, keywords: o.keywords, text: o.text };
 }
 
+/** Per-slot arc CSS vars: `--dist` (distance from row centre) lifts each token on the board's shallow
+ * arc (spec §10). Presentation-only; single-sourced here so the shop board and the Results winning-board
+ * bow identically. */
+export function arcVars(i: number, n: number): CSSProperties {
+  const center = (n - 1) / 2;
+  return { ['--i' as string]: i, ['--dist' as string]: Math.abs(i - center) } as CSSProperties;
+}
+
 export function KeywordChip({ kw }: { kw: Keyword }): ReactNode {
   return (
     <span className="kwtag" title={KW_LABEL[kw]}>
@@ -107,12 +115,6 @@ export function Card({ model, className, style, title, onClick, draggable, onDra
   const baseHp = base ? base.hp * mult : hp;
   const atkBuffed = atk > baseAtk;
   const hpBuffed = hp > baseHp;
-  // Split keywords into innate (printed on the card) vs granted this game (via a battlecry/aura),
-  // so the tooltip can name them in words and call the added ones out separately. No catalog entry
-  // (a token) ⇒ treat every keyword as innate rather than mislabel them all as "added".
-  const baseKeywords = base?.keywords ?? keywords;
-  const innateKeywords = keywords.filter((k) => baseKeywords.includes(k));
-  const addedKeywords = keywords.filter((k) => !baseKeywords.includes(k));
   const cls = ['unit', golden ? 'golden' : '', isToken ? 'token' : '', className ?? ''].filter(Boolean).join(' ');
   const hpFill = combat ? Math.max(0, Math.min(1, hp / Math.max(1, combat.hpMax))) : 0;
   return (
@@ -139,40 +141,67 @@ export function Card({ model, className, style, title, onClick, draggable, onDra
         <span className={'hp' + (hpBuffed ? ' buffed' : '')}>{combat ? <TickNum value={hp} delayMs={combat.changeDelayMs} durationMs={combat.tickMs} /> : hp}</span>
       </div>
       <div className="card-tip">
-        <div className="tip-name">{name}</div>
-        <div className="tip-sub">
-          {TRIBES[tribe]?.name ?? tribe} · Tier {tier} ·{' '}
-          <span className={atkBuffed ? 'buffed' : ''}>{atk}</span>/<span className={hpBuffed ? 'buffed' : ''}>{hp}</span>
-          {(atkBuffed || hpBuffed) && (
-            <span className="tip-base">
-              {' '}
-              (base {baseAtk}/{baseHp})
-            </span>
-          )}
-        </div>
-        {innateKeywords.length > 0 && (
-          <div className="tip-kw">
-            {innateKeywords.map((k) => (
-              <span key={k} className="tip-kwchip">
-                {KW_ICON[k]} {KW_LABEL[k]}
-              </span>
-            ))}
-          </div>
-        )}
-        {text && <div className="tip-text">{text}</div>}
-        {addedKeywords.length > 0 && (
-          <div className="tip-added">
-            <span className="tip-added-hd">Added this game</span>
-            {addedKeywords.map((k) => (
-              <span key={k} className="tip-kwchip added">
-                {KW_ICON[k]} {KW_LABEL[k]}
-              </span>
-            ))}
-          </div>
-        )}
+        <CardTipBody model={model} />
       </div>
       {children}
     </div>
+  );
+}
+
+/**
+ * The inner content of a card's inspect tooltip — name, tribe·tier, base-vs-buffed stats, keywords
+ * named in full (granted-this-game keywords under a separate "Added this game" block), and ability
+ * text (§10). Factored out of `Card` so the hover tooltip (desktop) and the touch inspect sheet
+ * (`Shop.tsx`) render byte-identical content from a single source.
+ */
+export function CardTipBody({ model }: { model: CardModel }): ReactNode {
+  const { cardId, name, tribe, tier, atk, hp, keywords, golden, text } = model;
+  const base = getCard(cardId);
+  const mult = golden ? triples.goldenStatMultiplier : 1;
+  const baseAtk = base ? base.atk * mult : atk;
+  const baseHp = base ? base.hp * mult : hp;
+  const atkBuffed = atk > baseAtk;
+  const hpBuffed = hp > baseHp;
+  // Split keywords into innate (printed on the card) vs granted this game (via a battlecry/aura), so the
+  // tip can name them in words and call the added ones out separately. No catalog entry (a token) ⇒
+  // treat every keyword as innate rather than mislabel them all as "added".
+  const baseKeywords = base?.keywords ?? keywords;
+  const innateKeywords = keywords.filter((k) => baseKeywords.includes(k));
+  const addedKeywords = keywords.filter((k) => !baseKeywords.includes(k));
+  return (
+    <>
+      <div className="tip-name">{name}</div>
+      <div className="tip-sub">
+        {TRIBES[tribe]?.name ?? tribe} · Tier {tier} ·{' '}
+        <span className={atkBuffed ? 'buffed' : ''}>{atk}</span>/<span className={hpBuffed ? 'buffed' : ''}>{hp}</span>
+        {(atkBuffed || hpBuffed) && (
+          <span className="tip-base">
+            {' '}
+            (base {baseAtk}/{baseHp})
+          </span>
+        )}
+      </div>
+      {innateKeywords.length > 0 && (
+        <div className="tip-kw">
+          {innateKeywords.map((k) => (
+            <span key={k} className="tip-kwchip">
+              {KW_ICON[k]} {KW_LABEL[k]}
+            </span>
+          ))}
+        </div>
+      )}
+      {text && <div className="tip-text">{text}</div>}
+      {addedKeywords.length > 0 && (
+        <div className="tip-added">
+          <span className="tip-added-hd">Added this game</span>
+          {addedKeywords.map((k) => (
+            <span key={k} className="tip-kwchip added">
+              {KW_ICON[k]} {KW_LABEL[k]}
+            </span>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
