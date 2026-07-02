@@ -125,7 +125,8 @@ export type ActionType =
   // deathrattle; bypasses divine shield (D11(a) ruling). Promoted from the `dealDamage:999` idiom.
   | 'giveGem'
   | 'makeSpell'
-  | 'gainGold'
+  | 'gainGold' // LIVE in the activated-ability resolver only (decision #39): gold clamped to goldCap
+  | 'refreshShop' // LIVE in the activated-ability resolver only (decision #39): free reroll (clears freeze)
   | 'discover'
   | 'plantDeathrattle' // attach a deathrattle Effect to a target (Round-6 bridge, §16.3 #5)
   | 'custom';
@@ -179,6 +180,27 @@ export interface Effect {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Activated ability (spend-gated, decision #39; spec §6.6a)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A shop-phase ability the OWNER buys with gems (the spendable wallet, decision #39).
+ * Declarative like an Effect, but there is no trigger: the "trigger" is the player's
+ * `activate` intent, validated + resolved by the shop reducer op `activateAbility`
+ * (once per turn per minion, board units only, wallet ≥ cost). `chosenAlly` targets
+ * reuse the pendingTarget machinery (§7.4). Costs are config numbers on the card row
+ * (never literals in logic) or the shared escalating doubler formula:
+ * `engines.tuskers.doubleBaseCost + doubleCostStep × session.doublesPurchased`
+ * (doublesPurchased is per-player per-GAME, shared across all doublers, never resets).
+ */
+export interface ActivatedSpec {
+  cost: number | 'doublerEscalating'; // gem price (flat, from config) or the escalating doubler formula
+  target: TargetSpec;
+  actions: ActionSpec[];
+  prompt?: string; // pendingTarget/UI description for chosenAlly abilities
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Aura (passive modifier) — the multipliers (spec §6.3)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -225,6 +247,7 @@ export interface UnitCard {
   keywords: Keyword[];
   effects: Effect[];
   auras?: AuraSpec[];
+  activated?: ActivatedSpec; // spend-gated activated ability (decision #39, §6.6a)
   isToken?: boolean; // pool-exempt, not directly purchasable
   goldenOf?: string; // base id, if this is a golden form
   text?: string; // human-readable rules text (placeholder UI)
@@ -379,8 +402,9 @@ export type Intent =
   | { type: 'tierUp' }
   | { type: 'playUnit'; unitUid: string; toSlot?: number } // bench → board
   | { type: 'moveUnit'; unitUid: string; toSlot: number } // reorder on board
-  | { type: 'targetChoice'; targetUid: string } // resolve pending targeted battlecry
+  | { type: 'targetChoice'; targetUid: string } // resolve pending targeted battlecry / activated ability
   | { type: 'discoverPick'; optionIndex: number }
+  | { type: 'activate'; unitUid: string } // buy a board unit's activated ability with gems (decision #39)
   | { type: 'readyUp' };
 
 export type IntentType = Intent['type'];
@@ -454,6 +478,14 @@ export interface PendingTarget {
   description: string;
 }
 
+/** Owner-only view of one board unit's activated ability (decision #39). PRIVATE channel only. */
+export interface ActivatedAbilityState {
+  uid: string; // board unit instance
+  cardId: string;
+  cost: number; // CURRENT gem cost (escalated for the shared doubler formula)
+  used: boolean; // already activated this shop turn (once per turn per minion)
+}
+
 export interface PrivateState {
   seat: number;
   gold: number;
@@ -465,7 +497,8 @@ export interface PrivateState {
   frozen: boolean;
   bench: ClientUnit[];
   board: ClientUnit[];
-  gems: number;
+  gems: number; // the SPENDABLE gem wallet (decision #39, supersedes D10's cosmetic total)
+  abilities: ActivatedAbilityState[]; // board units with an activated ability (decision #39)
   discover: DiscoverState | null;
   pendingTarget: PendingTarget | null;
   lastCombatLog: CombatEvent[] | null;

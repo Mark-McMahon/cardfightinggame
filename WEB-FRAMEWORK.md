@@ -1,5 +1,13 @@
 # PROMPT 1 — RIGOROUS REBUILD: a GENERATED adversarial sampler + Part A / Part B gates
 
+> **Provenance note (2026-07-01):** this document records the web-harness rebuild as it
+> happened. Where it describes the Tusker doubler as a free `gemsThisTurn`-gated end-of-turn
+> breakpoint, that mechanic has since been **superseded by decision #39** (requirements.md /
+> design-spec §6.6a): each double is now a PURCHASED activated ability at an escalating
+> shared gem cost, classified by the §11.3c lint as a **spend-gated** payoff. The Part A
+> containment suite (`sim/tuskers.test.ts`) and `assembleGrown` were reworked to pin the
+> purchased line; the floor/gates below still hold on the current content.
+
 > This section **supersedes** the fixture-based floor described further down. The earlier
 > pass closed the web with **hand-authored board fixtures whose stats were hardcoded**
 > (`atk: 640`, a `tall-titan` picked at `40/60`, …) — exactly the "hand-tune a small fixture

@@ -579,6 +579,10 @@ const RECIPES: Record<string, () => string> = {
   tuskers_ivorylord: () => tsk({ shape: 'tall', skin: 'hide', tusk: 'curved', eyes: 'fierce', helm: 1, gem: 1, gemCol: '#8f5cd0' }),
   tuskers_gemtitan: () => tsk({ shape: 'big', skin: 'gilt', tusk: 'big', eyes: 'fierce', helm: 1, gem: 1, hoard: 1, gemCol: '#3fa9c9' }),
   tuskers_tuskmonger: () => tsk({ shape: 'wide', skin: 'boar', tusk: 'curved', eyes: 'greedy', gem: 1, hoard: 1, gemCol: '#4fb36a' }) + boneMark(150, 150, '#e8d9c0'),
+  // decision #39 gem sinks — distinct recipes (clean-room §0: original geometry)
+  tuskers_gemwright: () => tsk({ shape: 'wide', skin: 'gilt', tusk: 'small', eyes: 'plain', gem: 1, gemCol: '#e8a13c' }),
+  tuskers_facetguard: () => tsk({ shape: 'tall', skin: 'bristle', tusk: 'small', eyes: 'plain', helm: 1, gem: 1, gemCol: '#3fa9c9' }),
+  tuskers_oreseeker: () => tsk({ shape: 'sm', skin: 'hide', tusk: 'curved', eyes: 'greedy', gem: 1, hoard: 1, gemCol: '#8f5cd0' }),
   // PRIMORDIALS — elements / cleave
   primordials_sparkling: () => prm({ shape: 'sm', skin: 'spark', crown: 'bolt', mouth: 'smile' }),
   primordials_gustling: () => prm({ shape: 'wide', skin: 'gale', crown: 'cloud', mouth: 'open' }),

@@ -7,6 +7,7 @@ import {
   startShopPhase,
   endOfTurnPhase,
   playUnit,
+  activateAbility,
   makeInstance,
   createPool,
   battlecryMultiplier,
@@ -50,10 +51,10 @@ describe('EV-AUR — trigger multipliers at the SHOP interface', () => {
     expect(battlecryMultiplier([])).toBe(1);
   });
 
-  it('EV-AUR-04: Grovecaller multiplies ONLY end-of-turn summon actions — not giveGem, not multiplyStats', () => {
+  it('EV-AUR-04: Grovecaller multiplies ONLY end-of-turn summon actions — not giveGem, not a purchased double (#39)', () => {
     const per = engines.tuskers.gemBaseValue;
-    const factor = getBreakpoint('tuskers_ivorytusk').factor!; // ×2 doubler
-    // Board: Grovecaller + 3 Gemsnouts (giveGem) + Ivorytusk (multiplyStats, will fire at gems≥threshold).
+    const factor = engines.tuskers.doublerFactor; // ×2 purchased doubler (decision #39)
+    // Board: Grovecaller + 3 Gemsnouts (giveGem) + Ivorytusk (purchased-double activated ability).
     const s = createShopSession(0, { pool: createPool(), seed: 'aur04a' });
     startShopPhase(s);
     put(s, 'wildkin_grovecaller');
@@ -66,7 +67,11 @@ describe('EV-AUR — trigger multipliers at the SHOP interface', () => {
     // giveGem NOT multiplied by Grovecaller: exactly 3 gems (3 generators × gemBaseValue), not 6
     expect(s.gemsThisTurn).toBe(3 * per);
     expect(s.gems).toBe(3 * per);
-    // multiplyStats NOT multiplied by Grovecaller: Ivorytusk doubles ONCE (×factor), not ×factor²
+    // a PURCHASED double is outside the endOfTurn aura's reach entirely (#39): with Grovecaller
+    // on board, one bought activation applies exactly ×factor, never ×factor².
+    startShopPhase(s);
+    s.gems = engines.tuskers.doubleBaseCost;
+    expect(activateAbility(s, tusk.uid).ok).toBe(true);
     expect(tusk.atk).toBe(ta * factor);
     expect(tusk.hp).toBe(th * factor);
 

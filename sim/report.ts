@@ -79,6 +79,8 @@ function main(): void {
   console.log(`  EV-BAL-F anti-degeneracy    : ${floor.ok ? 'PASS' : 'FAIL'}  UW=${floor.universalWinners.length} uncountered=${floor.uncounteredBoards.length}`);
   console.log(`  EV-BAL-G stale-combat       : ${report.stale.pass ? 'PASS' : 'FAIL'}  ${(report.stale.fraction * 100).toFixed(2)}% (<= ${(report.stale.flag * 100).toFixed(0)}%)`);
   console.log(`  coherence (Part B)          : ${coh.ok ? 'PASS' : 'FAIL'}`);
+  const h = report.hoarding;
+  console.log(`  hoarding (diagnostic, #39)  : unspent gems at game end — mean ${h.mean.toFixed(2)}  p50 ${h.p50}  p90 ${h.p90}  max ${h.max}  (${h.withGems}/${h.players} players; output only, not a gate)`);
   console.log('');
   console.log(`auto-flags (${report.flags.length}):`);
   if (report.flags.length === 0) console.log('  none');

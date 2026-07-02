@@ -174,50 +174,10 @@ describe('EV-BP — battlecry breakpoints (SHOP)', () => {
   });
 });
 
-// ── gems-gated doubler (Ivorytusk, Ivorylord, Gemtitan) ───────────────────────────
-function gemDoubler(cardId: string, seed: string) {
-  const bp = getBreakpoint(cardId);
-  const card = getCard(cardId);
-  const factor = Math.min(bp.factor!, engines.tuskers.multiplyFactorCap);
-  // at threshold: threshold Gemsnouts → gemsThisTurn == threshold → doubles
-  const sA = fresh(seed + 'a');
-  startShopPhase(sA);
-  const dA = put(sA, cardId);
-  for (let i = 0; i < bp.threshold; i++) put(sA, 'tuskers_gemsnout');
-  endOfTurnPhase(sA);
-  expect(sA.gemsThisTurn).toBe(bp.threshold * engines.tuskers.gemBaseValue);
-  expect(dA.atk).toBe(card.atk * factor);
-  expect(dA.hp).toBe(card.hp * factor);
-  // below: threshold−1 Gemsnouts → no double
-  const sB = fresh(seed + 'b');
-  startShopPhase(sB);
-  const dB = put(sB, cardId);
-  for (let i = 0; i < bp.threshold - 1; i++) put(sB, 'tuskers_gemsnout');
-  endOfTurnPhase(sB);
-  expect(dB.atk).toBe(card.atk);
-  expect(dB.hp).toBe(card.hp);
-}
-
-describe('EV-BP — gems-gated doublers (SHOP)', () => {
-  it('EV-BP-19: Ivorytusk — gemsThisTurn≥threshold → ×factor (and it COMPOUNDS across turns)', () => {
-    gemDoubler('tuskers_ivorytusk', 'bp19');
-    // compounding: two qualifying turns → ×factor twice on the persistent instance
-    const bp = getBreakpoint('tuskers_ivorytusk');
-    const card = getCard('tuskers_ivorytusk');
-    const factor = Math.min(bp.factor!, engines.tuskers.multiplyFactorCap);
-    const s = fresh('bp19c');
-    startShopPhase(s);
-    const tusk = put(s, 'tuskers_ivorytusk');
-    for (let i = 0; i < bp.threshold; i++) put(s, 'tuskers_gemsnout');
-    endOfTurnPhase(s); // turn 1 → ×factor
-    startShopPhase(s); // gemsThisTurn resets
-    endOfTurnPhase(s); // turn 2 → gems again ≥ threshold → ×factor again
-    expect(tusk.atk).toBe(card.atk * factor * factor);
-    expect(tusk.hp).toBe(card.hp * factor * factor);
-  });
-  it('EV-BP-20: Ivorylord — gemsThisTurn≥threshold → ×factor', () => gemDoubler('tuskers_ivorylord', 'bp20'));
-  it('EV-BP-21: Gemtitan — gemsThisTurn≥threshold → ×factor', () => gemDoubler('tuskers_gemtitan', 'bp21'));
-});
+// ── doublers (Ivorytusk, Ivorylord, Gemtitan) ──────────────────────────────────────
+// EV-BP-19/20/21 are RETIRED (decision #39): the doublers are no longer gemsThisTurn
+// breakpoints — each ×2 is a PURCHASED activated ability (spend-gated payoff class,
+// §6.6a/§11.3c). Their behavior is pinned by the EV-ABL family in activated.test.ts.
 
 // ── Mother Thorn: shop half (tokensThisTurn≥threshold → each further token +tokenAtk/+tokenHp) ─────
 describe('EV-BP — Mother Thorn shop half', () => {

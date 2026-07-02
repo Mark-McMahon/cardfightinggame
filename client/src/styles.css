@@ -427,3 +427,15 @@ input {
 /* granted-this-game effects (e.g. a poison buff) called out apart from the printed card */
 .card-tip .tip-added { margin-top: 4px; border-top: 1px solid var(--line); padding-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .card-tip .tip-added-hd { flex-basis: 100%; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #7ee081; font-weight: 700; }
+
+/* activated ability (decision #39) — a gem-cost button pinned under a board card */
+.ability-btn {
+  position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%);
+  z-index: 12; white-space: nowrap;
+  font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums;
+  color: #7fe0c0; background: linear-gradient(180deg, #123029, #0d221d);
+  border: 1px solid #1e6b57; border-radius: 2px; padding: 3px 8px; cursor: pointer;
+}
+.ability-btn:hover:not(:disabled) { border-color: #7fe0c0; color: #b6f0dd; }
+.ability-btn:disabled { opacity: 0.55; cursor: default; }
+.ability-btn.used { color: var(--dim); border-color: var(--line); background: var(--panel2); }

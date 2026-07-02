@@ -58,6 +58,8 @@ export {
   tierUp,
   playUnit,
   moveUnit,
+  activateAbility,
+  activatedCost,
   resolveTargetChoice,
   resolveDiscoverPick,
   startShopPhase,

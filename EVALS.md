@@ -26,7 +26,8 @@ fresh agent regenerating the engine passes when **all evals here are green**. Th
 
 **[DECISION-GATED]** previously marked evals awaiting a `DECISIONS-NEEDED.md` ruling. **All
 of D1–D10 are now ruled** and written into `design-spec.md`; the affected evals below are
-finalized, each citing its `(Dn)`.
+finalized, each citing its `(Dn)`. *(D10 was later SUPERSEDED by ledger decision #39 —
+spendable gems + purchased doublers; EV-ECO-14 was rewritten and Group M / EV-ABL added.)*
 
 ---
 
@@ -90,7 +91,7 @@ finalized, each citing its `(Dn)`.
 |---|---|---|---|---|
 | EV-ACT-BUFF | buffStats reducing atk below 0 / hp below 1; a combat-fired buff with vs without `permanent:true` | atk floored at 0, hp floored at 1, rounded; default combat buffs emit NO permanence marker (this-combat-only); `permanent:true` emits `permanent:true` + post-clamp `dAtk`/`dHp` for the §7.5 writeback fold (decision #38 — rewrote the pre-#38 "never written back" pin) | P | §6.8 clamps, §7.5 |
 | EV-ACT-SET | (`setStats` is reserved — 0 consumers; no eval required per §6.9) | — | — | — |
-| EV-ACT-MUL | Ivorytusk fires 3 turns; also a combat-fired multiply | factor clamped to `multiplyFactorCap`(2) in **both** phases; shop-fired persists+compounds; combat-fired this-combat-only; `statSanityBound` never reached | P | §6.3, Tuskers |
+| EV-ACT-MUL | a combat-fired multiply (synthetic effect); the shop-side compounding lives in EV-ABL (#39 — the doublers are purchased activations now) | factor clamped to `multiplyFactorCap`(2) in **both** phases; combat-fired this-combat-only; `statSanityBound` never reached | P | §6.3, §6.6a, Tuskers |
 | EV-ACT-RST | Nullforge vs a ×N-doubled carry | target reduced to printed base stats (buffs stripped) | P | resetToBase |
 | EV-ACT-GK | grantKeyword | keyword added; `keyword` event carries `gained=true`+`sourceId` | P | grantKeyword |
 | EV-ACT-SUM | Tombspawn / Reclaimer deathrattle-summon; a start-of-combat / breakpoint summon | `summon` inserts the unit(s) at the owner's slot, shifting right; fires `onSummon` for living friendlies; over-`boardCap` summons dropped (full-board overflow → EV-DTH-06) | P | summon |
@@ -147,9 +148,7 @@ finalized, each citing its `(Dn)`.
 | EV-BP-16 | `constructs_foundry` — deaths≥4 once → summon 6/6 Sentinel (deathrattle) | COMBAT | P |
 | EV-BP-17 | `constructs_titanforge` — alliesAtStart≥5 once → summon Sentinel | COMBAT | P |
 | EV-BP-18 | `constructs_aegisprime` — deaths≥1 everyN → Constructs +1/+1 (this combat) | COMBAT | P |
-| EV-BP-19 | `tuskers_ivorytusk` — gemsThisTurn≥3 → multiply ×2 (compounds across turns) | SHOP | P |
-| EV-BP-20 | `tuskers_ivorylord` — gemsThisTurn≥3 → multiply ×2 | SHOP | P |
-| EV-BP-21 | `tuskers_gemtitan` — gemsThisTurn≥3 → multiply ×2 | SHOP | P |
+| EV-BP-19..21 | **RETIRED (#39)** — the Tusker doublers are no longer `gemsThisTurn` breakpoints; each ×2 is a PURCHASED activated ability (spend-gated class, §6.6a). Behavior now pinned by **EV-ABL-01..04** (Group M). Ids retired, not reused. | — | — |
 | EV-BP-22 | `primordials_stormcaller` — battlecries≥2 → board +2/+1 | SHOP | P |
 | EV-BP-23 | `primordials_tempest` — alliesAtStart≥5 once → board +2 atk | COMBAT | P |
 | EV-BP-24 | `primordials_worldspark` — alliesAtStart≥5 once → grant board Cleave | COMBAT | P |
@@ -159,9 +158,10 @@ finalized, each citing its `(Dn)`.
 | EV-BP-28 | `corsairs_reaver` — alliesAtStart≥5 once → board +1 atk | COMBAT | P |
 | EV-BP-29 | `corsairs_marauder` — alliesAtStart≥5 once → board +2/+1 | COMBAT | P |
 
-*(29 entries = every row in `breakpoints.ts`. The breakpoint **lint** EV-BAL-C separately
-asserts every ⭐ card has exactly one such row and no primary payoff scales per-unit
-without a threshold.)*
+*(26 live entries = every row in `breakpoints.ts` after #39 removed the three doubler rows.
+The breakpoint **lint** EV-BAL-C separately asserts every ⭐ card has exactly one such row,
+no primary payoff scales per-unit without a threshold, and — since #39/#40 — every
+stat-growing activated ability is registered SPEND-GATED with real positive cost knobs.)*
 
 ## G. Economy / shop reducer — SHOP / INTENT
 
@@ -180,7 +180,7 @@ without a threshold.)*
 | EV-ECO-11 | play a targeted battlecry (Tidecaller) | `playUnit` fires battlecry; `chosenAlly` sets `pendingTarget`; `resolveTargetChoice` bakes result before combat | SHOP | battlecry, target |
 | EV-ECO-12 | moveUnit within board | reorders; slot indices update | INTENT | positioning |
 | EV-ECO-13 | discoverPick | resolves choice; options are drawn from tier+offset | SHOP | discover |
-| EV-ECO-14 | Gemsnout across turns; `gemCarryOver` | `gems` accumulates and persists; `gemsThisTurn` resets each shop turn; **(D10)** persistent `gems` has **no gameplay effect** (cosmetic — no spend sink; only `gemsThisTurn` feeds the doubler) | SHOP | gems |
+| EV-ECO-14 | Gemsnout across turns; `gemCarryOver` | `gems` accumulates and persists as the **SPENDABLE wallet (#39 — knowingly rewrote the D10 "cosmetic" pin)**; `gemsThisTurn` resets each shop turn; the wallet never changes any GOLD price (tier-up/reroll) and is uncapped (hoarding = sim diagnostic, not an engine cap); spending is only via `activateAbility` (Group M) | SHOP | gems |
 | EV-ECO-15 | `chosenAlly` battlecry played with no legal target; Discover from an empty tier+offset pool; `onSell` on a token | **(D5)** chosenAlly fizzles (resolves to nothing) but **still counts as a battlecry** and increments `battlecriesThisTurn`; empty Discover pool fills from the next lower tier then skips; `onSell` fires only on a **purchasable body**, not a token | SHOP/INTENT | D5 edge rules |
 | EV-ECO-16 | Tidebinder on board, play a 2nd battlecry; Tuskmonger / Quartermaster on board, sell a friendly body | `afterFriendlyBattlecry` fires on each subsequent friendly battlecry (Tidebinder → Reefkin +1/+1 permanent); `onSell` fires per friendly body sold (Tuskmonger → +2 gems; Quartermaster → highest-Attack Corsair +2/+2) | SHOP/INTENT | afterFriendlyBattlecry, onSell (audit Patterns A/B) |
 
@@ -205,7 +205,7 @@ without a threshold.)*
 | EV-INV-DET-SEED | same boards, different seeds | RNG-dependent choices (targeting, first-attacker tie) may differ; all draws come from the seeded PRNG (no `Math.random`) | P | invariant 2 |
 | EV-INV-PRIV | inspect `PublicState` during shop | contains no `shop`/`bench`/`board`/`gold`/`gems`/`hand`/opponent combat log; private data only on the owner push | STATE | invariant 3 |
 | EV-INV-CFG | lint over engine source | no §12 gameplay constant is a literal in logic; **(D7)** `boardCap`/`divineShieldNegatesPoison` sourced from config, `simultaneousDeaths`/`deathrattleOrder` honored, `attackOrderRule`/`firstAttackerTiebreak` removed; `64`/`8` loop bounds allowed as commented guards | P/meta | invariant 4 |
-| EV-VOCAB-01 | lint over `units.ts` × the §6.9 catalog | **anti-idiom law:** every trigger/selector/action/condition/aura a shipped card uses is a §6.9 **live** primitive with ≥1 eval; no card uses a `[reserved]` primitive; no `dealDamage` with a "destroy" magnitude survives (must be `destroy`) | P/meta | §6.9 regeneration surface |
+| EV-VOCAB-01 | lint over `units.ts` × the §6.9 catalog (incl. the `activated` surface, #39) | **anti-idiom law:** every trigger/selector/action/condition/aura a shipped card uses — in `effects` OR `activated` — is a §6.9 **live** primitive with ≥1 eval; no card uses a `[reserved]` primitive; `gainGold`/`refreshShop` appear ONLY in `activated.actions`; activated costs are positive or `doublerEscalating`; no `dealDamage` with a "destroy" magnitude survives (must be `destroy`) | P/meta | §6.9 regeneration surface |
 
 ## J. Balance gate — SIM (extend existing `sim/`, don't reinvent)
 
@@ -239,6 +239,26 @@ without a threshold.)*
 | EV-WBK-08 | lint over `units.ts` | content audit pin: every combat-fired `buffStats` on a shipped card is explicitly non-permanent (or gated behind a shop-scoped condition, e.g. Mother Thorn's `onSummon`); `engines.wildkin.tokenBuffPermanent` is live and read by Gorehide/Thornbeast | P/meta | #38 audit |
 | EV-WBK-09 | a combat-only +5/+5 lands first, then a permanent -6/-5 (emitted `dAtk`/`dHp` = -6/-5, unclamped in combat) on a persistent 2/3 survivor | the fold replays deltas through the same §6.8 `applyBuff` clamps combat used: the persistent instance becomes 0/1, never -4/-2 (a raw `+=` fold is distinguishable and forbidden) | P | #38 rule (h), §6.8 clamps |
 
+## M. Activated abilities / spendable gems (decision #39/#40, spec §6.6a) — SHOP / INTENT / STATE (`shared/engine/activated.test.ts`)
+
+| id | fixture | asserted property | layer | covers |
+|---|---|---|---|---|
+| EV-ABL-01 | Gemsnout + Ivorytusk across turns | gems accrue into a persistent SPENDABLE wallet (`gemsThisTurn` still resets); `activateAbility` deducts exactly the current cost | P | wallet |
+| EV-ABL-02 | three doublers + Gemwright, funded wallet | doubler price = `doubleBaseCost + doubleCostStep × doublesPurchased`, escalates PER GAME, SHARED across all doublers (buy A → B costs more), never resets across turns; flat-cost sinks don't feed the escalator; per-application factor ≤ `multiplyFactorCap` | P | §6.6a formula |
+| EV-ABL-03 | activate the same minion twice in one turn; again next turn | once per turn PER MINION: second activate rejected with **no mutation**; a different minion may still activate; the gate resets in `startShopPhase`; the double compounds on the persistent instance | P | once/turn |
+| EV-ABL-04 | doubled Ivorytusk → `boardToCombat` | the purchased double is a persistent-instance write — survives into the combat snapshot | P | persistence |
+| EV-ABL-05 | unknown uid / bench unit / no ability / empty wallet; `Match.applyIntent` outside shop | each rejected `{ok:false,error}`, mutating nothing; wrong phase rejected at the Match/room level (`not shop phase`); the accept path routes through the `activate` intent | P | invariant 1 |
+| EV-ABL-06 | Facetguard activation + targetChoice | `chosenAlly` activation arms `pendingTarget` (board-only legal targets); `targetChoice` applies the PERMANENT +atk/+hp + Divine Shield to the persistent instance (into combat); illegal target rejected; once/turn holds | P | §7.4 reuse |
+| EV-ABL-07 | Gemwright at 0 gold and at `goldCap` | spend `gemwrightCost` gems → +`gemwrightGold` gold, **clamped to `goldCap`** (activating at the cap wastes the gems — bot-guarded, not engine-rejected); catalog lint: Gemwright is the ONLY `gainGold` ability, no triggered `gainGold`, nothing converts gold→gems (one-way bridge) | P | §5 bridge |
+| EV-ABL-08 | Oreseeker refresh vs a paid roll, same seed; a frozen shop | `refreshShop` draws the SAME seeded sequence as `rollShop` (identical offers), charges no gold, and CLEARS a freeze like a paid roll; **(08b)** non-refresh activations draw NOTHING from the session RNG (roll stream unperturbed) | P | determinism |
+| EV-ABL-09 | activate through a `Match`, inspect both channels | wallet / `abilities` / `doublesPurchased` / used-this-turn NEVER appear in `PublicState`; owner's push carries `abilities: {uid, cardId, cost(escalated), used}`; opponent's push carries none of it | P | invariant 3 |
+| EV-ABL-10 | `lintBreakpoints` + registries | lint green: doubler breakpoint rows GONE (`hasBreakpoint` false), all six activated cards SPEND-GATED-registered (`spendGated` ↔ catalog `activated` 1:1), every cost knob a positive `engines[<tribe>]` number | B/P | §11.3c (#40) |
+
+*(Sim-side: `sim/tuskers.test.ts` Part A pins the purchased LINE — all-in reaches 1000+ stats
+by late game, a Facetguard-split lands under half, poison still beats the doubled carry, and
+the growth loop is deterministic. `sim/metrics.ts hoardingDiagnostic` reports the unspent-wallet
+distribution — output only, never a gate.)*
+
 ---
 
 # Coverage manifest
@@ -263,12 +283,15 @@ Every card / keyword / breakpoint counter / economy rule / invariant → the eva
 | revenantDeaths | EV-BP-07, EV-AUR-02 |
 | tokensThisTurn | EV-BP-01, EV-CND-03 |
 | battlecries | EV-BP-05/08/11/12/22/25/26/27, EV-AUR-05, EV-CND-03 |
-| gemsThisTurn | EV-BP-19/20/21, EV-ACT-GEM, EV-CND-01/03 |
+| gemsThisTurn | EV-ACT-GEM, EV-CND-01/03 (0 card consumers since #39 — the doublers moved to EV-ABL) |
 | alliesAtStart | EV-BP-02/03/17/23/24/28/29 |
 | shieldBreak | EV-BP-10, EV-KW-DS-01 |
 
-## Cards (90) — by coverage mechanism
-- **29 ⭐ breakpoint cards** → their `EV-BP-01..29` (1:1).
+## Cards (93) — by coverage mechanism
+- **26 ⭐ breakpoint cards** → their `EV-BP-*` rows (1:1; 19–21 retired by #39).
+- **6 spend-gated activated cards (#39)** — Ivorytusk/Ivorylord/Gemtitan (purchased doubles) →
+  EV-ABL-01..05/10 + sim Part A; Facetguard → EV-ABL-06; Gemwright → EV-ABL-07;
+  Oreseeker → EV-ABL-08.
 - **2 handler cards** (Bonepiper, Pallbearer) → EV-HND-01/02, EV-DTH-03.
 - **Vanilla-keyword bodies** (Thornpup, Grave Wisp, Reborn Wisp/Wraith, Scrapling, Sentinel,
   Lurefish, Gustling, Cinderwing, Swab, Ironclad, Grubtusk, …) → the keyword evals (§B) +
@@ -292,7 +315,8 @@ Every card / keyword / breakpoint counter / economy rule / invariant → the eva
 ## Economy rules
 income EV-ECO-01 · buy EV-ECO-02 · sell/onSell EV-ECO-03 · roll EV-ECO-04 · freeze EV-ECO-05 ·
 tierUp+discount EV-ECO-06 · slots EV-ECO-07 · pool EV-ECO-08 · caps EV-ECO-09 · triple/golden/
-discover EV-ECO-10/13 · positioning EV-ECO-12 · gems EV-ECO-14 · timer EV-MTC-07 · loss damage
+discover EV-ECO-10/13 · positioning EV-ECO-12 · gems/wallet EV-ECO-14 + EV-ABL-01 · activated
+abilities (#39) EV-ABL-01..10 · gem→gold bridge EV-ABL-07 · timer EV-MTC-07 · loss damage
 EV-MTC-01 · placement EV-MTC-03/04 · maxRounds EV-MTC-05 · pairing/ghost EV-MTC-06.
 
 ## Invariants (4)

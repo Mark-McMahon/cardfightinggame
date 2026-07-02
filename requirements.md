@@ -296,6 +296,82 @@ build from functional mechanics only; original names/text/art throughout.
     EV-WBK-09) + golden `EV-GLD-09`; this knowingly rewrites the old `EV-ACT-BUFF` pin
     "combat-fired stat changes are never written back."
 
+### Multi-lane scaling rework (Round 9, cont.) — spendable gems & the purchased doubler
+> Phase 2 of the rework: the Tusker lane's scaling becomes a stream of PURCHASED decisions
+> instead of an autopilot end-of-turn engine, and gems become a real second currency with
+> real sinks. Engine invariants untouched (server-authoritative intents, seeded RNG,
+> two-channel privacy, config-driven numbers).
+
+39. **Gems are a SPENDABLE wallet; the Tusker doublers are PURCHASED activated abilities;
+    three gem sinks ship. (2026-07-01 — SUPERSEDES D10.)** D10 ruled the persistent `gems`
+    total cosmetic; that ruling is retired. **Wallet:** `gems` is a private, persistent,
+    **uncapped** currency (hoarding is watched by a sim **diagnostic** — distribution of
+    unspent wallet at game end — never an engine cap); `gemsThisTurn` stays as the derived
+    per-turn counter (0 card consumers today; the condition stays live engine vocabulary).
+    **Activated abilities (spec §6.6a):** a new declarative `activated` field on `UnitCard`
+    (`{cost, target, actions, prompt?}`), resolved by ONE new shop-reducer op
+    `activateAbility` behind a new `{type:'activate', unitUid}` intent (both ADDITIVE
+    extensions of the §9.7 pinned contracts). Server-validated: shop phase, owned + on
+    board, has an ability, once per turn per minion (reset each shop turn), wallet ≥ cost;
+    a `chosenAlly` ability must have a legal target BEFORE the spend (rejected, never
+    fizzled — an activation is a purchase; contrast D5). `chosenAlly` reuses the
+    pendingTarget machinery. **Doubler rework:** Ivorytusk/Ivorylord/Gemtitan lose their
+    `endOfTurn gemsThisTurn≥3` auto-double rows (and their breakpoint rows); instead the
+    owner buys each ×2 (`multiplyStats`, still capped by `multiplyFactorCap` +
+    `statSanityBound`) at `doubleBaseCost(4) + doubleCostStep(2) × doublesPurchased`, where
+    `doublesPurchased` is per-player per-GAME and SHARED across all three doublers (never
+    resets; selling a doubler refunds nothing). **Sinks (all Tuskers, clean-room-checked):**
+    *Gemwright* (T3 3/3): once/turn spend `gemwrightCost(3)` gems → `gemwrightGold(1)` gold,
+    clamped to `goldCap` — THE only gem→gold bridge, one-way forever (gold→gem is banned: it
+    would let the gold economy pump the exponential lane); *Facetguard* (T3 2/5 Taunt):
+    once/turn spend `facetguardCost(2)` gems → chosen friendly +`gemDumpPayoff`(2/2)
+    permanent + Divine Shield (takes over Goldgrin's old free rider — Goldgrin becomes a
+    pure `goldgrinGems(2)` battlecry); *Oreseeker* (T2 2/3, renamed from the generic
+    "Prospector" for clean-room clarity): once/turn spend `oreseekerCost(2)` gems → FREE
+    shop refresh (same seeded draw path as a paid roll; clears a freeze exactly like a
+    roll). New actions `gainGold`/`refreshShop` are **activated-only** vocabulary. All
+    ability state (wallet, current cost, used-this-turn) is PRIVATE-channel
+    (`PrivateState.abilities`). Bots get a deterministic greedy policy (double whenever
+    affordable, biggest doubler first; then Facetguard/Gemwright/Oreseeker by simple
+    guards). Rationale: the auto-doubler was the last "free" exponential — reachable by
+    passively holding generators — and made the lane binary (hit 3 gems or do nothing);
+    pricing each step creates a real every-turn decision (double now vs bank vs buy
+    tempo/defense), gives gems a market, and keeps the thousands-of-stats ceiling reachable
+    only for an ALL-IN commitment (sim-verified: all-in ≈2000+ atk by late game; a
+    Facetguard-split line lands under half that). Pinned by the EV-ABL family + reworked
+    sim Part A; EV-BP-19/20/21 retired; EV-ECO-14 rewritten (knowingly supersedes its D10
+    pin).
+40. **Design-law corollary — exponential scaling must be purchased (2026-07-01; extends
+    #22, spec §6.6/§6.6a/§11.3c).** Exponential/unbounded scaling is legal ONLY where each
+    step is bought with a decision, a risk, or a contested condition — never accrued free
+    from static board state. The §11.3c lint's vocabulary gains a first-class SPEND-GATED
+    payoff classification: the `spendGated` registry in `shared/config/breakpoints.ts`
+    (`{card, currency:'gems', costKnobs[]}`). A threshold-free primary payoff passes the
+    lint iff its card is registered there, carries an `activated` ability, and every cost
+    knob resolves to a positive finite number in `engines[<tribe>]` (registry ↔ catalog is
+    1:1, enforced by `lintBreakpoints` + `sim/audit.ts`). Tuning rule of thumb: **when in
+    doubt, add a cost — not a bigger number.** This is a lint-vocabulary extension, not a
+    suppression: the anti-linear scanner still bans ungated per-turn stat growth.
+
+### Deployment (Round 10) — hosting topology, no gameplay change
+
+41. **Single-service deployment: the server serves the client; same-origin WebSocket.
+    (2026-07-01, spec §9.8.)** The app deploys as **one container / one service on one port**,
+    not a split static-site + API. The Colyseus process (`server/index.ts`) mounts Express
+    static hosting of the built client (`client/dist`) on the http.Server it hands to
+    `WebSocketTransport({ server })`; Colyseus's own matchmaking wrapper keeps `/matchmake/*`
+    HTTP for itself and lets every other path fall through to Express (static + `index.html`
+    SPA fallback). The client (`client/src/net/game.ts`) therefore connects **same-origin**
+    (`wss://<host>`, no `:2567`) in prod, keeps `ws://<host>:2567` in dev (Vite and the server
+    are separate origins there), and still honors a `VITE_SERVER_URL` build override for a
+    split host. Packaging is a `Dockerfile` (pnpm-workspace-aware, builds the client then runs
+    the server via `tsx` — no server compile step, matching the raw-`.ts` runtime). The server
+    binds `0.0.0.0:$PORT`. Rationale: one domain, no CORS, and the least config for a single
+    Cloudflare domain in front of Railway. **Non-goal:** horizontal scaling — rooms are
+    in-process (§9.2), so multi-instance would need a Redis presence/driver + sticky WS
+    routing; v1 is single-instance. No engine invariant is touched (this is transport/hosting,
+    not rules); no eval changes.
+
 ## Tribe name map (clean-room — never ship the reference names)
 | Reference (do NOT ship) | Original name | Identity |
 |---|---|---|
@@ -348,9 +424,11 @@ build from functional mechanics only; original names/text/art throughout.
 - [x] ~~Project structure~~ — locked (decision 20).
 - [x] ~~Spectate-after-death~~ — defaulted (spec-detail defaults).
 
-**All major branches resolved (36 decisions across 8 rounds; #30 = per-card procedural art;
+**All major branches resolved (40 decisions across 9 rounds; #30 = per-card procedural art;
 #31–32 = replay never-gray + fight-sized combat window; #33–36 = combat choreography —
-asymmetric strike telegraph, death cadence, honest deathrattle labels, rAF beat clock).**
+asymmetric strike telegraph, death cadence, honest deathrattle labels, rAF beat clock;
+#38 = combat→board writeback; #39–40 = spendable gems / purchased doubler / spend-gated
+payoff law, superseding D10).**
 
 ✅ **Full spec written → [`design-spec.md`](./design-spec.md)** (16 sections, developer-ready).
 ✅ **v1 implemented** (M0–M6 — see `README.md`).

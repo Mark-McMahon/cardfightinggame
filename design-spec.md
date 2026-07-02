@@ -66,7 +66,7 @@ original option and note it.
 | Beasts | **Wildkin** | token swarm, go-wide | SWARM · cleave |
 | Murlocs | **Reefkin** | cheap battlecry tempo | BATTLECRIES · poison/shield |
 | Demons | **Infernals** | self-damage / sacrifice risk | SACRIFICE · burst |
-| Quilboar | **Tuskers** | gem greed → exponential doubler | SPOILS · multiply |
+| Quilboar | **Tuskers** | gem greed → PURCHASED exponential doubler (#39) | SPOILS · multiply |
 | Elementals | **Primordials** | play-count → wide splash | ELEMENTS · cleave |
 | Nagas | **Sirens** | spellcraft-flavored burst | SPELLCRAFT · poison |
 | Undead | **Revenants** | reborn, death payoffs | DEATHS · reborn |
@@ -121,7 +121,7 @@ hardcoded in logic. §7.6 records where the current code falls short of (2) and 
 **Goals**
 - One 8-seat room, joinable by short code, fillable with bots.
 - Full shop → combat → placement loop with freeze and triple/upgrade.
-- **Nine original tribes; 90 unit definitions** (84 purchasable + 6 tokens) across tiers
+- **Nine original tribes; 93 unit definitions** (87 purchasable + 6 tokens) across tiers
   1–6, exercising 5 live keywords (`taunt`/`divineShield`/`poison`/`reborn`/`cleave`;
   `magnetic` reserved) and the breakpoint content model (§6.6). The design law of
   "breakpoints over linear stacking" (§6.6, decision #22) is the through-line. (Count
@@ -198,8 +198,9 @@ with a reason. The intent set (`shared/types` `Intent`):
 | `tierUp` | Raise shop tier, unlocking higher-tier units next roll. | escalating, see §5 |
 | `playUnit` | Move a bench unit onto the board (≤ `boardCap`). Triggers **battlecry**. | — |
 | `moveUnit` | Reorder units on the board (positioning). | — |
-| `targetChoice` | Resolve a pending targeted battlecry (player picks the target). | — |
+| `targetChoice` | Resolve a pending targeted battlecry **or targeted activated ability** (player picks the target). | — |
 | `discoverPick` | Resolve a Discover (pick 1 of 3). | — |
+| `activate` | Buy a board unit's **activated ability** with gems (decision #39, §6.6a). Once per turn per minion; board units only. | gem cost per card (§6.6a) |
 | `readyUp` | Mark done; combat starts early when all living players are ready. | — |
 
 Notes:
@@ -260,10 +261,14 @@ tracking. (An ultra-rare edge; simplicity over cleverness.)
   count, consistent with the battlecry counter). A **Discover** from an empty/insufficient
   tier+offset pool **fills from the next lower tier, then skips** if still empty. `onSell`
   fires only when selling a **purchasable body**, not a token.
-- **`gems` is cosmetic (D10, decided).** `gemCarryOver` accrues a persistent lifetime `gems`
-  total, but no spend sink ships — only the per-turn `gemsThisTurn` counter feeds the Tusker
-  doubler. The persistent total has **no gameplay effect** (a display of greed); a spend
-  action is future work (the reserved `onSpend` / gems-as-currency system).
+- **`gems` is a SPENDABLE wallet (decision #39, 2026-07-01 — SUPERSEDES D10).** D10's "cosmetic
+  lifetime total" ruling is retired: `gemCarryOver` now accrues a real, private, **uncapped**
+  currency spent through the `activate` intent (activated abilities, §6.6a — the purchased
+  Tusker doubles and the three gem sinks). `gemsThisTurn` remains the derived per-turn counter
+  for `gemsThisTurnAtLeast` conditions (0 card consumers today, §6.9). An activated
+  `chosenAlly` ability left unresolved at end of turn fizzles (the gems are spent — the D5
+  "count the act" family); bots always resolve immediately. Hoarding is watched by a **sim
+  diagnostic** (§11.3 outputs), never an engine cap.
 
 ---
 
@@ -294,6 +299,23 @@ macro-sim, §11).
 **Shared finite pool (decision):** all players draw from one pool. Buying removes a copy;
 selling returns it; rolls draw from what's left at/below your tier. Contesting a tribe
 thins it for everyone. Token and golden units are pool-exempt.
+
+**Gems — the second currency (decision #39, supersedes D10).** `gems` is a per-player,
+**private-channel**, persistent, **uncapped** wallet fed only by `giveGem` effects (Tusker
+generators/battlecries/onSell). It is spent only through **activated abilities** (§6.6a):
+the escalating purchased doubles and the three sinks (Gemwright / Facetguard / Oreseeker).
+Rules of the two-currency system:
+- **Gold and gems stay separate.** No gem total ever changes a gold price (tier-up, reroll,
+  buy), and no gold can buy gems.
+- **One bridge, one-way:** `Gemwright` (spend `gemwrightCost` gems → gain `gemwrightGold`
+  gold, clamped so gold never exceeds `goldCap`) is the ONLY gem→gold conversion. A
+  gold→gem conversion is **banned** (it would let the gold economy pump the exponential
+  doubler).
+- **No wallet cap.** Instead the sim reports a **hoarding diagnostic** (distribution of
+  unspent wallet at game end, §11.3 outputs) — pressure is added via costs if hoarding ever
+  proves dominant (decision #40), never via a silent clamp.
+- Cost knobs live in `engines.tuskers` (`doubleBaseCost`, `doubleCostStep`, `gemwrightCost`,
+  `gemwrightGold`, `facetguardCost`, `oreseekerCost`, `goldgrinGems`).
 
 ---
 
@@ -366,7 +388,8 @@ stat?, excludeSelf? }`. **Tie-break/default rules that are engine logic, not dat
 type ActionType =
   | 'buffStats' | 'grantKeyword' | 'summon' | 'dealDamage' | 'giveGem'   // [live]
   | 'multiplyStats' | 'plantDeathrattle' | 'custom' | 'resetToBase'      // [live] (resetToBase = Nullforge strip-to-print)
-  | 'setStats' | 'gainGold' | 'makeSpell' | 'discover' | 'sacrifice';    // [reserved / no-op in engine]
+  | 'gainGold' | 'refreshShop'                                           // [live, ACTIVATED-ONLY (#39, §6.6a): legal only in activated.actions, never in a triggered Effect]
+  | 'setStats' | 'makeSpell' | 'discover' | 'sacrifice';                 // [reserved / no-op in engine]
 interface ActionSpec {
   type: ActionType;
   atk?; hp?; permanent?;          // buffStats / setStats
@@ -390,7 +413,7 @@ it has always meant a direct persistent mutation. `plantDeathrattle` attaches a 
 
 **ConditionSpec** (optional gate):
 ```ts
-kind: 'countAllies' | 'gemsThisTurnAtLeast'                                    // [live]
+kind: 'countAllies' | 'gemsThisTurnAtLeast'                                    // [live] (gemsThisTurnAtLeast: engine+eval live, 0 card consumers since #39 — see §6.9)
     | 'battlecriesThisTurnAtLeast' | 'tokensSummonedThisTurnAtLeast' | 'deathsThisCombatAtLeast' // [live] manufactured-event breaks
     | 'hasTribe' | 'hasKeyword' | 'goldAtLeast' | 'tierAtLeast' | 'isGolden' | 'isToken';        // [reserved]
 value?; tribe?; keyword?;
@@ -469,7 +492,65 @@ type BreakpointCounter =
 ```
 
 **Lint (decision #22, §11.3c):** a test asserts every primary payoff is expressible as a
-discrete breakpoint and flags any per-unit scaling that lacks a threshold.
+discrete breakpoint and flags any per-unit scaling that lacks a threshold. **Since decision
+#39 the lint has a second legal class — spend-gated payoffs (§6.6a).**
+
+### 6.6a Activated abilities — the spend-gated payoff class (decisions #39/#40)
+
+**The second legal primary-payoff class beside breakpoints.** An *activated ability* is a
+shop-phase ability the OWNER buys with **gems** (the spendable wallet, §5). Declarative like
+an `Effect`, but with no trigger — the "trigger" is the player's `activate` intent:
+
+```ts
+interface ActivatedSpec {
+  cost: number | 'doublerEscalating';  // gem price: flat (a config number on the card row)
+                                        // or the shared escalating doubler formula
+  target: TargetSpec;                   // 'self' or 'chosenAlly' (shop-resolved, §7.4)
+  actions: ActionSpec[];                // same vocabulary; + activated-only gainGold/refreshShop
+  prompt?: string;                      // pendingTarget/UI text for chosenAlly abilities
+}
+// UnitCard gains `activated?: ActivatedSpec`.
+```
+
+**Resolution — ONE shop-reducer op** (`activateAbility(session, uid) → OpResult`, pinned in
+§9.7), reached only via the `activate` intent (§4.2). Validation, in order (a rejection
+mutates nothing): shop phase (enforced by `Match`/room) → unit owned + **on board** (bench
+rejected) → card has an `activated` spec → **not already used this shop turn** (once per
+turn per *minion*; `abilityUsedThisTurn` resets in `startShopPhase`) → no pendingTarget
+outstanding → wallet ≥ current cost → a `chosenAlly` ability must have a legal target
+**before** the spend (an activation is a purchase: it is *rejected*, never fizzled —
+contrast D5's battlecry fizzle). Then the gems are deducted and the actions resolve:
+`chosenAlly` arms the same pendingTarget machinery as targeted battlecries (resolved by
+`targetChoice`; stat writes are persistent-instance writes like other shop permanents);
+`self` abilities resolve immediately.
+
+**The escalating doubler formula.** The three Tusker doublers share
+`cost = engines.tuskers.doubleBaseCost + doubleCostStep × session.doublesPurchased`, where
+`doublesPurchased` is a **per-player per-GAME counter shared across all three doublers**
+(it never resets between turns, and selling a doubler does not refund it). Each purchased
+double is a `multiplyStats ×doublerFactor`, still clamped per application by
+`multiplyFactorCap` and bounded by `statSanityBound` (§6.8), written to the persistent
+instance — the exponential reach compounds only across purchases.
+
+**Activated-only actions.** `gainGold` (gold += amount, **clamped to `goldCap`** — the
+Gemwright bridge; activating at the cap wastes the gems, a player choice the bot guards
+against) and `refreshShop` (a FREE reroll: identical seeded draw path to `rollShop`, no
+gold charge, **clears a freeze exactly like a paid roll does**) are live only inside
+`activated.actions`; a triggered `Effect` may not use them (EV-VOCAB-01).
+
+**RNG discipline:** non-refresh activations draw NOTHING from the session RNG (the roll
+stream is unperturbed); `refreshShop` advances it exactly as a paid roll would (EV-ABL-08).
+
+**Privacy:** the wallet, `doublesPurchased`, per-minion used-this-turn state and the current
+cost are PRIVATE-channel only (`PrivateState.abilities: ActivatedAbilityState[]`, §9.3).
+
+**The design-law corollary (decision #40):** exponential/unbounded scaling is legal **only**
+where each step is purchased with a decision, a risk, or a contested condition. Every card
+with an activated ability must have a row in the **spend-gated registry**
+(`shared/config/breakpoints.ts` `spendGated: { card, currency:'gems', costKnobs[] }[]`),
+and the §11.3c lint verifies the registry ↔ catalog 1:1 and that every cost knob is a real
+positive number in `engines[<tribe>]`. When a payoff looks too strong, **add a cost, not a
+bigger number**.
 
 ### 6.7 Unit / instance / tribe / keyword schemas
 
@@ -477,6 +558,7 @@ discrete breakpoint and flags any per-unit scaling that lacks a threshold.
 interface UnitCard {
   id: string; name: string; tribe: TribeId; tier: number; atk: number; hp: number;
   keywords: Keyword[]; effects: Effect[]; auras?: AuraSpec[];
+  activated?: ActivatedSpec; // spend-gated activated ability (decision #39, §6.6a)
   isToken?: boolean;      // pool-exempt, not directly purchasable
   goldenOf?: string;      // base id, if a golden form
   text?: string;          // human-readable rules text (UI/tooltip)
@@ -491,7 +573,7 @@ interface KeywordDef { id; name; rulesText; }        // engine reads keyword *ti
 // DEFERRED stub: TavernSpell { id; name; cost; tier; effects; permanent; }
 ```
 Keyword *timing* lives in the combat engine (§7), not in data — data only tags which units
-carry a keyword. Canonical content: `shared/content/units.ts` (the 90 rows),
+carry a keyword. Canonical content: `shared/content/units.ts` (the 93 rows),
 `tribes.ts`, `keywords.ts`.
 
 ### 6.8 Code-only semantics (not derivable from the data rows)
@@ -524,7 +606,7 @@ data row states them. An agent regenerating from `units.ts` alone would not repr
 
 ### 6.9 Live vocabulary catalog — the regeneration surface (authoritative)
 
-The regenerable contract is **not the 90 cards** — it is the finite set of primitives they
+The regenerable contract is **not the 93 cards** — it is the finite set of primitives they
 compose. A fresh engine that implements every **live** primitive below (with §6.8 semantics)
 reproduces all declarative content for free; it needs card-specific code only for the 2
 handlers (§6.5). This is why "the agent doesn't need to know the cards" is true — *provided*
@@ -541,22 +623,31 @@ the vocabulary is complete and pinned.
 Counts are actual usage across `units.ts` — a **drift tripwire**: a live count hitting 0 means
 it silently became reserved; a card needing something not listed means *stop and promote it*.
 
-- **Triggers — live (10):** `battlecry`(29) · `deathrattle`(19) · `startOfCombat`(19) ·
-  `endOfTurn`(9) · `afterFriendlyDeaths`(8) · `onSell`(2) · `onAttack`(1) · `onShieldBreak`(1) ·
-  `onSummon`(1) · `afterFriendlyBattlecry`(1).
+- **Triggers — live (10):** `battlecry`(28) · `startOfCombat`(19) · `deathrattle`(18) ·
+  `afterFriendlyDeaths`(8) · `endOfTurn`(6) · `onSell`(2) · `onAttack`(1) · `onShieldBreak`(1) ·
+  `onSummon`(1) · `afterFriendlyBattlecry`(1). *(#39: −3 `endOfTurn` — the doubler rows became
+  activated abilities; −1 `battlecry` — Goldgrin's rider moved behind Facetguard's gem cost.)*
   *Reserved (0):* `onPurchase`, `onDamaged`, `onPlayTribe`, `onRefresh`, `onCast`,
   `onSacrifice`, `onSpend`, `onTripleCreated`. (`onPurchase` has 0 consumers — reserved in §6.2.)
-- **Selectors — live (9):** `self`(34) · `allAllies`(29) · `chosenAlly`(12) · `randomAlly`(5) ·
-  `lowestStatAlly`(4) · `highestStatAlly`(2) · `frontEnemy`(2) · `highestStatEnemy`(1) ·
-  `triggerSource`(1). *Reserved:* `leftNeighbor`, `rightNeighbor`, `adjacentAllies`,
+- **Selectors — live (9), triggered effects:** `self`(31) · `allAllies`(28) · `chosenAlly`(11) ·
+  `randomAlly`(5) · `lowestStatAlly`(4) · `highestStatAlly`(2) · `frontEnemy`(2) ·
+  `highestStatEnemy`(1) · `triggerSource`(1). **Activated surface (§6.6a):** `self`(5) ·
+  `chosenAlly`(1). *Reserved:* `leftNeighbor`, `rightNeighbor`, `adjacentAllies`,
   `newestAlly`, `oldestAlly`, `nAllies`, `randomEnemy`, `neighborsOfTarget` (cleave neighbors
   are computed in combat, not via a selector).
-- **Actions — live (8 + custom):** `buffStats`(44) · `grantKeyword`(17) · `summon`(13) ·
-  `dealDamage`(7) · `giveGem`(7) · `multiplyStats`(3) · `plantDeathrattle`(1) · `resetToBase`(1)
-  · `custom`(2) · **`destroy` — PROMOTED from the `dealDamage: 999` idiom (4 uses), see D11.**
-  *Reserved:* `setStats`, `gainGold`, `makeSpell`, `discover`. *(`sacrifice` folded into `destroy`.)*
-- **Conditions — live (5):** `countAllies`(7) · `battlecriesThisTurnAtLeast`(9) ·
-  `gemsThisTurnAtLeast`(3) · `deathsThisCombatAtLeast`(2) · `tokensSummonedThisTurnAtLeast`(1).
+- **Actions — live, triggered effects:** `buffStats`(42) · `grantKeyword`(16) · `summon`(13) ·
+  `giveGem`(7) · `dealDamage`(3) · `plantDeathrattle`(1) · `resetToBase`(1) · `custom`(2)
+  · **`destroy` — PROMOTED from the `dealDamage: 999` idiom (4 uses), see D11.**
+  **Activated surface (§6.6a):** `multiplyStats`(3 — the purchased doubles; 0 *triggered*
+  consumers since #39, the combat-side clamp stays pinned by EV-ACT-MUL) · `buffStats`(1) ·
+  `grantKeyword`(1) · `gainGold`(1) · `refreshShop`(1). `gainGold`/`refreshShop` are
+  **activated-only** — a triggered Effect may never use them (EV-VOCAB-01).
+  *Reserved:* `setStats`, `makeSpell`, `discover`. *(`sacrifice` folded into `destroy`.)*
+- **Conditions — live (5):** `battlecriesThisTurnAtLeast`(9) · `countAllies`(7) ·
+  `deathsThisCombatAtLeast`(2) · `tokensSummonedThisTurnAtLeast`(1) · `gemsThisTurnAtLeast`(0 —
+  **status note, #39:** the doubler conditions became purchased activations, so the card count
+  is 0; kept LIVE deliberately (an explicit exception to the count-0 tripwire) because the
+  `gemsThisTurn` counter + condition remain implemented and pinned by EV-CND-01/03).
   *Reserved:* `hasTribe`, `hasKeyword`, `goldAtLeast`, `tierAtLeast`, `isGolden`, `isToken`.
 - **Auras — live (exactly 3 (scope,modifier) shapes):** `(selfTribeAllies, damageMultiplier)`
   +`activeWhen` (Pale Lich) · `(yourBattlecries, triggerMultiplier)` (Echo Choir) ·
@@ -782,20 +873,23 @@ data + engine vocabulary.
 | Reefkin | battlecry chain/doubler, poison+shield carriers, single-target megabuff, plant | `battlecry`→`buffStats` (`chosenAlly`), aura `triggerMultiplier`, `grantKeyword`, `plantDeathrattle` |
 | Revenants | reborn stacking, death payoffs, tribe damage amp, deathrattle-double | keyword `reborn` + `deathrattle`, aura `damageMultiplier`+`activeWhen`, **H** `primeNextDeathrattleDouble` |
 | Infernals | self-damage / sacrifice for burst | `startOfCombat`→`dealDamage(self)`+`buffStats`, deaths breakpoints |
-| Tuskers | gem greed → exponential doubler | `giveGem` + `gemsThisTurn` breakpoint → `multiplyStats` (capped) |
+| Tuskers | gem greed → PURCHASED exponential doubler + gem sinks (#39) | `giveGem` wallet + activated abilities (§6.6a): escalating `multiplyStats` doubles (capped), `gainGold` bridge, `refreshShop`, chosenAlly shield |
 | Primordials | play-count → wide cleave splash | `battlecries`/`alliesAtStart` breakpoints → `buffStats` / grant `cleave` |
 | Sirens | poison home + start-of-combat burst | `startOfCombat`→`dealDamage`, `battlecries` breakpoints, board `poison` |
 | Constructs | assembly / reassemble | `deaths`/`alliesAtStart` breakpoints → `summon` (magnetic reserved) |
 | Corsairs | on-buy tempo, sticky reborn/shield width | `alliesAtStart` breakpoints, reborn/divine-shield width |
 
 Marquee ⭐ breakpoint cards per tribe live in `config/breakpoints.ts` (e.g. Mortarch
-`deaths≥3 once`, Pale Lich `revenantDeaths≥3 amp`, Chorus Tide `battlecries≥2`, the Tusker
-doublers `gemsThisTurn≥3 factor 2`). The full **90-row** roster is `shared/content/units.ts`;
-per-tribe counts (verified against the catalog): Wildkin 11, Revenants 13, Reefkin 12,
-Corsairs 10, Constructs 10, Tuskers 9, Primordials 8, Sirens 9, Infernals 8 (= 90; 84
+`deaths≥3 once`, Pale Lich `revenantDeaths≥3 amp`, Chorus Tide `battlecries≥2`); the Tusker
+doublers are **spend-gated** rows in the same file's `spendGated` registry (#39, §6.6a).
+The full **93-row** roster is `shared/content/units.ts`;
+per-tribe counts (verified against the catalog): Revenants 13, Reefkin 12, **Tuskers 12**,
+Wildkin 11, Corsairs 10, Constructs 10, Sirens 9, Primordials 8, Infernals 8 (= 93; 87
 purchasable + 6 tokens). The +7 over the pre-audit slice are the §16 cards: Reefkin
 Tidebinder, Infernals Carrion Sovereign (T6), Constructs Nullforge + Aegis Prime (T6),
-Tuskers Tuskmonger, Sirens Maelstrom Cantor, Corsairs Quartermaster.
+Tuskers Tuskmonger, Sirens Maelstrom Cantor, Corsairs Quartermaster; the +3 on top of those
+are the decision-#39 Tusker gem sinks **Gemwright (T3), Facetguard (T3), Oreseeker (T2)**
+(normal pool copy counts).
 
 ---
 
@@ -816,9 +910,12 @@ render state; every intent is validated before applying.
   isBot, connected, ready}`, plus `roomCode, phase, round, timer, pairings, hostSeat,
   botFill, winnerSeat`.
 - **Private per-client push** (owner only): `gold, baseIncome, tier, tierUpCost,
-  rerollCost, shop, frozen, bench, board, gems, discover, pendingTarget, lastCombatLog,
-  log`. **No opponent private info ever leaves the server** — shop/hand scouting is
-  impossible by construction.
+  rerollCost, shop, frozen, bench, board, gems, abilities, discover, pendingTarget,
+  lastCombatLog, log`. `gems` is the spendable wallet and `abilities` the activated-ability
+  state (`{uid, cardId, cost, used}` per board unit — who can activate, used-this-turn, the
+  CURRENT escalated doubler price), both decision #39 — private-channel only, like the
+  session's `doublesPurchased` escalator which never syncs at all. **No opponent private
+  info ever leaves the server** — shop/hand scouting is impossible by construction.
 
 **9.4 Messages:** client→server = the `Intent` union (§4.2) + lobby (`createRoom, joinRoom,
 setBotFill, startMatch`). server→client = public `state` patches, private `privateState`
@@ -849,9 +946,11 @@ transcribe — reference them); these are the *signatures*, which are the eval s
 - **Combat event schema:** the `CombatEvent` union in §7.5 (canonical in `shared/types`). This
   is the primary black-box observation surface for combat evals.
 - **Shop reducer:** the exported ops in `shared/engine/shop.ts` — `buyUnit, sellUnit, rollShop,
-  freezeShop, unfreezeShop, tierUp, playUnit, moveUnit, resolveTargetChoice, resolveDiscoverPick,
-  startShopPhase, endOfTurnPhase, boardToCombat` — each returning
-  `OpResult = { ok: boolean; error?: string; triples?: string[] }`.
+  freezeShop, unfreezeShop, tierUp, playUnit, moveUnit, activateAbility, resolveTargetChoice,
+  resolveDiscoverPick, startShopPhase, endOfTurnPhase, boardToCombat` — each returning
+  `OpResult = { ok: boolean; error?: string; triples?: string[] }`. *(`activateAbility` +
+  the `activate` intent member are the decision-#39 ADDITIVE extension of this pinned
+  contract; the cost helper `activatedCost(session, card)` is exported beside it.)*
 - **Intent application (accept/reject):** `Match.applyIntent(seat: number, intent: Intent):
   OpResult` (`shared/engine/match.ts`). A rejected intent returns `{ ok:false, error }` and
   mutates nothing — the observation surface for all validation evals.
@@ -859,6 +958,25 @@ transcribe — reference them); these are the *signatures*, which are the eval s
 - **State schemas (privacy contract):** `PublicState` (synced to all) vs `PrivateState`
   (owner-only push) per §9.3 — the two-channel split is itself an asserted invariant.
 - **Server→client messages:** §9.4 (`state`, `privateState`, `combatLog`, `ToastEvent`, `error`).
+
+**9.8 Deployment — single service (decision #41).** The game ships as **one process on one
+port**: the Colyseus server (`server/index.ts`) also serves the built React client
+(`client/dist`) over HTTP via an Express request listener handed to `WebSocketTransport({
+server })`. Colyseus's `attachMatchMakingRoutes` wraps that listener so `/matchmake/*` HTTP
+requests are handled by matchmaking, all other paths fall through to Express static + an
+`index.html` SPA fallback, and WebSocket upgrades ride the same socket. Consequences that any
+regeneration must preserve:
+- **Bind `0.0.0.0:$PORT`.** The port comes from `process.env.PORT` (host-assigned in prod;
+  falls back to 2567 in dev). No other port is hardcoded server-side.
+- **Same-origin client.** With no `VITE_SERVER_URL` build override, the prod client connects
+  to `wss://<same-host>` (no `:2567` suffix); dev keeps `ws://<host>:2567` because Vite (5173)
+  and the server (2567) are distinct origins (§10, `client/src/net/game.ts`).
+- **Container is source-run, not dist-run.** The server executes TypeScript via `tsx` and
+  imports `shared` as raw `.ts`, so the runtime image keeps the full pnpm install + sources
+  (see `Dockerfile`); there is no server compile step to reproduce.
+- **Stateful, single-instance by default.** Rooms live in process memory (§9.2), so horizontal
+  scaling would require a Colyseus presence/driver (Redis) + sticky WebSocket routing — out of
+  scope for v1; one instance is the assumed deployment.
 
 ---
 
@@ -1027,13 +1145,21 @@ to repair.
 - **(b) Reachability (the gate)** — ≥ `splashReachTargetPct` (0.5) of *developed* 2-tribe
   splashes must hit two distinct breakpoints; else breakpoints are tuned too high and
   everyone mono-stacks.
-- **(c) Breakpoint lint** — every primary payoff must be a discrete config breakpoint; flag
-  per-unit scaling without a threshold.
+- **(c) Breakpoint lint** — every primary payoff must be a discrete config breakpoint **or a
+  registered SPEND-GATED payoff (decision #39/#40, §6.6a)**: a card whose primary payoff is a
+  purchased activated ability is legal iff it has a `spendGated` registry row whose cost
+  knobs resolve to positive config numbers (each step is bought, which satisfies the
+  breakpoint law's intent — a decision per step). Flag per-unit scaling without a threshold,
+  stat-growing activated abilities missing from the registry, and registry/catalog drift.
 - **(d) Non-linearity** — crossing a marquee threshold must improve placement by ≥
   `nonLinearityMinStepRatio` (1.5×) the sub-threshold slope: a step, not a line.
 
 **11.3 outputs:** CLI → CSV/JSON + console; auto-flags overpowered / dead / dominant-build
-/ stale-combat (hitting `maxCombatSteps`). Monte-Carlo over seeds washes out targeting
+/ stale-combat (hitting `maxCombatSteps`). Also the **hoarding diagnostic (decision #39;
+output only, never a gate):** the distribution of UNSPENT gem wallet at game end (mean /
+p50 / p90 / max, `sim/metrics.ts hoardingDiagnostic`) — the wallet is uncapped by design,
+and this readout is what would justify adding cost pressure if banking gems ever proved
+dominant. Monte-Carlo over seeds washes out targeting
 variance. Additional harnesses: `sim/audit.ts`, `sim/web*.ts` (see `sim/`).
 
 **11.4 Database (later).** None required (in-memory rooms). Future: a `server/persistence`
@@ -1065,9 +1191,13 @@ values** (that is what drifted before). Read the files for current numbers.
 - **`engines.ts`** — one block per tribe (the per-tribe knob sets), including the Round-6
   cap knobs (`endOfTurnTriggerMultiplierCap`, `battlecryTriggerMultiplierCap`,
   `undeadDamageAmpCap`/`Threshold`, `tokenDeathFloorAtk`/`CapAtk`, `plantedDeathrattleAtk`/
-  `Hp`, Tuskers `doublerFactor`/`multiplyFactorCap`, Sirens `burstDamage`, etc.).
+  `Hp`, Tuskers `doublerFactor`/`multiplyFactorCap`, Sirens `burstDamage`, etc.) and the
+  decision-#39 activated-ability price knobs (Tuskers `doubleBaseCost`, `doubleCostStep`,
+  `goldgrinGems`, `gemwrightCost`, `gemwrightGold`, `facetguardCost`, `oreseekerCost`).
 - **`breakpoints.ts`** — the `{ card, counter, threshold, once?, ...payoff }` list; the
-  authoritative source for every ⭐ payoff's numbers (§6.6).
+  authoritative source for every ⭐ payoff's numbers (§6.6). Also the **`spendGated`
+  registry** (`{ card, currency, costKnobs[] }`, decision #39/#40, §6.6a) — the second
+  legal primary-payoff class the §11.3c lint accepts.
 - **`sim.ts`** — the balance-gate thresholds for §11.3 (a)/(b)/(d).
 - **`systems.ts`** — `freezeIsFree` (active); **DEFERRED stubs**: trinket*, tavernSpell*,
   heroPower*.
@@ -1088,7 +1218,7 @@ cardfightinggame/
 ├─ shared/                      # imported by server, client, AND sim
 │  ├─ types/index.ts            # UnitCard, Effect, AuraSpec, CombatEvent, state, intents
 │  ├─ config/                   # economy match combat triples engines breakpoints sim systems bots
-│  ├─ content/                  # units.ts (90 rows), tribes.ts, keywords.ts  ← new units = new rows
+│  ├─ content/                  # units.ts (93 rows), tribes.ts, keywords.ts  ← new units = new rows
 │  └─ engine/                   # PURE, no IO:
 │     ├─ rng.ts                 #   seeded PRNG (mulberry32/FNV-1a, Fisher–Yates)
 │     ├─ combat.ts              #   resolveCombat(boardA,boardB,seed) -> CombatEvent[]
@@ -1182,7 +1312,8 @@ content / declarative-engine; the balance gate (`sim/web.test.ts` anti-degenerac
 > and the engine deltas (`afterFriendlyBattlecry`, `onSell`, `highestStatEnemy`,
 > `resetToBase`, the summon-scoped `yourEndOfTurn` multiplier) are live in
 > `units.ts`/`engines.ts`/`breakpoints.ts`/the engine and are counted in the §2/§6.7/§8
-> totals (**90 units**) and described in the §6 vocabulary. This section is the change
+> totals (**90 units** at the time of that audit; **93** since decision #39 added the
+> Tusker gem sinks) and described in the §6 vocabulary. This section is the change
 > *rationale/provenance*, not a separate content tier.
 
 **Fixes.**
@@ -1196,7 +1327,9 @@ content / declarative-engine; the balance gate (`sim/web.test.ts` anti-degenerac
   compounding two of the three §11.3-capped multipliers into an unbounded exponential.
 - **Tall counter-web (Gate 2).** (a) **Goldgrin** now also grants **Divine Shield** to the
   buffed carry, so Tuskers can *buy* poison counterplay (a shield blanks the first poison
-  instance; poison-in-depth still wins). (b) **Nullforge** (new Construct tech) is a *second,
+  instance; poison-in-depth still wins). *(Superseded 2026-07-01 by decision #39: the shield
+  rider moved behind **Facetguard**'s gem cost — the counterplay is still bought, now priced
+  in gems; Goldgrin is a pure gem battlecry.)* (b) **Nullforge** (new Construct tech) is a *second,
   structurally-different* answer to tall: `resetToBase` strips the enemy's highest-Attack
   minion down to its printed stats — neutralize-by-deleting-size vs. poison's kill-on-any-hit.
 - **Thornwarden** `alliesAtStart` **4→5** (Gate 3 — a real go-wide commitment, matching the

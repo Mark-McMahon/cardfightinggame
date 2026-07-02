@@ -46,17 +46,26 @@ export interface EnginesConfig {
     sacrificeBuffHp: number;
   };
   tuskers: {
-    // Round-6 exponential engine (spoils axis). Gems are a manufactured-event COUNTER, not a
-    // linear per-gem stat trickle — the persistent power comes ONLY from the doubler breakpoint,
-    // which MULTIPLIES a carry by `doublerFactor` (≤ `multiplyFactorCap`) each turn it fires and
-    // so compounds across turns → thousands of stats. Kept beatable by poison (stat-agnostic).
+    // Exponential engine (spoils axis), reworked by decision #39: gems are a SPENDABLE wallet.
+    // The persistent power comes ONLY from the PURCHASED doubler (activated ability): the owner
+    // spends gems to MULTIPLY a carry by `doublerFactor` (≤ `multiplyFactorCap`) once per turn
+    // per doubler, at an escalating per-GAME price (`doubleBaseCost + doubleCostStep ×
+    // doublesPurchased`, shared across all doublers) — so it compounds across turns → thousands
+    // of stats, but every step is paid. Kept beatable by poison (stat-agnostic).
     gemBaseValue: number; // gems a generator makes per shop turn
     gemCarryOver: boolean;
     gemAmplifierValue: number;
-    gemDumpThreshold: number; // gems-this-turn to fire the doubler / gem-dump payoffs
-    gemDumpPayoffAtk: number; // one-shot also-buff on the dump
+    gemDumpThreshold: number; // legacy gems-this-turn threshold knob (no live consumer since #39)
+    gemDumpPayoffAtk: number; // Facetguard's targeted +atk/+hp payoff
     gemDumpPayoffHp: number;
-    doublerFactor: number; // multiplyStats factor for the ×N carry doubler (Ivorytusk)
+    doublerFactor: number; // multiplyStats factor for the ×N carry doubler (Ivorytusk et al)
+    doubleBaseCost: number; // decision #39: gem cost of the FIRST double this game
+    doubleCostStep: number; // decision #39: cost increase per double already purchased (per game)
+    goldgrinGems: number; // Goldgrin battlecry gem grant (decision #39: literal → knob)
+    gemwrightCost: number; // Gemwright: spend N gems → +gemwrightGold gold (the ONLY gem→gold bridge)
+    gemwrightGold: number;
+    facetguardCost: number; // Facetguard: spend N gems → chosen ally +gemDumpPayoff + Divine Shield
+    oreseekerCost: number; // Oreseeker: spend N gems → free shop refresh (clears freeze)
     multiplyFactorCap: number; // HARD cap on ANY multiplyStats factor (caps audit, §5)
     statSanityBound: number; // engineering seatbelt: max atk/hp a multiplyStats may produce
   };
@@ -138,10 +147,17 @@ export const engines: EnginesConfig = {
     gemBaseValue: 1,
     gemCarryOver: true,
     gemAmplifierValue: 1,
-    gemDumpThreshold: 3, // 3 gems in a turn → the doubler fires (reachable mid-game with 2 generators)
+    gemDumpThreshold: 3, // legacy (pre-#39 auto-doubler gate); kept for regen compatibility, no consumer
     gemDumpPayoffAtk: 2,
     gemDumpPayoffHp: 2,
-    doublerFactor: 2, // ×2 a carry — capped per-application; exponential only across turns
+    doublerFactor: 2, // ×2 a carry — capped per-application; exponential only across PURCHASED turns
+    doubleBaseCost: 4, // decision #39: first double costs 4 gems…
+    doubleCostStep: 2, // …then +2 gems per double already bought this game (shared escalator)
+    goldgrinGems: 2,
+    gemwrightCost: 3,
+    gemwrightGold: 1,
+    facetguardCost: 2,
+    oreseekerCost: 2,
     multiplyFactorCap: 2, // nothing may multiply stats by more than this in one application
     // Engineering seatbelt (Prompt-1 Part A), NOT a design cap. Max reachable in a real match
     // is ~base·2^maxRounds ≈ 8·2^25 ≈ 2.7e8, so 1e12 is far above any reachable state — it can

@@ -44,6 +44,8 @@ export function printReport(report: MacroReport): void {
   console.log(`(d) non-linearity        : ${pass(d.pass)}  mean step ratio ${d.meanRatio.toFixed(2)} (min ${d.threshold})  [${d.measuredCards} marquee cards measured]`);
   const g = report.stale;
   console.log(`(g) stale-combat         : ${pass(g.pass)}  ${(g.fraction * 100).toFixed(2)}% of ${g.combats} combats hit maxCombatSteps (flag ${(g.flag * 100).toFixed(0)}%)`);
+  const h = report.hoarding;
+  console.log(`hoarding (diagnostic)    : end-of-game unspent gems — mean ${h.mean.toFixed(2)}  p50 ${h.p50}  p90 ${h.p90}  max ${h.max}  (${h.withGems}/${h.players} players held gems; #39, not a gate)`);
   console.log('');
   console.log('tribes (avg placement, lower=better):');
   for (const t of report.tribes) {

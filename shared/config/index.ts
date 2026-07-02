@@ -44,7 +44,7 @@ export {
   breakpoints,
   sim,
 };
-export { getBreakpoint, hasBreakpoint } from './breakpoints';
+export { getBreakpoint, hasBreakpoint, spendGated, getSpendGated, hasSpendGated } from './breakpoints';
 export type {
   EconomyConfig,
   MatchConfig,
@@ -56,5 +56,5 @@ export type {
   BreakpointsConfig,
   SimConfig,
 };
-export type { Breakpoint, BreakpointCounter } from './breakpoints';
+export type { Breakpoint, BreakpointCounter, SpendGatedPayoff } from './breakpoints';
 export type { Difficulty, BotWeights } from './bots';

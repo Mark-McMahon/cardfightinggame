@@ -103,11 +103,11 @@ function parseSeeds(argv: string[]): number {
 
 function main(): void {
   const seeds = parseSeeds(process.argv.slice(2));
-  // Demo matchup: a fully-doubled Tusker carry (9 real shop turns) vs a saturated poison board.
-  // The exponential carry is enormous, yet poison ignores stat size (P1) — the canonical edge.
+  // Demo matchup: a heavily-doubled Tusker carry (18 shop turns of PURCHASED doubles, #39)
+  // vs a saturated poison board. The carry is enormous, yet poison ignores stat size (P1).
   const doubler = assembleGrown(
     ['tuskers_ivorytusk', 'tuskers_gemsnout', 'tuskers_tuskhoarder', 'tuskers_grubtusk'],
-    9,
+    18,
   );
   const poison = buildBoard([
     { cardId: 'sirens_lurefish', count: 2 },
@@ -120,7 +120,7 @@ function main(): void {
   const doublerAtk = doubler.units.find((u) => u.cardId === 'tuskers_ivorytusk');
   console.log('=== sim:micro ===');
   console.log(`seeds: ${seeds}`);
-  console.log(`A = tusk-doubler (9 turns): Ivorytusk grew to ${doublerAtk?.atk}/${doublerAtk?.hp}, ${doubler.units.length} units`);
+  console.log(`A = tusk-doubler (18 turns, purchased doubles): Ivorytusk grew to ${doublerAtk?.atk}/${doublerAtk?.hp}, ${doubler.units.length} units`);
   console.log(`B = saturated poison: ${poison.units.length} units`);
   const res = runMicro(doubler, poison, seeds, 'micro-demo');
   console.log('');

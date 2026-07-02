@@ -14,6 +14,7 @@ import {
   UNITS,
   lintBreakpoints,
   hasBreakpoint,
+  hasSpendGated,
   type UnitCard,
 } from '@cardgame/shared';
 
@@ -69,6 +70,11 @@ export function capsAudit(): CapsAudit {
           v.push(`${card.id} multiplyStats factor ${act.factor} > cap ${caps.multiply}`);
       }
     }
+    // activated abilities (#39) obey the same multiply cap — a purchased double is still capped.
+    for (const act of card.activated?.actions ?? []) {
+      if (act.type === 'multiplyStats' && (act.factor ?? 1) > caps.multiply)
+        v.push(`${card.id} activated multiplyStats factor ${act.factor} > cap ${caps.multiply}`);
+    }
   }
   return { ok: v.length === 0, violations: v };
 }
@@ -108,7 +114,8 @@ const STAT_GROWTH_ACTIONS = new Set(['buffStats', 'setStats', 'multiplyStats']);
 export function breakpointAudit(): BreakpointAudit {
   const v: string[] = [];
 
-  // (1) engine lint: every row → real card, no dupes (every ⭐ card ↔ exactly one row).
+  // (1) engine lint: every row → real card, no dupes (every ⭐ card ↔ exactly one row) +
+  //     the spend-gated registry checks (#39: registry ↔ `activated` 1:1, cost knobs real).
   const lint = lintBreakpoints();
   if (!lint.ok) v.push(...lint.errors);
 
@@ -116,6 +123,16 @@ export function breakpointAudit(): BreakpointAudit {
   for (const card of UNITS) {
     if (carriesPrimaryPayoff(card) && !hasBreakpoint(card.id)) {
       v.push(`primary payoff not registered as a breakpoint: ${card.id}`);
+    }
+  }
+
+  // (2b) SPEND-GATED class (#39/#40): a stat-growing activated ability is a primary payoff.
+  //      It is legal — each step is PURCHASED — only if registered in the spend-gated registry.
+  const GROWTH = new Set(['buffStats', 'setStats', 'multiplyStats']);
+  for (const card of UNITS) {
+    const grows = (card.activated?.actions ?? []).some((a) => GROWTH.has(a.type));
+    if (grows && !hasSpendGated(card.id)) {
+      v.push(`stat-growing activated ability not spend-gated-registered: ${card.id}`);
     }
   }
 

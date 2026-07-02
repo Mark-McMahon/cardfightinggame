@@ -29,14 +29,17 @@ function scalingNodes(): WebNode[] {
     {
       name: 'tusk-exponential',
       role: 'scaling',
-      note: 'Ivorytusk doubled 6 real shop turns (×2^6) + 3 gem generators — the exponential carry.',
-      board: assembleGrown(['tuskers_ivorytusk', 'tuskers_gemsnout', 'tuskers_tuskhoarder', 'tuskers_grubtusk'], 6),
+      // #39 rework: doubles are PURCHASED (escalating shared cost), so the same ×2^6 carry now
+      // takes 18 turns of 3-gems/turn income (cumulative price 4+6+…+14 = 54 gems) instead of 6
+      // free end-of-turn fires — the committed all-in line, engine-grown, nothing stat-tuned.
+      note: 'Ivorytusk with 6 PURCHASED doubles (×2^6, 18 turns of gem income) + 3 generators — the exponential carry.',
+      board: assembleGrown(['tuskers_ivorytusk', 'tuskers_gemsnout', 'tuskers_tuskhoarder', 'tuskers_grubtusk'], 18),
     },
     {
       name: 'tusk-spoils-sell', // Tuskmonger build-around (§16 Pattern B) feeding the doubler
       role: 'scaling',
-      note: 'Doubler + Tuskmonger + generators, grown 5 turns — sell-fueled spoils line.',
-      board: assembleGrown(['tuskers_ivorylord', 'tuskers_tuskmonger', 'tuskers_gemsnout', 'tuskers_tuskhoarder', 'tuskers_grubtusk'], 5),
+      note: 'Ivorylord with 5 PURCHASED doubles (15 turns of gem income) + Tuskmonger + generators — sell-fueled spoils line.',
+      board: assembleGrown(['tuskers_ivorylord', 'tuskers_tuskmonger', 'tuskers_gemsnout', 'tuskers_tuskhoarder', 'tuskers_grubtusk'], 15),
     },
     {
       name: 'swarm-wide',

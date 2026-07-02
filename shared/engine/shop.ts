@@ -5,11 +5,13 @@
 
 import type {
   ActionSpec,
+  ActivatedAbilityState,
   CombatBoard,
   Effect,
   PendingTarget,
   PrivateState,
   TribeId,
+  UnitCard,
   UnitInstance,
 } from '../types';
 import { economy, engines, triples as triplesCfg } from '../config';
@@ -37,7 +39,7 @@ export interface OpResult {
 }
 
 interface PendingTargetInternal {
-  effect: Effect;
+  actions: ActionSpec[]; // the chosenAlly payload (battlecry effect OR activated ability, #39)
   multiplier: number;
   sourceUid: string;
   sourceName: string;
@@ -56,8 +58,11 @@ export interface ShopSession {
   shop: string[]; // offered cardIds (each a reserved pool copy)
   bench: UnitInstance[];
   board: UnitInstance[];
-  gems: number; // cosmetic lifetime total (D10)
-  gemsThisTurn: number;
+  gems: number; // the SPENDABLE gem wallet (decision #39, supersedes D10) — uncapped; hoarding is a sim diagnostic
+  gemsThisTurn: number; // derived per-turn counter (feeds gemsThisTurnAtLeast conditions; resets each turn)
+  doublesPurchased: number; // decision #39: doubles bought this GAME (shared escalator; never resets)
+  abilityUsedThisTurn: string[]; // decision #39: board uids that activated this shop turn (once per turn per minion)
+  abilityUses: Record<string, number>; // decision #39: per-GAME activation count by cardId (sim payoff tracking)
   battlecriesThisTurn: number;
   tokensThisTurn: number;
   discover: { reason: string; options: string[] } | null;
@@ -89,6 +94,9 @@ export function createShopSession(seat: number, opts: SessionOpts = {}): ShopSes
     board: [],
     gems: 0,
     gemsThisTurn: 0,
+    doublesPurchased: 0,
+    abilityUsedThisTurn: [],
+    abilityUses: {},
     battlecriesThisTurn: 0,
     tokensThisTurn: 0,
     discover: null,
@@ -342,7 +350,7 @@ function fireBattlecry(s: ShopSession, source: UnitInstance): void {
         continue;
       }
       s.pendingTarget = {
-        effect: e,
+        actions: e.actions,
         multiplier,
         sourceUid: source.uid,
         sourceName: card.name,
@@ -381,6 +389,7 @@ export function startShopPhase(s: ShopSession): OpResult {
   s.baseIncome = baseIncomeForRound(s.round);
   s.gold = s.baseIncome;
   s.gemsThisTurn = 0;
+  s.abilityUsedThisTurn = []; // once-per-turn activation gates reset (#39); the WALLET (s.gems) persists
   s.battlecriesThisTurn = 0;
   s.tokensThisTurn = 0;
   s.pendingTarget = null;
@@ -500,13 +509,112 @@ export function resolveTargetChoice(s: ShopSession, targetUid: string): OpResult
     return { ok: false, error: 'target/source missing' };
   }
   for (let k = 0; k < pt.multiplier; k++) {
-    for (const action of pt.effect.actions) {
+    for (const action of pt.actions) {
       if (action.type === 'summon') summonShop(s, source.inst, action.summonUnitId, action.summonCount ?? 1);
       else if (action.type === 'giveGem') giveGemShop(s, action.amount ?? 0);
       else applyTargetAction(s, action, target.inst);
     }
   }
   s.pendingTarget = null;
+  return { ok: true };
+}
+
+// ── activated abilities (spend-gated, decision #39; spec §6.6a) ─────────────────────
+
+/** Current gem price of a card's activated ability. Flat costs are config numbers on the card
+ *  row; the doublers share the per-GAME escalating formula (spec §6.6a). */
+export function activatedCost(s: ShopSession, card: UnitCard): number {
+  const spec = card.activated;
+  if (!spec) return Infinity;
+  if (spec.cost === 'doublerEscalating') {
+    return engines.tuskers.doubleBaseCost + engines.tuskers.doubleCostStep * s.doublesPurchased;
+  }
+  return spec.cost;
+}
+
+/**
+ * Buy a board unit's activated ability with gems (intent `activate`, decision #39).
+ * Validation (server-authoritative; a rejection mutates NOTHING): shop phase is enforced by the
+ * caller (Match/room); here — unit owned + ON BOARD, card has an ability, not already used this
+ * turn (once per turn per minion), wallet ≥ current cost, and a chosenAlly ability must have a
+ * legal target BEFORE the spend (an activation is a purchase — it is rejected, never fizzled;
+ * contrast the D5 battlecry fizzle rule). chosenAlly abilities arm the same pendingTarget
+ * machinery as targeted battlecries; `targetChoice` resolves them (§7.4).
+ * Non-refresh abilities draw NOTHING from the session RNG (the roll stream is unperturbed);
+ * `refreshShop` uses the same seeded draw path as a paid roll (and clears a freeze like one).
+ */
+export function activateAbility(s: ShopSession, uid: string): OpResult {
+  const found = findUnit(s, uid);
+  if (!found) return { ok: false, error: 'unit not found' };
+  if (found.where !== 'board') return { ok: false, error: 'unit not on board' };
+  const card = getCard(found.inst.cardId);
+  const spec = card.activated;
+  if (!spec) return { ok: false, error: 'no activated ability' };
+  if (s.abilityUsedThisTurn.includes(uid)) return { ok: false, error: 'already activated this turn' };
+  if (s.pendingTarget) return { ok: false, error: 'resolve pending target first' };
+  const cost = activatedCost(s, card);
+  if (s.gems < cost) return { ok: false, error: 'not enough gems' };
+
+  // chosenAlly: verify a legal target exists BEFORE spending.
+  let candidates: Targetable[] = [];
+  if (spec.target.selector === 'chosenAlly') {
+    candidates = chosenAllyCandidates(spec.target, enrich(found.inst), s.board.map(enrich));
+    if (candidates.length === 0) return { ok: false, error: 'no legal target' };
+  }
+
+  // spend + gates (all validation passed — from here the op commits).
+  s.gems -= cost;
+  s.abilityUsedThisTurn.push(uid);
+  s.abilityUses[card.id] = (s.abilityUses[card.id] ?? 0) + 1;
+  if (spec.cost === 'doublerEscalating') s.doublesPurchased += 1;
+  s.log.push(`${card.name} activated (−${cost} gems)`);
+
+  if (spec.target.selector === 'chosenAlly') {
+    s.pendingTarget = {
+      actions: spec.actions,
+      multiplier: 1,
+      sourceUid: uid,
+      sourceName: card.name,
+      legalTargets: candidates.map((c) => c.uid),
+      description: `${card.name}: ${spec.prompt ?? 'choose a target'}`,
+    };
+    return { ok: true };
+  }
+
+  const targets = selectTargets(spec.target, {
+    source: enrich(found.inst),
+    allies: s.board.map(enrich),
+    enemies: [],
+    rng: s.rng,
+  });
+  for (const action of spec.actions) {
+    switch (action.type) {
+      case 'gainGold':
+        // the ONE gem→gold bridge (one-way; never above goldCap — spec §5).
+        s.gold = Math.min(economy.goldCap, s.gold + (action.amount ?? 0));
+        break;
+      case 'refreshShop': {
+        // free reroll: identical draw path to rollShop (same seeded session Rng), no gold
+        // charge; clears a freeze exactly like a paid roll does (spec §6.6a).
+        for (const id of s.shop) returnCopy(s.pool, id);
+        s.frozen = false;
+        s.shop = draw(s.pool, s.tier, economy.shopSlotsByTier[s.tier - 1] ?? 0, s.rng);
+        break;
+      }
+      case 'giveGem':
+        giveGemShop(s, action.amount ?? 0);
+        break;
+      case 'summon':
+        summonShop(s, found.inst, action.summonUnitId, action.summonCount ?? 1);
+        break;
+      default:
+        for (const t of targets) {
+          const f = findUnit(s, t.uid);
+          if (f) applyTargetAction(s, action, f.inst);
+        }
+        break;
+    }
+  }
   return { ok: true };
 }
 
@@ -533,6 +641,22 @@ export function boardToCombat(s: ShopSession): CombatBoard {
 
 // ── projection to the private channel (owner-only) ──────────────────────────────────
 
+/** Owner-only activated-ability view (decision #39): board units only, with the CURRENT cost. */
+function abilityStates(s: ShopSession): ActivatedAbilityState[] {
+  const out: ActivatedAbilityState[] = [];
+  for (const u of s.board) {
+    const card = getCard(u.cardId);
+    if (!card.activated) continue;
+    out.push({
+      uid: u.uid,
+      cardId: u.cardId,
+      cost: activatedCost(s, card),
+      used: s.abilityUsedThisTurn.includes(u.uid),
+    });
+  }
+  return out;
+}
+
 export function toPrivateState(s: ShopSession): PrivateState {
   const pending: PendingTarget | null = s.pendingTarget
     ? {
@@ -554,6 +678,7 @@ export function toPrivateState(s: ShopSession): PrivateState {
     bench: s.bench.map(toClientUnit),
     board: s.board.map(toClientUnit),
     gems: s.gems,
+    abilities: abilityStates(s),
     discover: s.discover ? { reason: s.discover.reason, options: s.discover.options.map(toShopOffer) } : null,
     pendingTarget: pending,
     lastCombatLog: s.lastCombatLog,

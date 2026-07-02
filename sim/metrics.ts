@@ -202,6 +202,42 @@ export function nonLinearity(_results: MatchResult[], seeds = 40): NonLinearity 
   };
 }
 
+// ── HOARDING diagnostic (decision #39 — output only, NOT a gate) ──────────────────────────────
+// The gem wallet is deliberately UNCAPPED; instead the sim reports the distribution of UNSPENT
+// wallet at game end. A fat tail (players banking large wallets instead of buying doubles/sinks)
+// is the "hoarding is optimal" smell that would justify adding pressure — this readout is how
+// that call gets made, without baking a premature cap into the engine.
+
+export interface HoardingDiagnostic {
+  players: number; // players measured (all seats, all games)
+  withGems: number; // players who ended with any unspent gems
+  mean: number;
+  p50: number;
+  p90: number;
+  max: number;
+}
+
+function quantile(sorted: number[], q: number): number {
+  if (sorted.length === 0) return 0;
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil(q * sorted.length) - 1));
+  return sorted[idx];
+}
+
+export function hoardingDiagnostic(results: MatchResult[]): HoardingDiagnostic {
+  const wallets: number[] = [];
+  for (const r of results) for (const p of r.players) wallets.push(p.unspentGems);
+  const sorted = [...wallets].sort((a, b) => a - b);
+  const withGems = wallets.filter((w) => w > 0).length;
+  return {
+    players: wallets.length,
+    withGems,
+    mean: avg(wallets),
+    p50: quantile(sorted, 0.5),
+    p90: quantile(sorted, 0.9),
+    max: sorted[sorted.length - 1] ?? 0,
+  };
+}
+
 // ── (g) stale-combat fraction ─────────────────────────────────────────────────────────────────
 
 export interface StaleCombat {
@@ -257,6 +293,7 @@ export interface MacroReport {
   reach: Reachability;
   nonLin: NonLinearity;
   stale: StaleCombat;
+  hoarding: HoardingDiagnostic; // decision #39 — diagnostic output only, never a gate
   tribes: TribeStat[];
   units: UnitStat[];
   breakpoints: BreakpointStat[];
@@ -337,6 +374,7 @@ export function buildMacroReport(results: MatchResult[]): MacroReport {
   const reach = reachability(results);
   const nonLin = nonLinearity(results);
   const stale = staleCombat(results);
+  const hoarding = hoardingDiagnostic(results);
 
   const flags: string[] = [];
   if (!singleAxis.pass) flags.push(`OVERPOWERED single-axis margin ${(singleAxis.margin * 100).toFixed(1)}pp > ${(singleAxis.threshold * 100).toFixed(0)}pp`);
@@ -355,6 +393,7 @@ export function buildMacroReport(results: MatchResult[]): MacroReport {
     reach,
     nonLin,
     stale,
+    hoarding,
     tribes,
     units,
     breakpoints: bpStats,

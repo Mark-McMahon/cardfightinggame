@@ -240,7 +240,7 @@ describe('EV-ECO — economy / shop reducer', () => {
     expect(s.board.map((u) => u.uid)).toEqual([a.uid, b.uid, c.uid]);
   });
 
-  it('EV-ECO-14 (D10): gems accumulate & persist; gemsThisTurn resets each shop turn; persistent gems is cosmetic', () => {
+  it('EV-ECO-14 (#39, supersedes D10): gems accumulate & persist as a SPENDABLE wallet; gemsThisTurn resets each shop turn', () => {
     const s = createShopSession(0, { seed: 'eco14' });
     put(s, 'tuskers_gemsnout'); // endOfTurn: +gemBaseValue gem
     const per = engines.tuskers.gemBaseValue;
@@ -255,12 +255,16 @@ describe('EV-ECO — economy / shop reducer', () => {
     endOfTurnPhase(s);
     expect(s.gems).toBe(per * 2); // accumulates across turns
     expect(s.gemsThisTurn).toBe(per);
-    // D10: the persistent lifetime total has no spend sink — no reducer op reads/consumes `gems`.
-    // A large gems total does not change the tier-up / reroll costs the player faces.
+    // #39 (supersedes D10's "cosmetic"): the wallet is a REAL currency, spent only through
+    // `activateAbility` (pinned by EV-ABL-01..). It still never touches the GOLD economy's
+    // prices — tier-up / reroll costs are gold-denominated and unaffected by any gem total —
+    // and the only gem→gold bridge is Gemwright's one-way activation (EV-ABL-07).
     const priv = toPrivateState(s);
     s.gems = 9999;
     const priv2 = toPrivateState(s);
     expect(priv2.tierUpCost).toBe(priv.tierUpCost);
     expect(priv2.rerollCost).toBe(priv.rerollCost);
+    // the wallet is uncapped by design (#39) — hoarding is a sim DIAGNOSTIC, not an engine cap
+    expect(priv2.gems).toBe(9999);
   });
 });

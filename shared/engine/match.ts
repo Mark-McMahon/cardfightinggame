@@ -7,6 +7,7 @@ import { match as matchCfg } from '../config';
 import { Rng } from './rng';
 import { createPool, type PoolState } from './pool';
 import {
+  activateAbility,
   buyUnit,
   boardToCombat,
   createShopSession,
@@ -142,6 +143,9 @@ export class Match {
         break;
       case 'targetChoice':
         res = resolveTargetChoice(s, intent.targetUid);
+        break;
+      case 'activate':
+        res = activateAbility(s, intent.unitUid);
         break;
       case 'discoverPick':
         res = resolveDiscoverPick(s, intent.optionIndex);

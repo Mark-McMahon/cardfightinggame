@@ -76,13 +76,11 @@ export const breakpoints: BreakpointsConfig = {
     { card: 'constructs_aegisprime', counter: 'deaths', threshold: 1, atk: 1, hp: 1 },
 
     // ═══ Round-6 replayability expansion — four tribes, each with a distinct keyword strength ═══
-    // ── Tuskers / SPOILS: the EXPONENTIAL engine. Each doubler MULTIPLIES a carry by `factor`
-    //    (≤ multiplyFactorCap) every turn it makes `gemsThisTurn` gems — compounds across turns to
-    //    thousands of stats. Reuses NO combat counter; gated on the shop `gemsThisTurn` count. Kept
-    //    beatable by poison (P1 ignores stat size) — the structural counter to any tall/amp line. ──
-    { card: 'tuskers_ivorytusk', counter: 'gemsThisTurn', threshold: 3, factor: 2 },
-    { card: 'tuskers_ivorylord', counter: 'gemsThisTurn', threshold: 3, factor: 2 },
-    { card: 'tuskers_gemtitan', counter: 'gemsThisTurn', threshold: 3, factor: 2 },
+    // ── Tuskers / SPOILS: the EXPONENTIAL engine — reworked by decision #39. The doublers are no
+    //    longer gemsThisTurn breakpoints: each ×factor step is now PURCHASED with spendable gems
+    //    (activated ability, escalating per-game cost). They are registered in the SPEND-GATED
+    //    payoff registry below (`spendGated`) — the §11.3c lint's second legal primary-payoff
+    //    class. Still beatable by poison (P1 ignores stat size). ──
     // ── Primordials / ELEMENTS: play-count → WIDE cleave splash. Counter: TALL (few targets waste
     //    cleave) + poison. Reuses `battlecries` (each play) and `alliesAtStart` (went wide). ──
     { card: 'primordials_stormcaller', counter: 'battlecries', threshold: 2, atk: 2, hp: 1 },
@@ -111,4 +109,43 @@ export function getBreakpoint(card: string): Breakpoint {
 
 export function hasBreakpoint(card: string): boolean {
   return card in byCard;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Spend-gated payoff registry (decision #39/#40; spec §6.6a, §11.3c)
+// ─────────────────────────────────────────────────────────────────────────────
+// The SECOND legal primary-payoff class beside breakpoints: a payoff whose every step is
+// PURCHASED with a currency (an explicit decision), not accrued from board state. The
+// §11.3c lint accepts a card's threshold-free primary payoff ONLY if it is registered
+// here, its card carries an `activated` ability, and its `costKnobs` resolve to positive
+// finite numbers in `engines[<tribe>]` — exponential scaling is legal only where each
+// step is bought (decision #40: "when in doubt add a cost, not a bigger number").
+
+export interface SpendGatedPayoff {
+  card: string; // catalog id — the lint cross-checks against the catalog + its `activated` spec
+  currency: 'gems'; // only spendable currency today (gold↔gems stays one-way via Gemwright)
+  costKnobs: string[]; // engines[<card.tribe>] knob names that price each step
+}
+
+export const spendGated: SpendGatedPayoff[] = [
+  // the three doublers share the escalating per-game formula (doubleBaseCost + doubleCostStep·k)
+  { card: 'tuskers_ivorytusk', currency: 'gems', costKnobs: ['doubleBaseCost', 'doubleCostStep'] },
+  { card: 'tuskers_ivorylord', currency: 'gems', costKnobs: ['doubleBaseCost', 'doubleCostStep'] },
+  { card: 'tuskers_gemtitan', currency: 'gems', costKnobs: ['doubleBaseCost', 'doubleCostStep'] },
+  // gem sinks (flat costs)
+  { card: 'tuskers_gemwright', currency: 'gems', costKnobs: ['gemwrightCost'] },
+  { card: 'tuskers_facetguard', currency: 'gems', costKnobs: ['facetguardCost'] },
+  { card: 'tuskers_oreseeker', currency: 'gems', costKnobs: ['oreseekerCost'] },
+];
+
+const spendByCard: Record<string, SpendGatedPayoff> = Object.fromEntries(spendGated.map((r) => [r.card, r]));
+
+export function hasSpendGated(card: string): boolean {
+  return card in spendByCard;
+}
+
+export function getSpendGated(card: string): SpendGatedPayoff {
+  const r = spendByCard[card];
+  if (!r) throw new Error(`No spend-gated registry row for ${card}`);
+  return r;
 }

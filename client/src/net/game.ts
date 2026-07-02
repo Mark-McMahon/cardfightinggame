@@ -20,13 +20,20 @@ export interface CreateOpts {
 let client: Client | null = null;
 let room: Room | null = null;
 
-/** ws endpoint: dev server on :2567; override with VITE_SERVER_URL for a hosted server. */
+/**
+ * ws endpoint resolution:
+ *  1. VITE_SERVER_URL (build-time) wins — for pointing a separately-hosted client at a server.
+ *  2. Dev (`import.meta.env.DEV`): Vite (:5173) and Colyseus (:2567) are separate origins.
+ *  3. Prod: the server serves this bundle too (§9.8), so connect SAME-ORIGIN — no port suffix
+ *     (443 for wss). colyseus.js derives the http(s) matchmake URL from this automatically.
+ */
 function endpoint(): string {
-  const override = (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_SERVER_URL;
-  if (override) return override;
+  const env = (import.meta as { env?: Record<string, string | undefined> }).env;
+  if (env?.VITE_SERVER_URL) return env.VITE_SERVER_URL;
   const proto = typeof location !== 'undefined' && location.protocol === 'https:' ? 'wss' : 'ws';
-  const host = typeof location !== 'undefined' ? location.hostname : 'localhost';
-  return `${proto}://${host}:2567`;
+  if (typeof location === 'undefined') return `${proto}://localhost:2567`;
+  if (env?.DEV) return `${proto}://${location.hostname}:2567`;
+  return `${proto}://${location.host}`;
 }
 
 function getClient(): Client {

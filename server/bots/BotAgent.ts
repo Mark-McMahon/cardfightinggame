@@ -22,8 +22,10 @@
 import {
   getCard,
   hasBreakpoint,
+  hasSpendGated,
   economy,
   Rng,
+  type ActivatedAbilityState,
   type Axis,
   type BotWeights,
   type ClientUnit,
@@ -87,6 +89,11 @@ export class BotAgent {
       const best = this.bestBench(priv, pub, focus);
       if (best) return { type: 'playUnit', unitUid: best.uid };
     }
+
+    // 2.5) spend the gem wallet (decision #39): deterministic greedy policy — doublers first
+    // (the compounding line), then the utility sinks. All randomness stays on the seeded rng.
+    const activate = this.bestActivation(priv, pub, focus);
+    if (activate) return { type: 'activate', unitUid: activate };
 
     // 3) ramp: tier up when affordable and we keep a tempo reserve (eagerness widens the window).
     if (priv.tierUpCost >= 0 && priv.gold >= priv.tierUpCost) {
@@ -163,7 +170,8 @@ export class BotAgent {
     const axes = card.axis ?? [];
     for (const ax of axes) if (focus.targetAxes.has(ax)) s += this.weights.axisValue;
     if (axes.length >= 2 && axes.some((a) => focus.targetAxes.has(a))) s += this.weights.bridgeValue;
-    if (hasBreakpoint(cardId)) s += this.weights.breakpointValue;
+    // spend-gated payoff cards (#39) are primary payoffs too — valued like breakpoint cards.
+    if (hasBreakpoint(cardId) || hasSpendGated(cardId)) s += this.weights.breakpointValue;
     if (focus.underTribe && tribe === focus.underTribe) s += this.weights.splashBalanceBonus;
     return s;
   }
@@ -210,6 +218,7 @@ export class BotAgent {
         focus.committed.size === 0 ||
         focus.committed.has(o.tribe) ||
         hasBreakpoint(o.cardId) ||
+        hasSpendGated(o.cardId) ||
         (getCard(o.cardId).axis ?? []).some((a) => focus.targetAxes.has(a));
       if (!worthwhile) continue;
       const sc = this.scoreOffer(o, focus) + this.rng.next() * 0.01;
@@ -238,10 +247,11 @@ export class BotAgent {
     const reserve = Math.round((1 - this.weights.rollAggression) * economy.buyCost);
     if (priv.gold - priv.rerollCost < reserve) return false;
 
-    // breakpoint hunt: assemble up to breakpointHuntTarget distinct payoff cards.
+    // breakpoint hunt: assemble up to breakpointHuntTarget distinct payoff cards
+    // (spend-gated payoff cards count as payoffs too, #39).
     const owned = new Set<string>();
-    for (const u of [...priv.board, ...priv.bench]) if (hasBreakpoint(u.cardId)) owned.add(u.cardId);
-    const offered = priv.shop.some((o) => hasBreakpoint(o.cardId));
+    for (const u of [...priv.board, ...priv.bench]) if (hasBreakpoint(u.cardId) || hasSpendGated(u.cardId)) owned.add(u.cardId);
+    const offered = priv.shop.some((o) => hasBreakpoint(o.cardId) || hasSpendGated(o.cardId));
     if (owned.size < this.weights.breakpointHuntTarget && !offered && this.rollsThisTurn < this.weights.breakpointHuntMaxRolls) {
       return true;
     }
@@ -250,6 +260,56 @@ export class BotAgent {
     const buy = this.bestBuy(priv, pub, focus);
     const nothingGood = !buy || buy.score < this.weights.rerollThreshold;
     return nothingGood && this.rng.next() < this.weights.rollAggression;
+  }
+
+  /**
+   * Decision #39 activation policy (deterministic, minimal):
+   *   1. DOUBLERS (escalating cost) — greedy: whenever the wallet covers the current price,
+   *      double the biggest doubler on board (ties → lowest uid). The all-in compounding line.
+   *   2. Facetguard-style chosenAlly buffs — activate when affordable and there is a real board
+   *      (≥2 units, so the shield lands on a carry, not only on itself); the pendingTarget step
+   *      then picks the biggest ally (bestTarget).
+   *   3. Gemwright (gainGold) — only while below goldCap (never waste the clamped gold).
+   *   4. Oreseeker (refreshShop) — a free roll when the bot would have rolled anyway.
+   * Returns the uid to activate, or null.
+   */
+  private bestActivation(priv: PrivateState, pub: PublicState, focus: BuildFocus): string | null {
+    const abilities = priv.abilities ?? [];
+    if (abilities.length === 0) return null;
+    const byUid = new Map<string, ClientUnit>();
+    for (const u of priv.board) byUid.set(u.uid, u);
+    const usable = abilities.filter((a) => !a.used && priv.gems >= a.cost && byUid.has(a.uid));
+    if (usable.length === 0) return null;
+
+    const kindOf = (a: ActivatedAbilityState): 'doubler' | 'target' | 'gold' | 'refresh' | 'other' => {
+      const spec = getCard(a.cardId).activated;
+      if (!spec) return 'other';
+      if (spec.cost === 'doublerEscalating') return 'doubler';
+      if (spec.target.selector === 'chosenAlly') return 'target';
+      if (spec.actions.some((x) => x.type === 'gainGold')) return 'gold';
+      if (spec.actions.some((x) => x.type === 'refreshShop')) return 'refresh';
+      return 'other';
+    };
+    const statOf = (a: ActivatedAbilityState): number => {
+      const u = byUid.get(a.uid);
+      return u ? u.atk + u.hp : 0;
+    };
+
+    const doublers = usable
+      .filter((a) => kindOf(a) === 'doubler')
+      .sort((x, y) => statOf(y) - statOf(x) || (x.uid < y.uid ? -1 : 1));
+    if (doublers.length > 0) return doublers[0].uid;
+
+    const targeted = usable.find((a) => kindOf(a) === 'target');
+    if (targeted && priv.board.length >= 2) return targeted.uid;
+
+    const gold = usable.find((a) => kindOf(a) === 'gold');
+    if (gold && priv.gold < economy.goldCap) return gold.uid;
+
+    const refresh = usable.find((a) => kindOf(a) === 'refresh');
+    if (refresh && this.shouldRoll(priv, pub, focus)) return refresh.uid;
+
+    return null;
   }
 
   private bestTarget(priv: PrivateState): string | null {

@@ -12,15 +12,20 @@ import { UNITS } from '@cardgame/shared';
 const LIVE = {
   triggers: new Set(['battlecry', 'deathrattle', 'startOfCombat', 'endOfTurn', 'afterFriendlyDeaths', 'onSell', 'onAttack', 'onShieldBreak', 'onSummon', 'afterFriendlyBattlecry']),
   selectors: new Set(['self', 'allAllies', 'chosenAlly', 'randomAlly', 'lowestStatAlly', 'highestStatAlly', 'frontEnemy', 'highestStatEnemy', 'triggerSource']),
-  actions: new Set(['buffStats', 'grantKeyword', 'summon', 'dealDamage', 'giveGem', 'multiplyStats', 'plantDeathrattle', 'resetToBase', 'custom', 'destroy']),
+  actions: new Set(['buffStats', 'grantKeyword', 'summon', 'dealDamage', 'giveGem', 'multiplyStats', 'plantDeathrattle', 'resetToBase', 'custom', 'destroy', 'gainGold', 'refreshShop']),
+  // `gemsThisTurnAtLeast` stays LIVE as engine vocabulary (EV-CND-01/03) though #39 left it
+  // with 0 card consumers (the doublers became purchased activations) — see §6.9.
   conditions: new Set(['countAllies', 'battlecriesThisTurnAtLeast', 'gemsThisTurnAtLeast', 'deathsThisCombatAtLeast', 'tokensSummonedThisTurnAtLeast']),
   auraScopes: new Set(['selfTribeAllies', 'yourBattlecries', 'yourEndOfTurn']),
   auraModifiers: new Set(['damageMultiplier', 'triggerMultiplier']),
 };
+// #39: gainGold/refreshShop are live ONLY inside `activated.actions` (the activated-ability
+// resolver); no triggered Effect may use them — asserted below.
+const ACTIVATED_ONLY_ACTIONS = new Set(['gainGold', 'refreshShop']);
 const RESERVED = {
   triggers: new Set(['onPurchase', 'onDamaged', 'onPlayTribe', 'onRefresh', 'onCast', 'onSacrifice', 'onSpend', 'onTripleCreated']),
   selectors: new Set(['leftNeighbor', 'rightNeighbor', 'adjacentAllies', 'newestAlly', 'oldestAlly', 'nAllies', 'randomEnemy', 'neighborsOfTarget']),
-  actions: new Set(['setStats', 'gainGold', 'makeSpell', 'discover', 'sacrifice']),
+  actions: new Set(['setStats', 'makeSpell', 'discover', 'sacrifice']),
   conditions: new Set(['hasTribe', 'hasKeyword', 'goldAtLeast', 'tierAtLeast', 'isGolden', 'isToken']),
   auraScopes: new Set(['allAllies', 'yourGems', 'yourSpells', 'shopCostTribe']),
   auraModifiers: new Set(['costReduction', 'gemValueAdd', 'spellPowerAdd', 'statBuffOnEvent']),
@@ -42,7 +47,19 @@ describe('EV-VOCAB-01 — anti-idiom law over shipped content (units.ts)', () =>
         for (const act of eff.actions) {
           expect(LIVE.actions.has(act.type), `${card.id} action ${act.type}`).toBe(true);
           expect(RESERVED.actions.has(act.type)).toBe(false);
+          // gainGold/refreshShop are activated-only primitives (#39) — never in a triggered Effect
+          expect(ACTIVATED_ONLY_ACTIONS.has(act.type), `${card.id} triggered ${act.type} (activated-only)`).toBe(false);
         }
+      }
+      // the activated-ability surface (#39) uses the same LIVE vocabulary
+      if (card.activated) {
+        expect(LIVE.selectors.has(card.activated.target.selector), `${card.id} activated selector`).toBe(true);
+        for (const act of card.activated.actions) {
+          expect(LIVE.actions.has(act.type), `${card.id} activated action ${act.type}`).toBe(true);
+          expect(RESERVED.actions.has(act.type)).toBe(false);
+        }
+        const cost = card.activated.cost;
+        expect(cost === 'doublerEscalating' || (typeof cost === 'number' && cost > 0), `${card.id} activated cost`).toBe(true);
       }
       for (const aura of card.auras ?? []) {
         expect(LIVE.auraScopes.has(aura.scope), `${card.id} aura scope ${aura.scope}`).toBe(true);

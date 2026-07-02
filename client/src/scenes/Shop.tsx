@@ -10,15 +10,16 @@
 
 import { useRef, useState } from 'react';
 import type { DragEvent } from 'react';
-import type { ClientUnit, ShopOffer, Intent } from '@cardgame/shared';
-import { economy, breakpoints } from '@cardgame/shared';
+import type { ClientUnit, ShopOffer, Intent, ActivatedAbilityState } from '@cardgame/shared';
+import { economy, UNITS } from '@cardgame/shared';
 import { usePrivateState, usePublicState, useRoom } from '../net/hooks';
 import { sendIntent, buyThenPlay } from '../net/game';
 import { Card, Standings, StatBadge, unitToModel, offerToModel } from '../components';
 
-// decision #27: a manufactured-event counter shows only when you own a card that consumes it.
-// The catalog→counter mapping is the authoritative breakpoints config (read-only static data).
-const GEM_CONSUMERS = new Set(breakpoints.list.filter((b) => b.counter === 'gemsThisTurn').map((b) => b.card));
+// decision #27: a resource counter shows only when you own a card that consumes it. Since #39
+// the gem CONSUMERS are the activated-ability cards (the wallet's spenders) — read from the
+// catalog (read-only static data).
+const GEM_CONSUMERS = new Set(UNITS.filter((u) => u.activated).map((u) => u.id));
 const ownsGemConsumer = (ids: string[]): boolean => ids.some((id) => GEM_CONSUMERS.has(id));
 
 type DragFrom = 'shop' | 'bench' | 'board';
@@ -65,6 +66,7 @@ export function Shop() {
   const oppSeat = opponentSeat(pub.pairings, conn.seat);
   const ownedIds = [...priv.board, ...priv.bench].map((u) => u.cardId);
   const showGems = ownsGemConsumer(ownedIds) || priv.gems > 0;
+  const abilityByUid = new Map<string, ActivatedAbilityState>((priv.abilities ?? []).map((a) => [a.uid, a]));
 
   const benchFull = priv.bench.length >= economy.benchCap;
   const boardFull = priv.board.length >= economy.boardCap;
@@ -269,23 +271,41 @@ export function Shop() {
           onDrop={onBoardDrop}
         >
           {priv.board.length === 0 && dropSlot == null && <span className="dim">drag units here to fight</span>}
-          {priv.board.map((u, i) => (
-            <div key={u.uid} style={{ display: 'contents' }}>
-              {dropSlot === i && <div className="drop-marker" />}
-              <div
-                ref={(el) => {
-                  slotRefs.current[i] = el;
-                }}
-                className={'bslot' + (draggingKey === u.uid ? ' dragging' : '')}
-                draggable={!pending && shopLive}
-                onDragStart={startDrag({ from: 'board', uid: u.uid }, u.uid)}
-                onDragEnd={endDrag}
-                onClick={clickBoard(u)}
-              >
-                <Card model={unitToModel(u)} className={pending && legal.has(u.uid) ? 'legal' : ''} />
+          {priv.board.map((u, i) => {
+            const ability = abilityByUid.get(u.uid);
+            const abilityReady = !!ability && !ability.used && priv.gems >= ability.cost && shopLive && !pending;
+            return (
+              <div key={u.uid} style={{ display: 'contents' }}>
+                {dropSlot === i && <div className="drop-marker" />}
+                <div
+                  ref={(el) => {
+                    slotRefs.current[i] = el;
+                  }}
+                  className={'bslot' + (draggingKey === u.uid ? ' dragging' : '')}
+                  draggable={!pending && shopLive}
+                  onDragStart={startDrag({ from: 'board', uid: u.uid }, u.uid)}
+                  onDragEnd={endDrag}
+                  onClick={clickBoard(u)}
+                >
+                  <Card model={unitToModel(u)} className={pending && legal.has(u.uid) ? 'legal' : ''} />
+                  {/* activated ability (decision #39): buy with gems, once per turn per minion */}
+                  {ability && (
+                    <button
+                      className={'ability-btn' + (ability.used ? ' used' : '')}
+                      disabled={!abilityReady}
+                      title={ability.used ? 'already activated this turn' : u.text ?? 'activate'}
+                      onClick={(e) => {
+                        e.stopPropagation(); // never fall through to target-pick on the card
+                        if (abilityReady) sendIntent({ type: 'activate', unitUid: u.uid });
+                      }}
+                    >
+                      {ability.used ? '✓ used' : <>◆{ability.cost} activate</>}
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {dropSlot === priv.board.length && <div className="drop-marker" />}
         </div>
       </div>

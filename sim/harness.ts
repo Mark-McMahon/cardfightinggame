@@ -17,6 +17,7 @@ import {
   getCard,
   getBreakpoint,
   hasBreakpoint,
+  hasSpendGated,
   combat as combatCfg,
   type BotWeights,
   type BreakpointCounter,
@@ -37,10 +38,13 @@ export interface PlayerGameResult {
   /** cardIds of the player's most-developed board across the game (peak non-token count). */
   peakBoard: string[];
   maxTier: number;
-  /** distinct breakpoint card ids whose threshold was reached in some round ("assembled the combo"). */
+  /** distinct PRIMARY-PAYOFF card ids assembled: breakpoint cards whose threshold was reached in
+   *  some round, plus spend-gated cards (decision #39) whose ability was actually PURCHASED. */
   breakpointsHit: Set<string>;
   /** owned breakpoint card → max counter value achieved (for the non-linearity metric). */
   ownedBreakpointMaxCounter: Map<string, number>;
+  /** gems left in the wallet at game end (decision #39 HOARDING diagnostic — output only). */
+  unspentGems: number;
 }
 
 export interface MatchResult {
@@ -150,6 +154,7 @@ export function runMatch(seed: string, seats: SeatSpec[]): MatchResult {
     maxTier: 1,
     breakpointsHit: new Set<string>(),
     ownedBreakpointMaxCounter: new Map<string, number>(),
+    unspentGems: 0,
   }));
   const peakCount = new Array<number>(seats.length).fill(-1);
 
@@ -189,6 +194,12 @@ export function runMatch(seed: string, seats: SeatSpec[]): MatchResult {
         board: s.board.map((u) => u.cardId),
         tier: s.tier,
       });
+      // spend-gated payoffs (decision #39): a purchased activation IS an assembled primary
+      // payoff — count it beside breakpoint hits (the reachability gate measures payoffs, and
+      // spend-gated is the second legal payoff class, §11.3c).
+      for (const [cardId, uses] of Object.entries(s.abilityUses)) {
+        if (uses > 0 && hasSpendGated(cardId)) per[p.seat].breakpointsHit.add(cardId);
+      }
       // track peak developed board + max tier
       const rec = per[p.seat];
       rec.maxTier = Math.max(rec.maxTier, s.tier);
@@ -213,7 +224,10 @@ export function runMatch(seed: string, seats: SeatSpec[]): MatchResult {
     }
   }
 
-  for (const p of m.state.players) per[p.seat].placement = p.placement;
+  for (const p of m.state.players) {
+    per[p.seat].placement = p.placement;
+    per[p.seat].unspentGems = m.sessions[p.seat].gems; // #39 hoarding diagnostic (wallet at game end)
+  }
   return { seed, players: per, rounds, combats, staleCombats };
 }
 

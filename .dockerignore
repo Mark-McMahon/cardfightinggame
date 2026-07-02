@@ -1,0 +1,16 @@
+# Keep the build context small and force a clean install/build inside the image.
+node_modules
+**/node_modules
+dist
+**/dist
+.git
+.vite
+coverage
+sim-out
+playwright-report
+test-results
+.playwright
+.playwright-cli
+.claude
+*.log
+.DS_Store

@@ -26,7 +26,7 @@ current code (or even the current prose) is correct until a golden locks it.
 | **D7** | Wire `boardCap` + `divineShieldNegatesPoison` to config; honor `simultaneousDeaths`/`deathrattleOrder`; **delete** `attackOrderRule`/`firstAttackerTiebreak`; keep `64`/`8` as commented guards. | §7.6, §12 |
 | **D8** | Ghost = **most-recently-eliminated** board, chosen **deterministically from the match seed**. | §4.4 |
 | **D9** | `maxRounds` HP-tie tiebreak = **seat order** (lowest seat higher). | §4.6 |
-| **D10** | Persistent `gems` is **cosmetic** (no spend sink ships); only `gemsThisTurn` feeds the doubler. | §4.7 |
+| **D10** | ⚠️ **SUPERSEDED by ledger decision #39 (2026-07-01,** `requirements.md`**):** persistent `gems` is now a **spendable wallet** (activated abilities: purchased doubles + three gem sinks); the doubler's `gemsThisTurn` breakpoint is retired in favor of the spend-gated payoff class (#40, spec §6.6a). *(Original D10 ruling — cosmetic, no sink — retained below as provenance.)* | §4.7, §6.6a |
 
 Two items were never D-scoped and remain open, both outside the regeneration's pure-interface
 surface: `avoidImmediateRematch`'s precise tie-break rule, and reconnect/bot-takeover (server
@@ -129,6 +129,9 @@ the match seed (required for sim reproducibility)?
 (cumulative damage dealt, seat order, seeded coin)? Needed for a deterministic placement eval.
 
 ## D10 — Persistent `gems` spend sink (reserved-system drift)
+> **SUPERSEDED (2026-07-01):** decision **#39** in `requirements.md` makes `gems` a spendable
+> wallet with real sinks (spec §5, §6.6a); EV-ECO-14 was rewritten accordingly.
+
 **Spec:** §6 reserved note, §15 #7. **Blocks:** EV-ECO-14 (full form), UNPROVEN #8.
 **Question:** `gemCarryOver=true` accrues a persistent `gems` count, but only the per-turn
 `gemsThisTurn` counter is consumed (the doubler breakpoint). Is the persistent `gems` total

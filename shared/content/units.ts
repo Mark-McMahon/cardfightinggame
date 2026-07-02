@@ -1138,15 +1138,17 @@ export const UNITS: UnitCard[] = [
     ],
   },
 
-  // ═══════════════════════════ TUSKERS — SPOILS (exponential doubler) ═══════════════
-  // Gem greed: hoard gems each shop turn, then DOUBLE a carry at a gem breakpoint. The
-  // doubler's per-application factor is CAPPED (×2 ≤ multiplyFactorCap) — the exponential
-  // reach (thousands of stats) comes ONLY from applying it across turns (it writes to the
-  // persistent instance, so it compounds), never from an uncapped single multiply. This is
-  // the game's tall/amp region: strong when unopposed, but every gain is stat SIZE, which
-  // POISON ignores (P1) — so a stat-agnostic chip is the structural counter, and a doubled
-  // single carry is also out-actioned by width. Tensions vs ENDURE/TALL for the carry slot.
-  // All declarative: gem generators (endOfTurn giveGem) + the gated multiplyStats doubler.
+  // ═══════════════════════════ TUSKERS — SPOILS (purchased doubler, decision #39) ═══
+  // Gem greed: hoard SPENDABLE gems each shop turn, then BUY doubles for a carry. The
+  // doubler is an ACTIVATED ability (once per turn per minion): pay the shared escalating
+  // per-game price (doubleBaseCost + doubleCostStep × doubles already purchased) to
+  // multiply the carry ×doublerFactor (≤ multiplyFactorCap). The exponential reach
+  // (thousands of stats) comes ONLY from buying steps across turns (it writes to the
+  // persistent instance, so it compounds), never from an uncapped single multiply — and
+  // every step is a real DECISION against the gem sinks (Gemwright/Facetguard/Oreseeker).
+  // This is the game's tall/amp region: strong when unopposed, but every gain is stat
+  // SIZE, which POISON ignores (P1) — the structural counter — and a doubled single carry
+  // is also out-actioned by width. Tensions vs ENDURE/TALL for the carry slot.
   {
     id: 'tuskers_gemsnout',
     name: 'Gemsnout',
@@ -1202,7 +1204,7 @@ export const UNITS: UnitCard[] = [
     ],
   },
   {
-    // ⭐ THE doubler — a carry that doubles itself every turn you hoard enough gems.
+    // ⭐ THE doubler — a carry you PAY to double (spend-gated, decision #39; escalating shared cost).
     id: 'tuskers_ivorytusk',
     name: 'Ivorytusk',
     tribe: 'tuskers',
@@ -1211,21 +1213,18 @@ export const UNITS: UnitCard[] = [
     hp: 4,
     keywords: [],
     axis: ['spoils'],
-    text: `End of turn: if you gained ${bp('tuskers_ivorytusk').threshold}+ gems this turn, DOUBLE this minion's stats (×${bp('tuskers_ivorytusk').factor}). Compounds across turns.`,
-    effects: [
-      {
-        trigger: { type: 'endOfTurn' },
-        condition: { kind: 'gemsThisTurnAtLeast', value: bp('tuskers_ivorytusk').threshold },
-        target: { selector: 'self' },
-        actions: [{ type: 'multiplyStats', factor: bp('tuskers_ivorytusk').factor }],
-      },
-    ],
+    text: `Once per turn: spend gems (${T.doubleBaseCost}, +${T.doubleCostStep} per double you've bought this game) to permanently DOUBLE this minion's stats (×${T.doublerFactor}). Compounds across turns.`,
+    effects: [],
+    activated: {
+      cost: 'doublerEscalating',
+      target: { selector: 'self' },
+      actions: [{ type: 'multiplyStats', factor: T.doublerFactor }],
+    },
   },
   {
-    // ✏️ audit fix (tall counter-web): Goldgrin now also grants Divine Shield to the buffed carry, so
-    // Tuskers can BUY poison counterplay — a shield blanks the FIRST poison instance (combat.ts), letting
-    // a doubled carry survive the opening touch and connect. Paid with a card, and poison-in-depth (a
-    // second source) still gets through, so the counter survives. This is the "see it coming, have an out".
+    // ✏️ decision #39 rework: Goldgrin is now a pure gem battlecry (its old chosenAlly
+    // +2/+2 + Divine Shield rider moved behind Facetguard's GEM COST — the poison-counterplay
+    // purchase lives there now, priced in gems instead of bundled free with the tempo body).
     id: 'tuskers_goldgrin',
     name: 'Goldgrin',
     tribe: 'tuskers',
@@ -1233,23 +1232,77 @@ export const UNITS: UnitCard[] = [
     atk: 3,
     hp: 3,
     keywords: [],
-    axis: ['spoils', 'endure'],
-    text: `Battlecry: gain 2 gems, then give a friendly minion +${T.gemDumpPayoffAtk}/+${T.gemDumpPayoffHp} and Divine Shield.`,
+    axis: ['spoils'],
+    text: `Battlecry: gain ${T.goldgrinGems} gems.`,
     effects: [
       {
         trigger: { type: 'battlecry' },
         target: { selector: 'self' },
-        actions: [{ type: 'giveGem', amount: 2 }],
-      },
-      {
-        trigger: { type: 'battlecry' },
-        target: { selector: 'chosenAlly', excludeSelf: true },
-        actions: [
-          { type: 'buffStats', atk: T.gemDumpPayoffAtk, hp: T.gemDumpPayoffHp, permanent: true },
-          { type: 'grantKeyword', keyword: 'divineShield' },
-        ],
+        actions: [{ type: 'giveGem', amount: T.goldgrinGems }],
       },
     ],
+  },
+  {
+    // NEW (decision #39) — THE gem→gold bridge, and deliberately the ONLY one, one-way
+    // (gold can never buy gems). Turns a hoard into tempo at a lossy rate; goldCap-clamped.
+    id: 'tuskers_gemwright',
+    name: 'Gemwright',
+    tribe: 'tuskers',
+    tier: 3,
+    atk: 3,
+    hp: 3,
+    keywords: [],
+    axis: ['spoils'],
+    text: `Once per turn: spend ${T.gemwrightCost} gems to gain ${T.gemwrightGold} gold (never above the gold cap).`,
+    effects: [],
+    activated: {
+      cost: T.gemwrightCost,
+      target: { selector: 'self' },
+      actions: [{ type: 'gainGold', amount: T.gemwrightGold }],
+    },
+  },
+  {
+    // NEW (decision #39) — the purchased poison-counterplay body (took over Goldgrin's old
+    // free rider). Reuses the chosenAlly pendingTarget machinery: activate → pick a friendly.
+    id: 'tuskers_facetguard',
+    name: 'Facetguard',
+    tribe: 'tuskers',
+    tier: 3,
+    atk: 2,
+    hp: 5,
+    keywords: ['taunt'],
+    axis: ['spoils', 'endure'],
+    text: `Taunt. Once per turn: spend ${T.facetguardCost} gems to give a friendly minion +${T.gemDumpPayoffAtk}/+${T.gemDumpPayoffHp} and Divine Shield.`,
+    effects: [],
+    activated: {
+      cost: T.facetguardCost,
+      target: { selector: 'chosenAlly' },
+      actions: [
+        { type: 'buffStats', atk: T.gemDumpPayoffAtk, hp: T.gemDumpPayoffHp, permanent: true },
+        { type: 'grantKeyword', keyword: 'divineShield' },
+      ],
+      prompt: 'choose a friendly minion to shield',
+    },
+  },
+  {
+    // NEW (decision #39) — gem-paid shop tempo: a FREE refresh (same seeded draw path as a
+    // paid roll; clears a freeze exactly like rolling does). Renamed from the generic
+    // "Prospector" to the clearly-original compound "Oreseeker" (clean-room §0).
+    id: 'tuskers_oreseeker',
+    name: 'Oreseeker',
+    tribe: 'tuskers',
+    tier: 2,
+    atk: 2,
+    hp: 3,
+    keywords: [],
+    axis: ['spoils'],
+    text: `Once per turn: spend ${T.oreseekerCost} gems to refresh the shop for free.`,
+    effects: [],
+    activated: {
+      cost: T.oreseekerCost,
+      target: { selector: 'self' },
+      actions: [{ type: 'refreshShop' }],
+    },
   },
   {
     id: 'tuskers_warhoard',
@@ -1284,18 +1337,16 @@ export const UNITS: UnitCard[] = [
     hp: 7,
     keywords: ['taunt'],
     axis: ['spoils', 'endure'],
-    text: `Taunt. End of turn: if you gained ${bp('tuskers_ivorylord').threshold}+ gems this turn, DOUBLE this minion's stats (×${bp('tuskers_ivorylord').factor}).`,
-    effects: [
-      {
-        trigger: { type: 'endOfTurn' },
-        condition: { kind: 'gemsThisTurnAtLeast', value: bp('tuskers_ivorylord').threshold },
-        target: { selector: 'self' },
-        actions: [{ type: 'multiplyStats', factor: bp('tuskers_ivorylord').factor }],
-      },
-    ],
+    text: `Taunt. Once per turn: spend gems (${T.doubleBaseCost}, +${T.doubleCostStep} per double you've bought this game) to permanently DOUBLE this minion's stats (×${T.doublerFactor}).`,
+    effects: [],
+    activated: {
+      cost: 'doublerEscalating',
+      target: { selector: 'self' },
+      actions: [{ type: 'multiplyStats', factor: T.doublerFactor }],
+    },
   },
   {
-    // ⭐ SPOILS capstone — a Taunt+Cleave doubler. Terrifying if unanswered; poison ends it.
+    // ⭐ SPOILS capstone — a Taunt doubler. Terrifying if unanswered; poison ends it.
     id: 'tuskers_gemtitan',
     name: 'Gemtitan',
     tribe: 'tuskers',
@@ -1304,20 +1355,19 @@ export const UNITS: UnitCard[] = [
     hp: 8,
     keywords: ['taunt'],
     axis: ['spoils'],
-    text: `Taunt. Battlecry: gain 3 gems. End of turn: if you gained ${bp('tuskers_gemtitan').threshold}+ gems this turn, DOUBLE this minion's stats (×${bp('tuskers_gemtitan').factor}). A tall carry — poison ignores its size.`,
+    text: `Taunt. Battlecry: gain 3 gems. Once per turn: spend gems (${T.doubleBaseCost}, +${T.doubleCostStep} per double you've bought this game) to permanently DOUBLE this minion's stats (×${T.doublerFactor}). A tall carry — poison ignores its size.`,
     effects: [
       {
         trigger: { type: 'battlecry' },
         target: { selector: 'self' },
         actions: [{ type: 'giveGem', amount: 3 }],
       },
-      {
-        trigger: { type: 'endOfTurn' },
-        condition: { kind: 'gemsThisTurnAtLeast', value: bp('tuskers_gemtitan').threshold },
-        target: { selector: 'self' },
-        actions: [{ type: 'multiplyStats', factor: bp('tuskers_gemtitan').factor }],
-      },
     ],
+    activated: {
+      cost: 'doublerEscalating',
+      target: { selector: 'self' },
+      actions: [{ type: 'multiplyStats', factor: T.doublerFactor }],
+    },
   },
 
   {

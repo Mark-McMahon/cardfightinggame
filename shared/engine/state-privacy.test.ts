@@ -25,15 +25,15 @@ describe('EV-INV-PRIV — public/private channel split', () => {
     for (const p of m.state.players) expect(Object.keys(p).sort()).toEqual([...PLAYER_KEYS].sort());
 
     // no private field KEY appears ANYWHERE in the serialized public state (match `"key":`, not values —
-    // e.g. the phase value "shop" is legitimately public)
+    // e.g. the phase value "shop" is legitimately public). `abilities` = activated-ability state (#39).
     const pub = JSON.stringify(m.state);
-    for (const key of ['gold', 'gems', 'shop', 'bench', 'board', 'hand', 'lastCombatLog', 'discover', 'pendingTarget', 'log', 'baseIncome']) {
+    for (const key of ['gold', 'gems', 'shop', 'bench', 'board', 'hand', 'lastCombatLog', 'discover', 'pendingTarget', 'log', 'baseIncome', 'abilities']) {
       expect(pub.includes(`"${key}":`), `public state leaks key ${key}`).toBe(false);
     }
 
     // the private channel (owner-only) DOES carry the private data
     const priv = m.privateState(0);
-    for (const key of ['gold', 'gems', 'shop', 'bench', 'board', 'discover', 'pendingTarget', 'lastCombatLog', 'log', 'tierUpCost', 'rerollCost']) {
+    for (const key of ['gold', 'gems', 'shop', 'bench', 'board', 'discover', 'pendingTarget', 'lastCombatLog', 'log', 'tierUpCost', 'rerollCost', 'abilities']) {
       expect(key in priv, `private state missing ${key}`).toBe(true);
     }
     expect(priv.gems).toBe(5);
