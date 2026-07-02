@@ -1173,7 +1173,31 @@ game** block, since the face chip alone doesn't say which effects were granted v
 full ability text, and base-vs-buffed stats. Triggers (battlecry/deathrattle) stay text-only
 (no face icon): they read in the ability text, not as another death-adjacent glyph.
 
-**Battlefield.** One clean **left→right battle line per side, no wrapping**. Leftmost =
+**Shop scene — a tabletop, not stacked panels (game-feel).** The shop phase renders as one
+continuous felt/wood **table** (`client/src/scenes/Shop.tsx` + `styles.css`), not a column of
+bordered `SHOP`/`BOARD`/`BENCH` zones: a **tavern shelf** across the top you drag a minion *down*
+from (it doubles as the sell target), the **board as the focal felt** in the middle, and a **hero
+dock + fanned hand** along the bottom. The board is laid on a shallow **arc** (each slot lifted by
+its distance from the row centre) and every token casts a ground shadow so units "stand on" the
+surface; the **hand** overlaps its cards in a rotated **fan** that straightens and lifts on hover.
+The **hero dock** surfaces the owner's own **HP as a glossy orb** (previously only in the standings
+rail), a coin count, the gem pill (when a consumer is owned, decision #27/#39), tier + Tier-Up, and
+the two commit actions — **Refresh** (roll) and a glowing **Ready**. The 8-player standings stay a
+slim ladder rail. This is **client presentation only**: it renders the same private state and sends
+the same intents (invariant #1) — drag-and-drop still maps onto the existing op set (below), and the
+combat engine is untouched. Every tabletop *magnitude* (the arc rise, the fan angle/lift/overlap, the
+felt/shelf tones, the token shadow, the HP-orb colour) is a **single-sourced CSS token** beside
+`--card-scale` (never a magic number strewn through markup), and the whole tabletop shrinks uniformly
+off `--card-scale` at narrower widths so a full 7-wide board never wraps or overflows. Hidden hover
+tooltips use `display:none` (not `visibility:hidden`) so a right-edge card's tip can't silently widen
+the page into a horizontal scrollbar; the hand's tips open leftward for the same reason.
+
+**Battlefield.** One clean **left→right battle line per side, no wrapping**, both armies on **one
+shared felt arena** split by a lit **clash line** (the `VS` medallion sits on it) — not two separate
+bordered boxes — with the same ground shadows as the shop so each side "stands on" the field. This is
+a presentation reskin of `CombatReplay.tsx`/`styles.css` only: the segmented causal beats, the
+measured strike geometry (the lunge rides an inner `.fx` layer while the ground shadow stays on the
+static slot), and the link overlay are unchanged. Leftmost =
 next-to-act and first-targeted; adjacency is visually obvious (matters for cleave +
 Bonepiper). The engine is already single-line — this is client-only. Each line is
 **labelled**: your board reads "You"; the far line reads the **opponent's display name** —
@@ -1336,8 +1360,16 @@ entirely — the client would jump straight to the results screen. The continuin
 / battlecries / gems) **only when you own a card that consumes it** — never an always-on
 panel.
 
-**Shop — drag-and-drop (decision #28).** Drag shop→board, board→sell-zone, reorder,
-board↔bench. Buttons remain a fallback. Maps onto existing intents; no server change.
+**Shop — drag-and-drop (decision #28).** Drag tavern-shelf→board (buy-then-play),
+board/bench→tavern to sell (the shelf doubles as the sell target), reorder on the board, and
+board↔hand. Buttons/clicks remain a fallback. Maps onto existing intents; no server change. (The
+zones are now the tabletop's tavern shelf / board felt / fanned hand — see "Shop scene" above — but
+the drop→intent mapping is unchanged.) The board drop handlers (`onDragOver`/`onDrop`) are wired to
+the **whole `.board-felt` surface**, not the inner card row: the felt is `flex:1 1 auto` and grows to
+fill the table, so wiring the drop to the short bottom-pinned `.board-row` left most of the visible
+board silently rejecting drops (the taller the window, the larger the dead band — up to ~78% on a
+maximized display). Per-unit **magnetic-merge** drops (decision #54) still take priority via
+`stopPropagation` on the target `.arc-slot`. Covered by the Playwright DnD e2e (`e2e/`, `pnpm test:e2e`).
 
 ---
 

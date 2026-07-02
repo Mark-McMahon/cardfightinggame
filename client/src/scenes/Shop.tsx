@@ -9,7 +9,7 @@
 // Buttons remain the fallback (click a shop card to buy, a bench card to play; econ controls are buttons).
 
 import { useRef, useState } from 'react';
-import type { DragEvent } from 'react';
+import type { DragEvent, CSSProperties, ReactNode } from 'react';
 import type { ClientUnit, ShopOffer, Intent, ActivatedAbilityState } from '@cardgame/shared';
 import { economy, UNITS } from '@cardgame/shared';
 import { usePrivateState, usePublicState, useRoom } from '../net/hooks';
@@ -27,6 +27,34 @@ interface DragPayload {
   from: DragFrom;
   uid?: string;
   shopIndex?: number;
+}
+
+// Positional layout hints for the curved board + fanned hand. Only POSITION (index / distance /
+// signed offset from the row centre) is computed here — pure geometry, like a flex index. Every
+// tunable MAGNITUDE (the arc rise, the fan angle, the fan lift) lives as a CSS token in styles.css
+// (invariant #4: no gameplay number is hardcoded, and presentation magnitudes are single-sourced
+// too). CSS reads these vars and multiplies them by its tokens, so the whole curve reshapes from
+// one place. `n` is the row length; `i` this card's slot.
+function arcVars(i: number, n: number): CSSProperties {
+  const center = (n - 1) / 2;
+  return { ['--i' as string]: i, ['--dist' as string]: Math.abs(i - center) } as CSSProperties;
+}
+function fanVars(i: number, n: number): CSSProperties {
+  const center = (n - 1) / 2;
+  return { ['--off' as string]: (i - center).toFixed(3), ['--dist' as string]: Math.abs(i - center) } as CSSProperties;
+}
+
+// A tiny ORIGINAL hero medallion (clean-room §0: procedural, no external art). A framed disc whose
+// hue is seeded from the seat so each player's crest is distinct, stamped with their initial.
+function HeroCrest({ name, seat }: { name: string; seat: number | null }): ReactNode {
+  const initial = (name || '?').trim().slice(0, 1).toUpperCase() || '?';
+  const hue = (((seat ?? 0) * 47) % 360 + 360) % 360;
+  const style = { ['--crest-hue' as string]: hue } as CSSProperties;
+  return (
+    <div className="hero-crest" style={style} aria-hidden>
+      <span className="hero-initial">{initial}</span>
+    </div>
+  );
 }
 
 export function Shop() {
@@ -165,8 +193,11 @@ export function Shop() {
     if (shopLive) sendIntent(i);
   };
 
+  const boardN = priv.board.length;
+  const handN = priv.bench.length;
+
   return (
-    <div className={'match-main' + (shopLive ? '' : ' shop-frozen')}>
+    <div className={'match-main tabletop' + (shopLive ? '' : ' shop-frozen')}>
       <Standings pub={pub} mySeat={conn.seat} opponent={opponent} />
 
       {/* Combat hold: the shop below is a frozen preview, not yet live. The grey-out alone reads as a
@@ -193,80 +224,68 @@ export function Shop() {
         </div>
       )}
 
-      {/* economy control bar */}
-      <div className="econ-bar panel">
-        <StatBadge kind="coin" icon="◈" iconClass="coin-ico" title="gold">
-          {priv.gold}
-        </StatBadge>
-        <span className="tier-pill" title="tavern tier">
-          Tier <span className="tp-n">{priv.tier}</span>
-        </span>
-        {showGems && (
-          <StatBadge kind="gem-pill" icon="◆" iconClass="gem-ico" title="gems (feeds the Tusker doubler)">
-            {priv.gems}
-          </StatBadge>
-        )}
-        <div className="spacer" />
-        <button className="ctl-btn" disabled={priv.tierUpCost < 0 || !canAfford(priv.tierUpCost)} onClick={intent({ type: 'tierUp' })}>
-          <span className="ctl-ico">▲</span> Tier Up
-          {priv.tierUpCost >= 0 && <span className="ctl-cost">{priv.tierUpCost}</span>}
-        </button>
-        <button className="ctl-btn" disabled={!canAfford(priv.rerollCost)} onClick={intent({ type: 'roll' })}>
-          <span className="ctl-ico">⟳</span> Roll<span className="ctl-cost">{priv.rerollCost}</span>
-        </button>
-        <button className={'ctl-btn freeze' + (priv.frozen ? ' active' : '')} onClick={intent(priv.frozen ? { type: 'unfreeze' } : { type: 'freeze' })}>
-          <span className="ctl-ico">❄</span> Freeze
-        </button>
-        <button className="ctl-btn ready primary" disabled={!!myPub?.ready} onClick={intent({ type: 'readyUp' })}>
-          {myPub?.ready ? 'Ready ✓' : 'Ready'}
-        </button>
-      </div>
-
       {pending && (
         <div className="pending">
           <strong>{pending.sourceName}:</strong> {pending.description} — click a highlighted target.
         </div>
       )}
 
-      {/* SHOP zone — also the sell target while dragging a board/bench unit */}
-      <div
-        className={'zone shop-zone' + (sellArmed ? ' sell-armed' : '') + (sellOver ? ' sell-over' : '')}
-        onDragOver={(e) => {
-          if (sellArmed) {
-            e.preventDefault();
-            setSellOver(true);
-          }
-        }}
-        onDragLeave={() => setSellOver(false)}
-        onDrop={onShopDrop}
-      >
-        <h4>{sellArmed ? `Drop to sell (+${economy.sellRefund}g)` : shopLive ? 'Shop' : 'Shop — 🔒 locked'}</h4>
-        <div className="units-row">
-          {priv.shop.length === 0 && <span className="dim">empty — roll for units</span>}
-          {priv.shop.map((o: ShopOffer, i: number) => {
-            const key = `shop-${i}`;
-            const affordable = canAfford(economy.buyCost) && !benchFull;
-            return (
-              <div
-                key={key}
-                className={'dragwrap' + (draggingKey === key ? ' dragging' : '')}
-                draggable={!pending && shopLive}
-                onDragStart={startDrag({ from: 'shop', shopIndex: i }, key)}
-                onDragEnd={endDrag}
-                onClick={clickOffer(i)}
-              >
-                <Card model={offerToModel(o)} className={affordable && !pending ? 'clickable' : ''} />
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* BOARD zone — buy/play/reorder drop target */}
-      <div className="zone board-zone">
-        <h4>Board {priv.board.length}/{economy.boardCap}</h4>
+      {/* The tabletop surface — one continuous felt/wood table (no boxed panels): a tavern shelf up
+          top (drag a minion DOWN to buy), the curved board as the focal felt, and a hero dock + a
+          fanned hand along the bottom. Every intent is exactly as before; this is presentation only. */}
+      <div className="table">
+        {/* TAVERN SHELF — the shop counter you drag from; doubles as the sell target while dragging a
+            board/bench unit up here (drop to sell). */}
         <div
-          className={'units-row board-row' + (boardOver ? ' drop-over' : '')}
+          className={'tavern' + (sellArmed ? ' sell-armed' : '') + (sellOver ? ' sell-over' : '')}
+          onDragOver={(e) => {
+            if (sellArmed) {
+              e.preventDefault();
+              setSellOver(true);
+            }
+          }}
+          onDragLeave={() => setSellOver(false)}
+          onDrop={onShopDrop}
+        >
+          <div className="tavern-bar">
+            <span className="tavern-title">{sellArmed ? `↑ Drop to sell  +${economy.sellRefund}g` : shopLive ? 'Tavern' : 'Tavern · 🔒 locked'}</span>
+            <span className="spacer" />
+            <button
+              className={'ctl-btn freeze' + (priv.frozen ? ' active' : '')}
+              title="freeze the shop for next turn"
+              onClick={intent(priv.frozen ? { type: 'unfreeze' } : { type: 'freeze' })}
+            >
+              <span className="ctl-ico">❄</span> {priv.frozen ? 'Frozen' : 'Freeze'}
+            </button>
+          </div>
+          <div className="shelf">
+            {priv.shop.length === 0 && <span className="dim shelf-empty">empty — refresh for units</span>}
+            {priv.shop.map((o: ShopOffer, i: number) => {
+              const key = `shop-${i}`;
+              const affordable = canAfford(economy.buyCost) && !benchFull;
+              return (
+                <div
+                  key={key}
+                  className={'dragwrap' + (draggingKey === key ? ' dragging' : '')}
+                  draggable={!pending && shopLive}
+                  onDragStart={startDrag({ from: 'shop', shopIndex: i }, key)}
+                  onDragEnd={endDrag}
+                  onClick={clickOffer(i)}
+                >
+                  <Card model={offerToModel(o)} className={affordable && !pending ? 'clickable' : ''} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* BOARD FELT — the focal surface; buy/play/reorder drop target. Units sit on a shallow arc.
+            The drop handlers live on the FELT (the whole visible surface), not the inner card row:
+            the felt is flex-grow and fills the table, so wiring drops to the short bottom-pinned row
+            left most of the visible board silently rejecting drops (the taller the window, the worse).
+            Per-unit merge drops still take priority via stopPropagation on the arc-slot. */}
+        <div
+          className={'board-felt' + (boardOver ? ' drop-over' : '')}
           onDragOver={onBoardOver}
           onDragLeave={() => {
             setBoardOver(false);
@@ -274,80 +293,117 @@ export function Shop() {
           }}
           onDrop={onBoardDrop}
         >
-          {priv.board.length === 0 && dropSlot == null && <span className="dim">drag units here to fight</span>}
-          {priv.board.map((u, i) => {
-            const ability = abilityByUid.get(u.uid);
-            const abilityReady = !!ability && !ability.used && priv.gems >= ability.cost && shopLive && !pending;
-            return (
-              <div key={u.uid} style={{ display: 'contents' }}>
-                {dropSlot === i && <div className="drop-marker" />}
-                <div
-                  ref={(el) => {
-                    slotRefs.current[i] = el;
-                  }}
-                  className={'bslot' + (draggingKey === u.uid ? ' dragging' : '') + (mergeOverUid === u.uid ? ' merge-over' : '')}
-                  draggable={!pending && shopLive}
-                  onDragStart={startDrag({ from: 'board', uid: u.uid }, u.uid)}
-                  onDragEnd={endDrag}
-                  onDragOver={(e) => {
-                    if (shopLive && canMergeOnto(u)) {
-                      e.preventDefault();
-                      e.stopPropagation(); // take priority over the board-row reorder/play drop
-                      setMergeOverUid(u.uid);
-                    }
-                  }}
-                  onDragLeave={() => setMergeOverUid((cur) => (cur === u.uid ? null : cur))}
-                  onDrop={(e) => {
-                    const d = dragRef.current;
-                    if (shopLive && canMergeOnto(u) && d?.uid) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      sendIntent({ type: 'merge', unitUid: d.uid, targetUid: u.uid });
-                      endDrag();
-                    }
-                  }}
-                  onClick={clickBoard(u)}
-                >
-                  <Card model={unitToModel(u)} className={pending && legal.has(u.uid) ? 'legal' : ''} />
-                  {/* activated ability (decision #39): buy with gems, once per turn per minion */}
-                  {ability && (
-                    <button
-                      className={'ability-btn' + (ability.used ? ' used' : '')}
-                      disabled={!abilityReady}
-                      title={ability.used ? 'already activated this turn' : u.text ?? 'activate'}
-                      onClick={(e) => {
-                        e.stopPropagation(); // never fall through to target-pick on the card
-                        if (abilityReady) sendIntent({ type: 'activate', unitUid: u.uid });
-                      }}
-                    >
-                      {ability.used ? '✓ used' : <>◆{ability.cost} activate</>}
-                    </button>
-                  )}
+          <div className="board-tag">Board {boardN}/{economy.boardCap}</div>
+          <div className="board-row">
+            {boardN === 0 && dropSlot == null && <span className="dim board-empty">drag units here to fight</span>}
+            {priv.board.map((u, i) => {
+              const ability = abilityByUid.get(u.uid);
+              const abilityReady = !!ability && !ability.used && priv.gems >= ability.cost && shopLive && !pending;
+              return (
+                <div key={u.uid} style={{ display: 'contents' }}>
+                  {dropSlot === i && <div className="drop-marker" />}
+                  <div
+                    ref={(el) => {
+                      slotRefs.current[i] = el;
+                    }}
+                    style={arcVars(i, boardN)}
+                    className={'bslot arc-slot' + (draggingKey === u.uid ? ' dragging' : '') + (mergeOverUid === u.uid ? ' merge-over' : '')}
+                    draggable={!pending && shopLive}
+                    onDragStart={startDrag({ from: 'board', uid: u.uid }, u.uid)}
+                    onDragEnd={endDrag}
+                    onDragOver={(e) => {
+                      if (shopLive && canMergeOnto(u)) {
+                        e.preventDefault();
+                        e.stopPropagation(); // take priority over the board-row reorder/play drop
+                        setMergeOverUid(u.uid);
+                      }
+                    }}
+                    onDragLeave={() => setMergeOverUid((cur) => (cur === u.uid ? null : cur))}
+                    onDrop={(e) => {
+                      const d = dragRef.current;
+                      if (shopLive && canMergeOnto(u) && d?.uid) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        sendIntent({ type: 'merge', unitUid: d.uid, targetUid: u.uid });
+                        endDrag();
+                      }
+                    }}
+                    onClick={clickBoard(u)}
+                  >
+                    <Card model={unitToModel(u)} className={pending && legal.has(u.uid) ? 'legal' : ''} />
+                    {/* activated ability (decision #39): buy with gems, once per turn per minion */}
+                    {ability && (
+                      <button
+                        className={'ability-btn' + (ability.used ? ' used' : '')}
+                        disabled={!abilityReady}
+                        title={ability.used ? 'already activated this turn' : u.text ?? 'activate'}
+                        onClick={(e) => {
+                          e.stopPropagation(); // never fall through to target-pick on the card
+                          if (abilityReady) sendIntent({ type: 'activate', unitUid: u.uid });
+                        }}
+                      >
+                        {ability.used ? '✓ used' : <>◆{ability.cost} activate</>}
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-          {dropSlot === priv.board.length && <div className="drop-marker" />}
+              );
+            })}
+            {dropSlot === boardN && <div className="drop-marker" />}
+          </div>
         </div>
-      </div>
 
-      {/* BENCH zone — buy(from shop) drop target */}
-      <div className="zone" onDragOver={(e) => dragRef.current?.from === 'shop' && e.preventDefault()} onDrop={onBenchDrop}>
-        <h4>Bench {priv.bench.length}/{economy.benchCap}</h4>
-        <div className="units-row">
-          {priv.bench.length === 0 && <span className="dim">buy units from the shop</span>}
-          {priv.bench.map((u) => (
-            <div
-              key={u.uid}
-              className={'bslot' + (draggingKey === u.uid ? ' dragging' : '')}
-              draggable={!pending}
-              onDragStart={startDrag({ from: 'bench', uid: u.uid }, u.uid)}
-              onDragEnd={endDrag}
-              onClick={clickBench(u)}
-            >
-              <Card model={unitToModel(u)} className={pending && legal.has(u.uid) ? 'legal' : !pending && !boardFull ? 'clickable' : ''} />
+        {/* DOCK — hero zone (portrait, HP orb, coins, tier/upgrade, Refresh, Ready) + the fanned hand
+            (bench). The hand is the buy(from shop) drop target. */}
+        <div className="dock">
+          <div className="hero">
+            <HeroCrest name={myPub?.name ?? 'You'} seat={conn.seat} />
+            <div className="hp-orb" title="your health">
+              <span className="hp-val">{Math.max(0, myPub?.hp ?? 0)}</span>
             </div>
-          ))}
+            <div className="hero-stats">
+              <StatBadge kind="coin" icon="◈" iconClass="coin-ico" title="gold">
+                {priv.gold}
+              </StatBadge>
+              {showGems && (
+                <StatBadge kind="gem-pill" icon="◆" iconClass="gem-ico" title="gems (feeds the Tusker doubler)">
+                  {priv.gems}
+                </StatBadge>
+              )}
+              <button className="ctl-btn tierup" disabled={priv.tierUpCost < 0 || !canAfford(priv.tierUpCost)} onClick={intent({ type: 'tierUp' })}>
+                <span className="ctl-ico">▲</span> Tier <span className="tp-n">{priv.tier}</span>
+                {priv.tierUpCost >= 0 && <span className="ctl-cost">{priv.tierUpCost}</span>}
+              </button>
+            </div>
+            <div className="hero-actions">
+              <button className="ctl-btn refresh" disabled={!canAfford(priv.rerollCost)} onClick={intent({ type: 'roll' })}>
+                <span className="ctl-ico">⟳</span> Refresh<span className="ctl-cost">{priv.rerollCost}</span>
+              </button>
+              <button className="ctl-btn ready primary" disabled={!!myPub?.ready} onClick={intent({ type: 'readyUp' })}>
+                {myPub?.ready ? 'Ready ✓' : 'Ready'}
+              </button>
+            </div>
+          </div>
+
+          <div className="hand" onDragOver={(e) => dragRef.current?.from === 'shop' && e.preventDefault()} onDrop={onBenchDrop}>
+            <div className="hand-tag">Hand {handN}/{economy.benchCap}</div>
+            <div className="hand-fan">
+              {handN === 0 && <span className="dim hand-empty">buy units from the tavern</span>}
+              {priv.bench.map((u, i) => (
+                <div
+                  key={u.uid}
+                  style={fanVars(i, handN)}
+                  className={'bslot fan-card' + (draggingKey === u.uid ? ' dragging' : '')}
+                  draggable={!pending}
+                  onDragStart={startDrag({ from: 'bench', uid: u.uid }, u.uid)}
+                  onDragEnd={endDrag}
+                  onClick={clickBench(u)}
+                >
+                  <Card model={unitToModel(u)} className={pending && legal.has(u.uid) ? 'legal' : !pending && !boardFull ? 'clickable' : ''} />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 

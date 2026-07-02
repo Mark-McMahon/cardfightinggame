@@ -25,6 +25,21 @@
   --card-scale: 1.2;
   --card-w: calc(112px * var(--card-scale));
   --card-h: calc(140px * var(--card-scale));
+
+  /* ── tabletop game-feel (client presentation only; every MAGNITUDE the curved board / fanned hand /
+     tavern / hero dock use is single-sourced here, so the whole tabletop reshapes from one place —
+     the same discipline as --card-scale). Positional indices (--i/--off/--dist) are supplied per-card
+     by the scene; these tokens are what they're multiplied by. ── */
+  --felt: #23180d;                 /* board felt — warm, darker than the surround so it reads as a surface */
+  --felt-lip: #6b5226;             /* the felt's raised wooden lip */
+  --shelf: #2c1e12;                /* tavern shelf recess */
+  --table-shadow: 0 14px 20px -10px #000c, 0 3px 6px #0008;  /* a token standing on the felt */
+  --board-arc-step: 14px;          /* vertical rise per unit of distance-from-centre → the board's arc */
+  --hand-fan-step: 4.5deg;         /* rotation per signed-offset-from-centre → the hand's fan */
+  --hand-fan-lift: 9px;            /* vertical drop per distance-from-centre → the fan's droop */
+  --hand-overlap: 30px;            /* how much fanned hand cards overlap horizontally */
+  --orb: #c0402b;                  /* HP orb core (ember red) */
+  --orb-lo: #5e1a12;               /* HP orb rim */
 }
 * { box-sizing: border-box; }
 body {
@@ -229,30 +244,59 @@ input {
 /* the deaths counter crossing a payoff threshold = the "why" behind a swing → flares gold */
 .ctx-counter.fired { border-color: var(--gold); box-shadow: 0 0 14px #e8be46aa; background: #3a2a10; }
 
-/* the battlefield is the positioned frame the attacker↔defender / source→target links measure against */
-.battlefield { position: relative; display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 1200px; margin-top: 8px; }
+/* the battlefield is the positioned frame the attacker↔defender / source→target links measure against.
+   Reskinned (§10) as ONE shared felt arena — two armies on the same surface, split by a clash line —
+   rather than two separate bordered boxes. Purely presentational: the beat choreography, the measured
+   slot geometry, and the link overlay are unchanged. */
+.battlefield {
+  position: relative; display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 1240px; margin-top: 8px;
+  padding: 18px 20px; border-radius: 12px;
+  background:
+    radial-gradient(80% 55% at 50% 0%, #3a2712 0%, transparent 60%),
+    radial-gradient(80% 55% at 50% 100%, #3a2712 0%, transparent 60%),
+    linear-gradient(180deg, #241809 0%, #180f07 50%, #241809 100%);
+  border: 2px solid var(--felt-lip); box-shadow: inset 0 0 60px #0008, 0 12px 34px -14px #000c;
+}
 .link-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 6; overflow: visible; }
 .bl-side { display: flex; flex-direction: column; gap: 4px; }
-.bl-label { font-weight: 700; font-size: 13px; }
+/* army banner — the side's name reads as a small standard over its ranks */
+.bl-label {
+  font-family: var(--serif); font-weight: 800; font-size: 13px; letter-spacing: 0.4px; color: #e8cf9a;
+  align-self: flex-start; padding: 2px 12px; border-radius: 2px;
+  background: #0004; border: 1px solid #ffffff12;
+}
+/* each army sits directly on the shared felt — no box of its own */
 .bl-line {
-  display: flex; gap: calc(10px * var(--card-scale)); flex-wrap: nowrap; align-items: center; min-height: calc(146px * var(--card-scale));
-  padding: 10px; border-radius: 2px; background: #1f1710; border: 2px solid var(--line); box-shadow: inset 0 2px 6px #00000040;
+  display: flex; gap: calc(12px * var(--card-scale)); flex-wrap: nowrap; align-items: flex-end; min-height: calc(150px * var(--card-scale));
+  padding: 8px 6px; background: transparent; border: none;
   /* overflow must stay visible so the hover card-tip (reused from the shop) isn't clipped —
      `overflow-x: auto` would force `overflow-y` to auto and cut off the tooltip. Wide boards
      (summon-heavy combats) overflow the frame and scroll via the `.overlay` instead. */
   overflow: visible;
 }
 .bl-slot { position: relative; flex: 0 0 auto; }
+/* combat tokens cast the same ground shadow as the shop, so each army "stands on" the arena. The
+   shadow rides on .bl-slot (which never moves) while the card lunges above it via the .fx transform. */
+.bl-slot::after {
+  content: ''; position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%);
+  width: 74%; height: 12px; border-radius: 50%;
+  background: radial-gradient(50% 50% at 50% 50%, #000b 0%, transparent 72%); pointer-events: none; z-index: 0;
+}
 /* hover-to-inspect during combat: lift the hovered card above its neighbours so the same shop
    tooltip reads clearly even mid-beat (§16.6). */
 .bl-slot:hover { z-index: 30; }
 .bl-empty { padding: 0 8px; }
-.bl-divider { display: flex; align-items: center; justify-content: center; height: 2px; background: linear-gradient(90deg, transparent, var(--line), transparent); position: relative; margin: 2px 0; }
-.vs-badge { position: absolute; font-size: 16px; font-weight: 800; color: var(--dim); background: var(--bg); padding: 0 10px; }
+/* the clash line — a lit seam down the middle where the two armies meet, with the VS medallion on it */
+.bl-divider { display: flex; align-items: center; justify-content: center; height: 3px; position: relative; margin: 4px 0;
+  background: linear-gradient(90deg, transparent, #e0a82e00 4%, #e0a82e66 50%, #e0a82e00 96%, transparent);
+  box-shadow: 0 0 12px #e0a82e33; }
+.vs-badge { position: absolute; font-family: var(--serif); font-size: 15px; font-weight: 800; color: var(--accent);
+  background: radial-gradient(circle, #2a1c0d 0%, #1a1108 100%); border: 1px solid var(--felt-lip); border-radius: 50%;
+  width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px #0009; }
 
 /* focus system: the active participants light up, and during a STRIKE the rest of the board dims —
    the asymmetry (only the initiator is spotlit + lunges) is the clearest "who started it" signal. */
-.bl-slot .unit { transition: box-shadow 0.2s, border-color 0.2s, opacity 0.22s; }
+.bl-slot .unit { transition: box-shadow 0.2s, border-color 0.2s, opacity 0.22s; border-color: #6b5330; border-radius: 7px; background: linear-gradient(180deg, #34281a 0%, var(--panel2) 72%); box-shadow: var(--bevel), var(--table-shadow); }
 .is-attacker .unit { border-color: var(--accent); box-shadow: 0 0 18px var(--accent); z-index: 4; }
 .is-target .unit { border-color: #ff5a52; box-shadow: 0 0 16px #ff5a52; }
 .is-source .unit { border-color: var(--gold); box-shadow: 0 0 12px #e8be4688; }
@@ -376,14 +420,15 @@ input {
 .shop-wait .sw-secs { font-family: var(--serif); font-size: 28px; font-weight: 800; color: var(--accent); min-width: 1.4ch; text-align: right; }
 .shop-wait .sw-unit { font-size: 14px; color: var(--dim); }
 .shop-wait .sw-opening { font-size: 16px; font-weight: 700; color: var(--accent); }
-/* frozen shop = non-interactive. Dim the CONTENT (cards, econ controls) rather than the whole zone,
-   so zone headers stay bright and the shop's "🔒 locked" label reads even while everything under it
-   is greyed out — the cue lands where the eye/pointer is, not only in the top banner (§10). */
-.match-main.shop-frozen .econ-bar,
-.match-main.shop-frozen .zone { pointer-events: none; }
-.match-main.shop-frozen .econ-bar > *,
-.match-main.shop-frozen .zone .units-row { opacity: 0.5; filter: grayscale(0.35); }
-.match-main.shop-frozen .zone.shop-zone h4 { color: var(--accent); }
+/* frozen shop = non-interactive. Dim the CONTENT (cards, dock controls) rather than the whole table,
+   so headers stay bright and the tavern's "🔒 locked" label reads even while everything under it is
+   greyed out — the cue lands where the eye/pointer is, not only in the top banner (§10). */
+.match-main.shop-frozen .table { pointer-events: none; }
+.match-main.shop-frozen .shelf,
+.match-main.shop-frozen .board-row,
+.match-main.shop-frozen .hand-fan,
+.match-main.shop-frozen .hero { opacity: 0.5; filter: grayscale(0.35); }
+.match-main.shop-frozen .tavern-title { color: var(--accent); }
 
 /* shop drag-and-drop (§16.6, decision #28) */
 .dragwrap { cursor: grab; transition: opacity 0.12s; position: relative; }
@@ -395,7 +440,6 @@ input {
    transform-induced stacking context (and tooltip) paints above siblings */
 .discover-card .unit:hover { z-index: 10; }
 .dragwrap.dragging, .bslot.dragging { opacity: 0.35; }
-.board-row.drop-over { background: #2c2011; }
 /* magnetic merge target (decision #54): drag a magnetic bench unit onto a friendly Construct */
 .bslot.merge-over { outline: 2px dashed var(--good, #7fe0ff); outline-offset: 2px; border-radius: 8px; }
 .drop-marker {
@@ -416,9 +460,15 @@ input {
   position: absolute; left: calc(100% + 10px); top: -2px;
   width: 220px; background: var(--panel); border: 1px solid var(--accent); border-radius: 2px;
   padding: 10px; z-index: 60; text-align: left; pointer-events: none; font-size: 12px;
-  opacity: 0; visibility: hidden; transition: opacity 0.12s; box-shadow: 3px 3px 0 #000a;
+  /* display:none (not visibility:hidden) so a hidden tooltip reserves NO layout — otherwise the
+     right-opening tip of a right-edge card silently widens the page (a persistent horizontal
+     scrollbar even with nothing hovered). It fades in on hover instead. */
+  display: none; box-shadow: 3px 3px 0 #000a;
 }
-.unit:hover .card-tip { opacity: 1; visibility: visible; }
+.unit:hover .card-tip { display: block; animation: tipIn 0.12s ease both; }
+@keyframes tipIn { from { opacity: 0; } to { opacity: 1; } }
+/* the fanned hand lives bottom-right, so its tooltip opens to the LEFT — never off the right edge */
+.hand .card-tip { left: auto; right: calc(100% + 10px); }
 .card-tip .tip-name { font-weight: 800; font-size: 13px; }
 .card-tip .tip-sub { color: var(--dim); margin-bottom: 4px; }
 .card-tip .tip-sub .buffed { color: #7ee081; font-weight: 700; }
@@ -443,3 +493,173 @@ input {
 .ability-btn:hover:not(:disabled) { border-color: #7fe0c0; color: #b6f0dd; }
 .ability-btn:disabled { opacity: 0.55; cursor: default; }
 .ability-btn.used { color: var(--dim); border-color: var(--line); background: var(--panel2); }
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   TABLETOP GAME-FEEL (§10) — the shop phase reads as a real auto-battler board, not stacked panels:
+   a tavern shelf you drag from, a curved board felt, and a hero dock + fanned hand. Client-only
+   presentation; every intent + the whole combat engine are untouched. All magnitudes are the :root
+   tokens above (invariant #4 spirit: no magic numbers strewn through logic OR styles).
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* the whole body column is one continuous felt table with a carved wooden lip — no inner panel boxes */
+.match-main.tabletop > .table {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 16px 18px 18px; border-radius: 10px;
+  border: 2px solid var(--felt-lip);
+  background:
+    radial-gradient(120% 90% at 50% 8%, #34240f 0%, var(--felt) 55%, #180f07 100%);
+  box-shadow: inset 0 2px 0 #ffffff10, inset 0 0 60px #0007, 0 10px 30px -12px #000a;
+  min-height: calc(100vh - 40px);
+}
+
+/* ── TAVERN SHELF — the shop counter; drag a minion DOWN to buy. Doubles as the sell target. ── */
+.tavern {
+  border-radius: 8px; padding: 8px 12px 12px;
+  background: linear-gradient(180deg, #3a2917 0%, var(--shelf) 100%);
+  border: 1px solid #573f22; border-top: 2px solid #6d5030;
+  box-shadow: inset 0 1px 0 #ffffff14, inset 0 -10px 20px -12px #000, 0 4px 10px -6px #000a;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+.tavern-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.tavern-title { font-family: var(--serif); font-size: 15px; font-weight: 800; letter-spacing: 0.4px; color: #e8cf9a; }
+/* the shelf is a shallow lit recess the minions "sit in" */
+.shelf {
+  display: flex; gap: calc(10px * var(--card-scale)); flex-wrap: wrap; align-items: flex-end;
+  min-height: var(--card-h); padding: 10px 8px 6px;
+  border-radius: 6px; background: linear-gradient(180deg, #1c1309, #241811);
+  box-shadow: inset 0 3px 8px #000a, inset 0 -1px 0 #ffffff0a;
+}
+.shelf-empty, .board-empty, .hand-empty { align-self: center; }
+/* minions on the shelf lift + cast a shadow on hover, so buying feels physical (drag down to board) */
+.shelf .dragwrap { transition: transform 0.12s ease, filter 0.12s ease; }
+.shelf .dragwrap .unit { box-shadow: var(--bevel), var(--table-shadow); }
+.shelf .dragwrap:hover { transform: translateY(-6px); z-index: 20; }
+.shelf .dragwrap:hover .unit { box-shadow: var(--bevel), 0 18px 26px -10px #000e; }
+/* sell arming: the tavern turns into a "drop to sell" target when a board/bench unit is picked up */
+.tavern.sell-armed { border-color: var(--bad); background: linear-gradient(180deg, #3a2226, #2a1618); }
+.tavern.sell-armed .tavern-title { color: #ff9b9b; }
+.tavern.sell-over { box-shadow: inset 0 0 0 2px var(--bad), 0 0 20px var(--bad); }
+
+/* ── BOARD FELT — the focal surface. Units stand on a shallow arc and cast ground shadows. ── */
+.board-felt {
+  position: relative; flex: 1 1 auto; min-height: calc(210px * var(--card-scale));
+  border-radius: 8px; padding: 26px 16px 22px;
+  display: flex; align-items: flex-end; justify-content: center;
+  background:
+    radial-gradient(70% 60% at 50% 100%, #4a3616 0%, transparent 62%),
+    radial-gradient(120% 120% at 50% 0%, #2a1c0d 0%, #1d1409 100%);
+  border: 1px solid #5a4322;
+  box-shadow: inset 0 2px 10px #000a, inset 0 0 0 1px #ffffff08;
+}
+.board-tag {
+  position: absolute; top: 8px; left: 12px; font-size: 11px; letter-spacing: 1px;
+  text-transform: uppercase; color: var(--accent); opacity: 0.7; font-weight: 700;
+}
+.board-empty { color: var(--dim); align-self: center; }
+/* the arc: each slot is lifted by (distance-from-centre × --board-arc-step) so the row bows like the
+   far edge of a round table — centre highest, wings lower. Purely visual; drop-slot math uses live
+   rects (the vertical offset doesn't move X). align-items:flex-end keeps the bases on a shared ground. */
+.board-row {
+  display: flex; gap: calc(14px * var(--card-scale)); flex-wrap: nowrap; align-items: flex-end;
+  justify-content: center; min-height: var(--card-h); padding-top: calc(var(--board-arc-step) * 3.5);
+}
+/* the whole felt is the drop surface, so the "armed" highlight lives on it (not the inner card row) */
+.board-felt.drop-over { filter: brightness(1.08); box-shadow: inset 0 0 0 2px var(--accent), inset 0 2px 10px #000a; }
+.arc-slot {
+  position: relative;
+  transform: translateY(calc(var(--board-arc-step) * var(--dist, 0) * -1));
+  transition: transform 0.18s ease;
+}
+/* an elliptical ground shadow anchors each token to the felt so it "stands on" the surface */
+.arc-slot::after, .shelf .dragwrap::after, .fan-card::after {
+  content: ''; position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%);
+  width: 72%; height: 12px; border-radius: 50%;
+  background: radial-gradient(50% 50% at 50% 50%, #000a 0%, transparent 72%);
+  pointer-events: none; z-index: 0; transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.arc-slot .unit { box-shadow: var(--bevel), var(--table-shadow); }
+.arc-slot:hover { transform: translateY(calc(var(--board-arc-step) * var(--dist, 0) * -1 - 8px)); z-index: 20; }
+.arc-slot:hover::after { opacity: 0.6; transform: translateX(-50%) scale(1.08); }
+
+/* on the felt, the card token warms up + rounds slightly so it reads as a standee, not a UI box */
+.shelf .unit, .board-row .unit, .hand-fan .unit {
+  border-color: #6b5330; border-radius: 7px;
+  background: linear-gradient(180deg, #34281a 0%, var(--panel2) 72%);
+}
+
+/* ── DOCK — hero zone (left) + fanned hand (right) ── */
+.dock { display: flex; align-items: flex-end; gap: 18px; }
+
+/* HERO ZONE — portrait medallion + HP orb + coins + tier/upgrade + Refresh + Ready */
+.hero {
+  display: grid; grid-template-columns: auto auto 1fr; grid-template-rows: auto auto; gap: 8px 12px;
+  align-items: center; align-content: center;
+  padding: 12px 16px; border-radius: 10px; flex: 0 0 auto; min-width: 330px;
+  background: linear-gradient(180deg, #2c2013, #1f1710);
+  border: 1px solid #574121;
+  box-shadow: var(--plaque), 0 6px 16px -8px #000a;
+}
+.hero-crest {
+  grid-row: 1 / span 2; width: 58px; height: 58px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(70% 70% at 35% 30%, hsl(var(--crest-hue,40) 55% 55%), hsl(var(--crest-hue,40) 45% 30%));
+  border: 2px solid var(--accent);
+  box-shadow: inset 0 2px 4px #ffffff40, inset 0 -4px 8px #0007, 0 2px 6px #0009;
+}
+.hero-initial { font-family: var(--serif); font-size: 26px; font-weight: 800; color: #fff; text-shadow: 0 1px 3px #000a; }
+/* HP orb — a glossy ember sphere; the iconic "hero health" read */
+.hp-orb {
+  grid-row: 1 / span 2; width: 56px; height: 56px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; position: relative;
+  background: radial-gradient(60% 60% at 38% 30%, #ff8a6a 0%, var(--orb) 46%, var(--orb-lo) 100%);
+  box-shadow: inset 0 3px 6px #ffffff55, inset 0 -6px 10px #0008, 0 3px 8px #0009, 0 0 14px #c0402b55;
+}
+.hp-orb::after { content: ''; position: absolute; top: 8px; left: 12px; width: 16px; height: 10px; border-radius: 50%; background: #ffffffaa; filter: blur(2px); }
+.hp-val { font-family: var(--serif); font-weight: 800; font-size: 22px; color: #fff; text-shadow: 0 1px 3px #000c; z-index: 1; font-variant-numeric: tabular-nums; }
+.hero-stats { grid-column: 3; grid-row: 1; display: flex; align-items: center; gap: 8px; }
+.hero-actions { grid-column: 3; grid-row: 2; display: flex; align-items: center; gap: 8px; }
+.hero .ctl-btn.tierup .tp-n { color: var(--accent); font-weight: 800; }
+.hero .ctl-btn.refresh { min-width: 104px; }
+/* Ready is the big glowing commit button */
+.hero .ctl-btn.ready {
+  padding: 10px 26px; font-size: 15px; font-weight: 800; letter-spacing: 0.3px;
+  box-shadow: var(--bevel), 0 0 16px #e0a82e66; animation: readyPulse 2.4s ease-in-out infinite;
+}
+.hero .ctl-btn.ready:disabled { animation: none; box-shadow: var(--bevel); }
+@keyframes readyPulse { 0%,100% { box-shadow: var(--bevel), 0 0 12px #e0a82e55; } 50% { box-shadow: var(--bevel), 0 0 22px #e0a82eaa; } }
+
+/* FANNED HAND — bench cards overlap in a shallow arc, tilting out from centre; hover straightens +
+   lifts the card for a clean read. Drag/drop + click-to-play intents are unchanged. */
+.hand { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.hand-tag { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); font-weight: 700; align-self: flex-start; margin-left: 6px; }
+.hand-fan {
+  display: flex; justify-content: center; align-items: flex-end; min-height: var(--card-h);
+  padding-top: calc(var(--hand-fan-lift) * 3);
+}
+.hand-empty { color: var(--dim); align-self: center; }
+.fan-card {
+  transform-origin: bottom center;
+  transform: rotate(calc(var(--hand-fan-step) * var(--off, 0))) translateY(calc(var(--hand-fan-lift) * var(--dist, 0)));
+  transition: transform 0.16s ease, margin 0.16s ease;
+}
+.fan-card:not(:first-child) { margin-left: calc(var(--hand-overlap) * -1); }
+.fan-card .unit { box-shadow: var(--bevel), var(--table-shadow); }
+/* hover: straighten, rise, and split the neighbours apart so the hovered card reads clean */
+.hand-fan:hover .fan-card { margin-left: calc(var(--hand-overlap) * -0.4); }
+.fan-card:hover { transform: rotate(0deg) translateY(-18px) scale(1.04); z-index: 30; }
+.fan-card.dragging { z-index: 40; }
+
+/* ── responsive: the whole tabletop keys off --card-scale, so narrowing it shrinks the board / hand /
+   tavern uniformly and a full 7-wide board still fits without wrapping or a horizontal scrollbar. Below
+   the rail-collapse breakpoint the table stays a single column and the hero dock wraps above the hand. ── */
+@media (max-width: 1340px) { :root { --card-scale: 1.05; } }
+@media (max-width: 1120px) { :root { --card-scale: 0.92; } }
+@media (max-width: 1040px) {
+  .dock { flex-wrap: wrap; }
+  .hero { min-width: 0; width: 100%; }
+}
+@media (max-width: 900px) { :root { --card-scale: 0.82; } }
+@media (max-width: 860px) {
+  .match-main.tabletop > .table { min-height: 0; }
+}
