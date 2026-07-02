@@ -116,7 +116,9 @@ build from functional mechanics only; original names/text/art throughout.
     Echo Choir (`battlecryTriggerMultiplier`), Pale Lich (`undeadDamageAmp`). **Pale Lich
     converts to a DEATHS breakpoint** ("at 3+ Revenant deaths this combat, Revenants deal
     2× — capped"). **Echo Choir's doubled battlecry triggers must count toward battlecry
-    breakpoints** — that second-order interaction must be *visible to the sim*.
+    breakpoints** — that second-order interaction must be *visible to the sim*. *(This last
+    clause was later SUPERSEDED by #50 (2026-07-02): the doubler amplifies OUTPUT and an
+    echoed play counts as exactly one toward the gate; the sim-visibility requirement stands.)*
     Grovecaller + Grovelord (6 tokens/turn) is the **#1 single-axis margin target**.
 26. **Combat readability — animated single battle line, highlights only.** One clean
     left→right line per side (**no wrap**; leftmost = next-to-act and first-targeted),
@@ -560,8 +562,13 @@ build from functional mechanics only; original names/text/art throughout.
     changes the pinned §9.7 shop reducer; goldens/tests updated (EV-TCH-01..04). Motive: guarantee a
     developed board always has access to an ANSWER (poison / stat-neutralizer), so scaling lines stay
     context-sensitive (the §16 floor) even under bad rolls.
-50. **Echo Choir counting rebalance — amplify OUTPUT, not the gate COUNT (2026-07-02; Phase 4; refines
-    #—/EV-AUR-05).** Previously a played battlecry incremented `battlecriesThisTurn` by the Echo Choir
+50. **Echo Choir counting rebalance — amplify OUTPUT, not the gate COUNT (2026-07-02; Phase 4;
+    SUPERSEDES the Echo Choir clause of #25).** Decision #25 required "Echo Choir's doubled battlecry
+    triggers must count toward battlecry breakpoints." This decision **explicitly reverses that clause**:
+    the doubler is now an OUTPUT amplifier, not a battlecry-count inflator. (#25's cap + non-stacking +
+    the requirement that the interaction stay sim-visible all still hold — the interaction remains
+    sim-visible, just as a ×output rather than a ×count.) Pinning golden: EV-AUR-05.
+    Previously a played battlecry incremented `battlecriesThisTurn` by the Echo Choir
     MULTIPLIER up front, so one play could reach a ≥2 gate from the echoed copy alone (a double-dip:
     Chorus Tide echoed at 0 prior battlecries fired its own ≥2 payoff). Now a played battlecry counts as
     **exactly one** toward `battlecriesThisTurn`, regardless of the doubler. The doubler STILL amplifies

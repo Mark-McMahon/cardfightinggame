@@ -975,7 +975,7 @@ numbered items below are kept as the **historical record** of the divergences fo
 2026-07-01 audit. **Status (2026-07-01): items 1–3, 5 and 6 are implemented and green**
 (items 1–3/6 in `combat.ts`, pinned by `EV-DTH-08/09a/09b/10` in
 `shared/engine/death.test.ts` and `EV-INV-CFG` in `shared/engine/invariants.test.ts`;
-item 5 by the §7.5 writeback fold, pinned by `EV-WBK-01..09`); item 4 is a decided stance,
+item 5 by the §7.5 writeback fold, pinned by `EV-WBK-01..10`); item 4 is a decided stance,
 not a code item. The "*pre-fix code*" notes describe the audited code, not today's:
 
 1. **Deaths are simultaneous (D1).** Collect the whole batch, register it, then resolve
@@ -1015,7 +1015,7 @@ One honest residue on item 6: `combat.ts` does not literally branch on
 `simultaneousDeaths`/`deathrattleOrder`; behavior is hardcoded to their single legal values,
 which `EV-INV-CFG` explicitly accepts ("implemented as behavior rather than necessarily
 referenced by name"). The `EV-GLD-*` determinism goldens were regenerated from the corrected
-engine, per D4. Item 5 (writeback) is closed by decision #38 — pinned by `EV-WBK-01..09`
+engine, per D4. Item 5 (writeback) is closed by decision #38 — pinned by `EV-WBK-01..10`
 (`shared/engine/combatWriteback.test.ts`) and golden `EV-GLD-09`; §15 risk #3 is resolved.
 
 ---
@@ -1493,9 +1493,11 @@ ships. Validate content/numbers (config + sim) before animating cards.
    RNG-draw contract (§6.8, reproducibility note).
 3. **Writeback gap (§7.6 #5) — RESOLVED (decision #38, 2026-07-01).** Combat-fired
    `permanent:true` buffs now fold onto surviving persistent instances after combat (§7.5,
-   `shared/engine/combatWriteback.ts`; pinned by `EV-WBK-01..09` + `EV-GLD-09`). Residual
-   watch item: no shipped card uses the seam yet (all combat buffs are explicit
-   `permanent:false`) — when later phases add persistent scalers, they must pass the §11.3
+   `shared/engine/combatWriteback.ts`; pinned by `EV-WBK-01..10` + `EV-GLD-09`/`EV-GLD-12`).
+   The seam is now USED in shipped content: Gravemonarch (Phase 3, #46) is the sole
+   `permanent:true` combat consumer — its end-of-combat contested-condition double folds a
+   `permanent` `multiplyStats` (writeback-multiply extension, `EV-WBK-10`). Every other
+   combat buff remains explicit `permanent:false`. Persistent scalers must pass the §11.3
    sim gate like any scaling line.
 4. **Numbers need continuous tuning.** Gold curve, tier costs, pool counts, breakpoint
    thresholds are simulator-set starting points; gate content on §11.3 sim health.
