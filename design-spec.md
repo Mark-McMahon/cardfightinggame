@@ -1182,10 +1182,29 @@ regeneration must preserve:
 
 ---
 
-## 10. Client & game-feel (decisions #21, #26–28, #30)
+## 10. Client & game-feel (decisions #21, #26–28, #30, #71)
 
 React + Vite, original iconographic art, no asset files. See `WEB-FRAMEWORK.md` for the
 front-end architecture.
+
+**Art direction — Cozy Tavern, one continuous table (decision #71).** The committed direction is a
+**warm, painterly, candlelit tavern**: wood, brass, parchment, ember. The load-bearing rule is
+**cohesion — the whole game reads as a single lit wooden tabletop, not a stack of skinned boxes.** The
+shop, board, bench, hero, standings, and combat are all **areas of the same table**, never floating
+windows; regions are separated by **light, elevation, material, and negative space — never a `border:Npx
+solid` outline or a 1px hairline** — every raised element casts the same warm drop shadow from the same
+overhead candle (one depth ladder, one light direction) and continuous wood grain runs under the whole
+surface. Brass is the connective metal (frames, rails, coins), parchment the card body, wood the ground.
+The theme is a **single-sourced `styles.css` `:root`** kept as a **two-part token system**: the existing
+SEMANTIC names (`--bg`/`--panel`/`--accent`/…) are retained (so nothing breaks) and repaletted warm,
+alongside a richer **Cozy-Tavern token set** (`--brass*`, `--card-face`, `--ember`, `--attack`/`--health`,
+the warm `--sh-*`/`--recess`/`--groove` depth ladder, `--r-*`/`--s*`/`--ease-*`/`--dur-*`, and the three
+font tokens) that components migrate onto as each is restyled — **no second token file, no hardcoded
+value** (invariant 4). Type is three loaded web fonts (Google Fonts in `index.html`, reversing the earlier
+"system serifs only" default): **Cinzel** engraved display (`--font-display`, which `--serif` now points
+at), **Crimson Pro** card/body serif (`--font-name`), **Inter** tabular numerals (`--font-num`). This
+supersedes the #67 "Dusk Battlefield" direction while keeping its combat VS command bar and its
+atmosphere-only (never `transform: scale`) enemy-depth constraint.
 
 **Card anatomy (procedural, clean-room).** The face leads with a **tribe-themed procedural
 SVG avatar** — a per-tribe face system with a unique per-card recipe (`client/src/
@@ -1199,14 +1218,33 @@ game** block, since the face chip alone doesn't say which effects were granted v
 full ability text, and base-vs-buffed stats. Triggers (battlecry/deathrattle) stay text-only
 (no face icon): they read in the ability text, not as another death-adjacent glyph.
 
+**Cozy-Tavern card atom (decision #71).** The card `.unit` is a **parchment face set into a rim-lit
+double-brass frame**: an engraved serif name (`--font-name`), the procedural portrait as a framed window
+(its background carries a warm candlelight wash so every art window sits in the tavern while keeping its
+tribe hue), a small minted brass tier coin, and the stats as **two minted coins** — a burnt-orange
+**Attack** coin bottom-left, a blood-red **Health** coin bottom-right (tabular `--font-num`). A raised
+stat wears a green ring rather than recolouring, so a buff never masquerades as base. **Golden** triples
+reskin the frame legendary-gold with a slow ember loop; **tokens** wear a subtler iron frame. The frame
+is a **local `--frame` token**, so golden/token redefine it and every combat-focus glow (attacker/target/
+source, buff/gain) ADDS to the brass instead of replacing it. Critically it is **one primitive rendered
+identically in the shop, on the board, in the catalog, AND in combat** — the old cold `.bl-slot .unit`
+and per-zone card reskins are gone — so a card is visibly the same object wherever it appears (the core
+cohesion guarantee, above).
+
 **Shop scene — a tabletop, not stacked panels (game-feel).** The shop phase renders as one
-continuous **table** (`client/src/scenes/Shop.tsx` + `styles.css`) — a **dusk-toned war-camp
-surface** in the shared Dusk Battlefield palette (the "Battlefield" reskin below), not a column of
-bordered `SHOP`/`BOARD`/`BENCH` zones: a **tavern shelf** across the top you drag a minion *down*
+continuous **table** (`client/src/scenes/Shop.tsx` + `styles.css`) — **one warm wooden surface** with a
+brass lip and continuous wood grain, lit from the overhead candle (the shared Cozy-Tavern palette,
+decision #71 above), not a column of bordered `SHOP`/`BOARD`/`BENCH` zones: a **tavern shelf** (a recess
+carved into the counter) across the top you drag a minion *down*
 from (it doubles as the sell target), the **board as the focal felt** in the middle, and a **hero
-dock + fanned hand** along the bottom. The board is laid on a shallow **arc** (each slot lifted by
-its distance from the row centre) and every token casts a ground shadow so units "stand on" the
-surface; the **hand** overlaps its cards in a rotated **fan** that straightens and lifts on hover.
+dock + fanned hand** along the bottom. The board sits as **one level row** (the arc token
+`--board-arc-step` is retained but set to `0`, so a flat line reads cleaner than the old bow; raise
+it to re-arc) and every token casts a ground shadow so units "stand on" the surface; the **hand**
+overlaps its cards in a rotated **fan** that straightens and lifts on hover. While a shop-phase
+effect awaits a target (battlecry / `chosenAlly`, §6.5), the pickable units **pulse green** and every
+un-pickable card (non-legal board/bench units and the whole shop shelf) fades, so the legal choices
+are unmistakable — the highlight is an `@keyframes` animation specifically so it beats the per-zone
+token box-shadows in the cascade.
 The tavern shelf's **control bar** across the top is the econ deck — sited nearest the shop you spend
 into: the **wallet** (a coin count and the gem pill, the latter shown only when a consumer is owned,
 decision #27/#39) reads beside the shop title, and the shop/commit actions cluster on the right —
@@ -1237,12 +1275,12 @@ board slot / reordering still needs drag (mouse); the sheet covers the buy/play/
 impossible on touch. The tapped card carries an `.inspecting` selection ring; a tap on bare felt or the
 sheet's ✕ dismisses it.
 
-**Battlefield — the dusk arena (§10 reskin).** The combat overlay renders as a **battlefield at
-dusk**: a full twilight sky (deep-indigo zenith grading down through a violet band to a burning
-**ember horizon**), a distant ridge silhouette, and an earthen field with drifting ambient embers —
-a complete visual departure from the between-rounds shop, though **both reskin off the one "Dusk
-Battlefield" token set** (the single-sourced `styles.css` `:root`), so the whole app reads as a
-single world. Both armies share the one
+**Combat — the same table, pushed in (§10 reskin, decision #71).** The combat overlay is **not a cut
+to another screen**: the shop furniture recedes as the candles lower (a warm deepening vignette, never a
+cold scrim), and the fight resolves on a surface that is visibly **the same wooden table** — a warm
+candle pool overhead, continuous wood grain, a brass lip — with the camera pushed in. It reskins off the
+**same single-sourced Cozy-Tavern `:root`** as the shop, so the whole app reads as one candlelit world,
+with drifting ambient embers rising off the table. Both armies share the one
 field, split by a lit **clash seam** with a small **⚔ marker** on it (the player-vs-player identity
 now lives in the command bar, below, not on the seam). One clean **left→right battle line per side,
 no wrapping**; **leftmost = next-to-act and first-targeted** (adjacency matters for cleave +
@@ -1433,9 +1471,9 @@ entirely — the client would jump straight to the results screen. The continuin
 `beginShop` from the same callback.
 
 **Results — the winner's victory lap (`client/src/scenes/Results.tsx`).** Above the final placements,
-the *winner* sees **their own winning board** — a static, arc-laid row of the roster that took the
-match, rendered with the same `Card` token + `arcVars` arc as the shop board (single-sourced from
-`components.tsx`). It reads the winner's `privateState.board`, which persists in the store at
+the *winner* sees **their own winning board** — a static, level row of the roster that took the
+match, rendered with the same `Card` token + `arcVars` slot vars as the shop board (single-sourced
+from `components.tsx`, so it flattens with the board off the same `--board-arc-step` token). It reads the winner's `privateState.board`, which persists in the store at
 `finished` and already carries combat's permanent buffs folded in (§7.5) — so no server change and no
 new message. Two-channel privacy (invariant #3) means a client only ever holds its **own** board, so
 this is the winner viewing their winning roster, not losers viewing the winner's board; showing the

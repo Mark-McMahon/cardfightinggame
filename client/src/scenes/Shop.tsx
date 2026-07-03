@@ -249,7 +249,7 @@ export function Shop() {
   const inspUid = (uid: string): boolean => showSheet && (sel?.zone === 'bench' || sel?.zone === 'board') && sel.uid === uid;
 
   return (
-    <div className={'match-main tabletop' + (shopLive ? '' : ' shop-frozen')}>
+    <div className={'match-main tabletop' + (shopLive ? '' : ' shop-frozen') + (pending ? ' targeting' : '')}>
       <Standings pub={pub} mySeat={conn.seat} opponent={opponent} />
 
       {/* Combat hold: the shop below is a frozen preview, not yet live. The grey-out alone reads as a

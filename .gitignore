@@ -10,3 +10,6 @@ test-results/
 .playwright-cli/
 .turbo/
 .claude/skills/playwright-cli/
+
+# UI iteration screenshots (visual pass, not source)
+ui-iterations/

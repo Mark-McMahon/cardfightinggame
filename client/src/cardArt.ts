@@ -667,8 +667,10 @@ export function hasCardRecipe(cardId: string): boolean {
   return Object.prototype.hasOwnProperty.call(RECIPES, cardId);
 }
 
-/** Radial-gradient background for the portrait box, themed to the tribe colour. */
+/** Radial-gradient background for the portrait box, themed to the tribe colour. A warm candlelight
+ *  wash from the top sits every portrait window in the Cozy-Tavern world (design-spec §10) while the
+ *  tribe-darkened base keeps each tribe's hue readable at a glance. */
 export function portraitBg(tribe: TribeId): string {
   const col = TRIBES[tribe]?.colorHex ?? '#555';
-  return `radial-gradient(circle at 50% 34%, ${shade(col, -0.5)}, ${shade(col, -0.74)})`;
+  return `radial-gradient(72% 62% at 50% 20%, rgba(240,180,110,0.22), transparent 62%), radial-gradient(circle at 50% 36%, ${shade(col, -0.42)}, ${shade(col, -0.72)})`;
 }

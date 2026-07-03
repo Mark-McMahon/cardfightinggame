@@ -974,6 +974,48 @@ build from functional mechanics only; original names/text/art throughout.
     mouse flips back to the desktop paths live. Verified in an emulated mobile Playwright context: a tap
     opens the sheet and spends no gold / adds no unit; the Buy button then purchases.
 
+### Client visual redesign (Round 16) — "Cozy Tavern" reskin + one-continuous-table cohesion
+
+71. **The client art direction is reskinned "Dusk Battlefield" → "Cozy Tavern" and the whole UI is
+    rebuilt as ONE continuous candlelit table; three web fonts are now loaded (2026-07-02, spec §10;
+    client-only, no engine/intent change — `styles.css` `:root` + components, `index.html`, `cardArt.ts`
+    `portraitBg`).** The user asked for a committed art direction — a warm, painterly, candlelit tavern
+    (wood, brass, parchment, ember) — with **cohesion as the top priority: the whole game must read as a
+    single lit wooden tabletop, not a stack of skinned boxes.** This **supersedes the visual direction of
+    #67 (Dusk Battlefield)** but deliberately **keeps #67's combat VS command bar and its load-bearing
+    correctness constraint** (enemy depth stays atmosphere/haze only, **never** `transform: scale`, so the
+    measured `.bl-slot` strike geometry is intact). **What changed:** **(a)** the `styles.css` `:root` is
+    repaletted warm and EXTENDED into a **two-part token system** — the existing SEMANTIC names
+    (`--bg`/`--panel`/`--accent`/…) are kept (so every component keeps working) and retuned to tavern
+    values, alongside a richer **Cozy-Tavern token set** (`--brass*`/`--card-face`/`--ember`/`--attack`/
+    `--health`, the warm `--sh-*`/`--recess`/`--groove` depth ladder, `--r-*`/`--s*`/`--ease-*`/`--dur-*`,
+    `--font-display`/`--font-name`/`--font-num`) that components migrate onto as each is restyled — still
+    the **single** theme file (invariant 4: no second token file, no hardcoded values); **(b)** zones are
+    separated by **light / elevation / material / negative space — never a `border:Npx solid` outline or a
+    1px `.sdiv` hairline:** each region is a raised wooden surface (`--sh-*` + a lit top edge) or a recess
+    carved into the wood (`--recess`), on **one depth ladder lit from one overhead candle**, with
+    continuous wood grain running under the whole table; **(c)** the **card atom (`.unit`) is rebuilt as a
+    parchment face in a rim-lit double-brass frame** (engraved `--font-name` name, procedural portrait
+    window, a burnt-orange **Attack coin** + blood-red **Health coin**; golden = a legendary-gold frame +
+    slow ember loop, token = a subtler iron frame) and is **byte-identical in the shop, on the board, in
+    the catalog, AND in combat** — the old cold `.bl-slot .unit` and per-zone card reskins are removed so
+    one primitive has one look everywhere (the frame is a local `--frame` token so every combat-focus glow
+    ADDS to the brass instead of replacing it); **(d)** the **combat overlay is no longer a cold modal over
+    another screen** — the shop furniture recedes as the candles lower (a warm deepening vignette, never a
+    `#0d0a16` scrim) and the fight resolves on a surface visibly the **same wooden table pushed in** (warm
+    candle pool + continuous wood grain + brass lip), replacing the dusk sky / ember-horizon / mountain-
+    ridge landscape; **(e)** three **web fonts are loaded** (Google Fonts `<link>` in `index.html`:
+    **Cinzel** engraved display, **Crimson Pro** card/body serif, **Inter** tabular numerals),
+    **reversing the earlier "system serifs, no web-font dependency" spec-detail default** — the user
+    explicitly chose to load them for the tavern read; `--serif` is repointed at `--font-display` so
+    existing headings pick it up. **No engine / combat-outcome / intent change**; all e2e selectors
+    (`.board-felt`, `.tavern`, `.hero`, `.hand-fan`, `.unit`, the `Skip` button) and the pinned combat
+    semantics are preserved; `pnpm --filter @cardgame/client typecheck` clean, verified by driving the real
+    lobby → shop → combat and the `#cards` / `#replay-lab` workbenches (Playwright) — the card atom reads
+    identically in every zone and the fight sits on the same table. **In progress (not yet done):** the 3
+    signature juice moments (recruit settle, tavern-up candle flare, and strike polish beyond the existing
+    lunge/flash) are the remaining Cozy-Tavern work.
+
 ## Tribe name map (clean-room — never ship the reference names)
 | Reference (do NOT ship) | Original name | Identity |
 |---|---|---|
