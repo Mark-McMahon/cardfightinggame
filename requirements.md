@@ -1016,6 +1016,173 @@ build from functional mechanics only; original names/text/art throughout.
     signature juice moments (recruit settle, tavern-up candle flare, and strike polish beyond the existing
     lunge/flash) are the remaining Cozy-Tavern work.
 
+72. **Primordials gains a PERSISTENT ELEMENTS scaling axis: the T6 `elementsPlayed` capstone Elderstorm
+    (2026-07-10, Phase 7; spec §6.3/§6.6/§8/§16.4; content `primordials_elderstorm`).** Continuing the
+    #68 program — every tribe gets a *scalable, fun* comp reaching very high stat totals through **many
+    earned, capped steps**, balanced and counterable — rolled **weakest ceiling first**. Primordials had the
+    **weakest ceiling of the nine**: all its payoffs were shop-turn / go-wide one-shots (Stormcaller
+    `battlecries≥2`, Tempest/Worldspark `alliesAtStart`), with **no persistent axis** and no T6 that rewarded
+    a committed elements build, so a developed board topped out at modest per-body buffs + a board-wide cleave
+    grant. **Chosen:** a new **persistent per-player counter `elementsPlayed`** (incremented in `shop.playUnit`
+    per Primordial PLAYED — cloning the `forgemastersPlayed` increment site, NOT decremented on sale/death;
+    carried into combat on `CombatBoard.elementsPlayed` via the Ossuary Titan/lifetimeDeaths plumbing pattern,
+    invariant 1b) + a new `elementsPlayedAtLeast` LIVE condition. **Elderstorm (T6, 6/8 cleave)** is a TIERED
+    breakpoint on it (4/8/12 → +3/+3, +5/+5, +8/+8 to your *Primordials* this combat, escalating ≥1.5× — a
+    step, not a line), so every element channelled over the whole game pumps the WHOLE board. **Why a PLAY
+    counter, not a board read (contrast #68's `boardMerges`):** it is the natural "elements you've channelled"
+    fantasy and it varies the mechanism across tribes (Constructs = board-state merge count; Primordials =
+    lifetime play count) — reusing the `lifetimeDeaths` persistence plumbing, incrementing like
+    `forgemastersPlayed`. **No new fodder card** was needed (unlike #68's Rivetling/Coilcore): unlike magnetic,
+    the counter is fed by playing ANY Primordial, so the existing 8 units already feed it. **Why this respects
+    the binding constraints:** the high ceiling comes from MANY BOUGHT+PLAYED element steps, **never** by
+    lifting the ×2 `multiplyFactorCap` (the buff is additive) — payoff numbers live in
+    `config/breakpoints.ts.tiers`; the capstone buff is `permanent:false` (re-earned each combat; the §7.5
+    writeback must not fold it). **Counterability (validated, maxed 7-wide board = ~183 atk / ~168 hp
+    aggregate, 351 total, at `elementsPlayed`=27):** it folds to **poison that connects** (a shielded/taunt
+    poison wall → **0% win / 85% loss** in a 200-seed micro, stat-agnostic), while **fragile poison chaff**
+    (100% win for Primordials) and **tall-without-poison** (100% win) lose to the stacked wide line — the
+    Magnaforge profile (you need poison-that-connects, not just any poison). **Gate (binding, macro 200×8):**
+    single-axis margin **−4.2pp** (limit 8; mono-Primordials still does *worse* than multi-axis), reachability
+    **55.7%** (target 50), non-linearity **8.65×** (min 1.5), stale-combat **0.00%** (flag 1%); Elderstorm's
+    tier-1 (4) assembles for **21%** of its owners via the bots' real play policy (measured via
+    `ownedBreakpointMaxCounter` — the Magnaforge 16.7%/#68 precedent). **Tier retune (same PR):** an initial
+    8/16/24 was lowered to **4/8/12** after the macro sim showed bots reach a *max of 5* elements (they splash
+    Elderstorm as a strong 6/8 cleave body rather than committing to mono-Primordials, the weakest/least-picked
+    tribe) — so 8+ was unreachable in the sim. The top tiers (8/12) stay the aspirational ceiling a dedicated
+    build reaches (scratchpad-proven at 27 elements → 351 aggregate), the same top-tier macro under-coverage as
+    Magnaforge's ≥2-tower step (a documented characteristic, not a gate item — the aggregate reachability gate
+    passes at 55.7%). **No new OP/dead flag** on any Primordial. Pinned by new goldens EV-ELM-01..02 (the
+    persistent counter: tribe-gated increment, survives sale, golden counts once, rides into combat) +
+    EV-ELS-01..05 (Elderstorm's tiered board-wide payoff: silent below tier, one cumulative buff per crossed
+    tier, escalating, Primordials-only via `filterTribe`, this-combat-only, poison one-shots a buffed body).
+
+73. **Corsairs gains a GOLD spend-gated scaling lever: the T6 Prizemaster (2026-07-10, Phase 7; spec
+    §6.6a/§8; content `corsairs_prizemaster`; the activated-ability system gains a `currency` field).**
+    Continuing the #68 program (weakest ceilings first). Corsairs was the low-STAT-ceiling tribe: a
+    TEMPO/reborn+shields identity plus a gold ECONOMY (Vault Keeper raises the gold cap; Fence/Moneylender/
+    Bursar generate gold) that could only buy tempo — gold never SCALED a carry. **Chosen:** the FIRST
+    `currency:'gold'` spend-gated payoff (§6.6a's second legal class; the activated-ability system spent only
+    gems before this). **Prizemaster (T6, 5/7 reborn)** — once per turn, spend `engines.corsairs.prizemasterCost`
+    (3) GOLD to permanently give a chosen Corsair +5/+5 (a `chosenAlly filterTribe:'corsairs'` activated
+    buffStats). **Why deliberately DISTINCT from the Tuskers gem-doublers (variety, not an 8th tiered
+    breakpoint):** GOLD not gems; ADDITIVE +5/+5 not a ×2 multiply (so it folds to poison and is never a
+    `multiplyFactorCap` concern); a CHOSEN carry not self. **Why this respects the binding constraints:** each
+    +5/+5 is BOUGHT with gold you'd otherwise spend on tempo/tiering, one per turn (a real, capped step — the
+    ceiling scales with the gold ECONOMY: Vault Keeper's raised cap funds more activations), **never** by
+    lifting any multiplier cap; every number is a config knob (`prizemasterCost`/`prizemasterBuffAtk`/`Hp`).
+    **Engine plumbing:** `ActivatedSpec.currency?` + `ActivatedAbilityState.currency` (default 'gems'),
+    `activateAbility` spends the named wallet, the bot's `bestActivation` reads the matching wallet
+    (`priv.gold`) so it actually uses the lever (routed through the existing chosenAlly `target` policy), and
+    `Shop.tsx` shows a 🪙 gold cost. **Sim credit is the EXISTING spend-gated path** (no harness change): a used
+    ability with `hasSpendGated` is credited toward reachability. **Counterability (validated, a pumped Sea Queen
+    carry reaches 65/66 after 12 activations, ~130 golden — the low hundreds):** it folds to poison-that-connects
+    (a shielded/taunt poison wall → **100% loss** in a 200-seed micro, one-shots the carry regardless of size,
+    stat-agnostic — EV-CGL-07) and to removal/cleave; reborn/divine-shield only buys one extra life (the wall's
+    other poison bodies finish the return). A big NO-poison board loses 100% to the carry. **Gate (binding, macro 200×8):** single-axis margin **−4.2pp** (limit 8), reachability
+    **55.7%** (target 50), non-linearity **8.65×**, stale **0.00%**; Prizemaster is a top-5 unit by placement
+    when owned (avgP 1.00) and adds **no new OP/dead flag**. Pinned by new goldens EV-CGL-01..07 (gold not gems;
+    rejection mutates nothing; once-per-turn; `filterTribe`; the buff compounds across turns + rides into combat;
+    registry/lint green + `abilityStates` projects `currency:'gold'`; poison one-shots the pumped carry) and the
+    updated EV-ABL-09 shape golden.
+
+74. **Wildkin gains a SWARM↔DEATHS scaling capstone that REUSES the `lifetimeDeaths` counter: the T6 Thornqueen
+    (2026-07-10, Phase 7; spec §6.6/§8; content `wildkin_thornqueen`).** Continuing the #68 program (weakest
+    ceilings first) — Wildkin was the **weakest tribe** (macro avgP ~5.6): a wide board of modest tokens whose
+    only board payoff (Grovelord) is a flat, width-capped `countAllies` buff, with no way for the swarm's per-body
+    to scale high. **Chosen (variety + no plumbing bloat, per the audit):** instead of a fourth NEW persistent
+    counter, **REUSE the existing `lifetimeDeaths`** (Ossuary Titan's counter): combat deaths — including tokens —
+    feed it via `match.ts`, and a WIDE board that loses bodies every combat accrues it FAST, so it needs zero
+    engine/types/sim plumbing AND auto-accrues (fixing the reachability gap Elderstorm's build-gated play counter
+    hit). It extends Wildkin's existing avenge/DEATHS sub-theme (Pack Mother), NOT Revenants' identity (which uses
+    `revenantDeaths` + a contested double + damage amp, never a generic board-wide buff). **Thornqueen (T6, 6/7
+    reborn)** is a TIERED breakpoint on `lifetimeDeaths` (24/48/72 → +3/+3, +5/+5, +8/+8 board-wide to your
+    *Wildkin* this combat, escalating ≥1.5×; reborn so the queen returns to keep leading the brood and her death
+    feeds the counter). **Threshold choice (measured, not guessed):** owners reach lifetimeDeaths **min 43 / median
+    63 / max 97**, so an initial 8/16/24 was a flat always-on slab (100% of all tiers); raised to **24/48/72** so it
+    is a GENUINE earned ramp — tier-1 reliable at acquisition (100% of owners), tier-2 usual (95%), tier-3 the
+    aspirational late-game stretch (**33%**) as the dead pile up. **Why this respects the binding constraints:** the
+    ceiling comes from MANY EARNED STEPS (each fallen body is a bought+lost swarm member), **never** by lifting the
+    ×2 `multiplyFactorCap` (additive) — numbers live in `breakpoints.ts.tiers`; the buff is `permanent:false`
+    (re-earned each combat; the §7.5 writeback must not fold it). **Counterability (validated, maxed 7-wide brood =
+    ~150 atk / ~155 hp aggregate, 304 total, at lifetimeDeaths=72):** it folds to **poison-that-connects** (a
+    shielded/taunt poison wall → **100% loss** in a 200-seed micro, one-shots each pumped body, stat-agnostic),
+    while fragile poison chaff and cleave-that-can't-one-shot lose to the buffed width. **Gate (binding, macro
+    200×8):** single-axis margin **−5.0pp** (limit 8; Wildkin stays the *weakest* tribe even with the capstone),
+    reachability **55.0%** (target 50), non-linearity **8.65×**, stale **0.00%**, and **no new OP/dead flag** (the
+    pre-existing Thornpup/Brambleling token DEAD flags + the Pack Mother OP flag are unchanged from before). Pinned
+    by new goldens EV-SWD-01..05 (silent below tier; one cumulative buff per crossed tier; escalating; Wildkin-only
+    via `filterTribe`; this-combat-only; poison one-shots a buffed body).
+
+75. **Infernals gains a PERSISTENT few+tall SACRIFICE carry: the T6 Soulglutton (2026-07-10, Phase 7; spec
+    §6.6/§7.5/§8; content `infernals_soulglutton`; EV-WBK-08 lint allowlist).** Continuing the #68 program.
+    Infernals' pre-Phase-7 SACRIFICE payoffs were ALL this-combat (Bloodcaller/Abysslord death breakpoints,
+    Carrion Sovereign's per-death board buff) or one-time (Gorgemaw's single battlecry eat), so the "few+tall"
+    carry could never reach a very-high TOTAL — nothing PERSISTED across combats. **Chosen (variety + no
+    plumbing bloat):** the first **PERMANENT combat-fired death payoff** — reuse the existing `deaths` counter,
+    but flag the buff `permanent:true` so the §7.5 writeback folds it onto the SURVIVING instance and it carries
+    across combats. **Soulglutton (T6, 6/9 taunt)** — the FIRST time 3+ friendlies die in a combat (once),
+    permanently gain +6/+6. Each combat where you manufacture 3+ sacrifices (Infernals spend their own width via
+    Hollow Priest/Pyrewalker/Dreadmaw/Maw) adds one chunk, so the carry grows TALL over the whole game. **Why
+    DISTINCT from the other Phase-7 capstones:** this-combat board-wide tiered (Primordials/Wildkin) vs a
+    PERMANENT SELF carry (few+tall); and distinct from Gravemonarch's contested MULTIPLY (this is an additive
+    threshold, not a survive-a-near-wipe double). **Why this respects the binding constraints:** it is a
+    registered `deaths` breakpoint (bounded by the anti-linear lint); the ceiling comes from MANY EARNED STEPS
+    (each death is a spent body), **never** by lifting the ×2 `multiplyFactorCap` (additive); the EV-WBK-08 lint
+    (which guards against *accidental* combat-fired permanence) is updated with an explicit `intentionalPersistent`
+    allowlist for it (the regeneration-currency rule — semantics changed, so the pinning lint changed in the same
+    PR). **Counterability (validated, carry grows to 78/81 over 12 combats — unbounded with game length, the low
+    hundreds):** as a FEW+TALL single body it folds HARD to **poison** (a shielded/connecting touch → **100% loss**
+    in a 200-seed micro, one-shots the giant regardless of size, stat-agnostic); a wide board of MODEST bodies does
+    not out-race it, so poison (or a poison/burst-carrying wide board) is the real answer — consistent with the
+    design law that poison is the universal counter to stacking (decision #1). **Reachability:** Soulglutton fires
+    for **100%** of its owners (median 8 per-combat deaths — Infernals manufacture deaths by identity). **Gate
+    (binding, macro 200×8):** single-axis margin **−5.1pp** (limit 8; Infernals avgP unchanged at ~4.87 — the tribe
+    is not stronger overall, only its PEAK), reachability **55.6%** (target 50), stale **0.00%**, and **no new
+    OP/dead flag** (Soulglutton is neither). Pinned by new goldens EV-SAC-01..04 (silent below the gate; fires once
+    with a permanent folding delta; COMPOUNDS across combats via the real §7.5 writeback; poison one-shots the
+    grown carry) and the updated EV-WBK-08 allowlist.
+
+76. **Tuskers / Revenants / Reefkin — VERIFIED already-high-ceiling; no Phase-7 content change (2026-07-10;
+    verification only, no code change).** The #68 program's audit classed these three as *already* having a
+    scalable, high-ceiling, counterable comp, so the Phase-7 pass (weakest ceilings first) deliberately did NOT
+    add content to them — only confirmed (a) their ceilings are intact after the Primordials/Corsairs/Wildkin/
+    Infernals additions and (b) they still fold to poison (the stat-agnostic equalizer, decision #1). **Measured
+    ceilings (throwaway scratchpad + `pnpm sim:micro`, each vs a saturated poison-that-connects wall = 100% loss):**
+    **Tuskers** — the purchased ×2 gem-doubler (Ivorytusk) grows to **96/128** over 18 turns and compounds toward
+    THOUSANDS across a long game (spend-gated, #39); **Revenants** — Gravemonarch's contested ×2 (survive a
+    5+-death near-wipe, #46) reaches **1536/1792** over 8 near-wipes (2^N → thousands); **Reefkin** — Tidebinder's
+    per-battlecry permanent board buff, DOUBLED by Echo Choir (#50), reaches **109/110** after 14 battlecry plays
+    (hundreds, scaling with plays). All three are pinned by existing goldens (EV-ABL Tuskers doubler, Gravemonarch
+    contested-double, EV-AUR Echo Choir, Tidebinder) and remain balanced in the macro gate (single-axis margin
+    **−5.1pp**, reachability **55.6%**). **Why no touch:** adding scaling to an already-covered, macro-strong tribe
+    (Reefkin was the top out-of-band tribe pre-#59; Tuskers' Warhoard is OP-flagged) risks the single-axis margin
+    for zero coverage gain — the litmus is "does every tribe HAVE a high-ceiling comp," which these already pass.
+
+77. **Sirens gains a STAT-AGNOSTIC poison-COVERAGE capstone: the T6 Venomtide (2026-07-10, Phase 7; spec §6.5/
+    §8; content `sirens_venomtide`).** The final Phase-7 tribe, and the one deliberately kept DIFFERENT: per the
+    session's locked **decision #1**, Sirens' scaling is measured in poison **COVERAGE/REACH — more CONNECTING
+    poison bodies — NOT stat totals** (poison is the counter to everyone else's stacking, so Sirens must never
+    get big stats). Sirens' problem was reach: its poison gets blanked by divine shields and its fragile bodies
+    struggle to connect. **Chosen (reuses primitives, no plumbing):** at a WIDE board (`alliesAtStart≥6`),
+    Venomtide grants your Sirens **Cleave** this combat — and because a poison attacker's cleave carries POISON to
+    the splashed neighbours (combat `attackerPoison`), a wide poison board (innate poison + Abysscantor's
+    board-poison) poisons the WHOLE enemy row per swing, REACHING past the shielded front to the bodies beside it.
+    Coverage scales with the number of poison bodies (each becomes a 3-wide poison-cleaver), **never** with stats.
+    **Why same primitive as Worldspark but not a dupe:** identical mechanism (`alliesAtStart`→board `cleave`),
+    different PURPOSE — poison DELIVERY, not damage splash; this-combat only (a combat `grantKeyword` never
+    persists). **Counterability (validated, decision #1 counter UNCHANGED):** a maxed wide poison-cleave board (7
+    low-stat poison bodies) is measured in COVERAGE — it BEATS every stacking comp (**83% vs a Wildkin brood, 100%
+    vs an Infernals 120/120 carry, 100% vs a Corsairs 65/66 carry** — poison ignores their stats) yet FOLDS to the
+    **divine-SHIELD wall** (7× DS taunt → **0% win / 61% loss**: each shield blanks one poison instance, so the
+    opponent answers coverage by shielding MORE, not by out-stat-ing), plus the fragile low-stat Sirens are
+    out-tempo'd if walled. **Reachability:** thin in the macro (Sirens is the least-picked tribe at ~3.6%, and the
+    capstone needs a WIDE poison board — like Elderstorm's build-gated coverage; the aggregate reachability gate
+    still passes), but it fires for 100% of the owners who build wide, and the COVERAGE ceiling is scratchpad-proven.
+    **Gate (binding, macro 200×8):** single-axis margin **−6.0pp** (limit 8; Sirens mono stays weaker than
+    multi-axis), reachability **56.4%** (target 50), stale **0.00%**, and **no new OP/dead flag**. Pinned by new
+    goldens EV-CVG-01..04 (no cleave below the width gate; Sirens gain cleave at it; a poison-cleaver poisons the
+    SPLASHED neighbours = coverage; a divine shield blanks the poison instance = the unchanged counter).
+
 ## Tribe name map (clean-room — never ship the reference names)
 | Reference (do NOT ship) | Original name | Identity |
 |---|---|---|

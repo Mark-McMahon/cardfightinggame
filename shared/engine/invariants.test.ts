@@ -18,7 +18,8 @@ const LIVE = {
   // `gemsThisTurnAtLeast` stays LIVE as engine vocabulary (EV-CND-01/03) though #39 left it
   // with 0 card consumers (the doublers became purchased activations) — see §6.9.
   // Phase 6: `boardMergesAtLeast` promoted to LIVE (Magnaforge board-wide magnetic capstone, decision #68).
-  conditions: new Set(['countAllies', 'battlecriesThisTurnAtLeast', 'gemsThisTurnAtLeast', 'deathsThisCombatAtLeast', 'tokensSummonedThisTurnAtLeast', 'alliesAtMost', 'lifetimeDeathsAtLeast', 'boardMergesAtLeast']),
+  // Phase 7: `elementsPlayedAtLeast` promoted to LIVE (Elderstorm elements-played capstone, decision #72).
+  conditions: new Set(['countAllies', 'battlecriesThisTurnAtLeast', 'gemsThisTurnAtLeast', 'deathsThisCombatAtLeast', 'tokensSummonedThisTurnAtLeast', 'alliesAtMost', 'lifetimeDeathsAtLeast', 'boardMergesAtLeast', 'elementsPlayedAtLeast']),
   // Phase 4: `leftmost` scope + `attackBuff` modifier promoted to LIVE (Vanguard Pennant, §6.4).
   // Phase 5: `yourSentinels` (Forgemaster) + `yourEconomy` (gold cards) scopes; `statBuffOnEvent`
   // (Forgemaster) + `goldCapSet`/`sellRefundSet`/`goldNextTurnIfRich` (gold cards) modifiers → LIVE.

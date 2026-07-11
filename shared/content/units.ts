@@ -277,6 +277,33 @@ export const UNITS: UnitCard[] = [
       },
     ],
   },
+  {
+    // ⭐ Phase 7 SWARM↔DEATHS scaling capstone — Thornqueen (decision #74). Wildkin was the WEAKEST tribe: a
+    // wide board of modest tokens with only a flat, width-capped Grovelord buff — no way for the swarm's per-body
+    // to scale high. This turns the swarm's endless FALLEN into a whole-board payoff: a TIERED breakpoint on the
+    // PERSISTENT `lifetimeDeaths` counter (REUSED from Ossuary Titan — combat deaths incl. tokens feed it, so a
+    // wide board accrues it FAST → reachable). One cumulative board-wide buff to your WILDKIN per crossed tier at
+    // start of combat, THIS COMBAT ONLY (permanent:false). A step, not a line — mirrors Ossuary Titan/Magnaforge
+    // but board-wide over the swarm. Reborn so the queen returns to keep leading the brood (and her death feeds the
+    // counter). Numbers live in breakpoints.ts.tiers. Still folds to poison + cleave + width-removal.
+    id: 'wildkin_thornqueen',
+    name: 'Thornqueen',
+    tribe: 'wildkin',
+    tier: 6,
+    atk: 6,
+    hp: 7,
+    keywords: ['reborn'],
+    axis: ['swarm', 'deaths'],
+    text: `Reborn. Start of combat: for every fallen-swarm milestone this game (${bp('wildkin_thornqueen').tiers!.map((t) => t.threshold).join('/')} lifetime deaths), give your Wildkin an escalating +Atk/+Health this combat. SWARM capstone.`,
+    effects: bp('wildkin_thornqueen').tiers!.map(
+      (tier): Effect => ({
+        trigger: { type: 'startOfCombat' },
+        condition: { kind: 'lifetimeDeathsAtLeast', value: tier.threshold },
+        target: { selector: 'allAllies', filterTribe: 'wildkin' },
+        actions: [{ type: 'buffStats', atk: tier.atk, hp: tier.hp, permanent: false }],
+      }),
+    ),
+  },
 
   // ═══════════════════════════ REVENANTS — DEATHS ═════════════════════════════
   {
@@ -1059,6 +1086,31 @@ export const UNITS: UnitCard[] = [
       },
     ],
   },
+  {
+    // ⭐ Phase 7 SACRIFICE PERSISTENT ceiling — Soulglutton (decision #75). Infernals' pre-Phase-7 payoffs were ALL
+    // this-combat or one-time (Gorgemaw's single eat), so the "few+tall" carry could never reach a very-high TOTAL.
+    // This is the first PERMANENT death payoff: at 3+ friendly deaths this combat (once), the carry PERMANENTLY gains
+    // +6/+6 — permanent:true, so the §7.5 writeback folds it onto the SURVIVING instance and it carries across combats.
+    // Each combat where you manufacture 3+ sacrifices adds one chunk → the carry grows TALL over the whole game through
+    // MANY EARNED STEPS (each death is a spent body), never one multiply. Taunt so it is the front wall that tanks + survives
+    // to fold its buff; still folds HARD to poison (a touch kills the giant, stat-agnostic) and to a wide board.
+    id: 'infernals_soulglutton',
+    name: 'Soulglutton',
+    tribe: 'infernals',
+    tier: 6,
+    atk: 6,
+    hp: 9,
+    keywords: ['taunt'],
+    axis: ['sacrifice', 'deaths'],
+    text: `Taunt. The FIRST time ${bp('infernals_soulglutton').threshold}+ friendly minions die in a combat, permanently gain +${bp('infernals_soulglutton').atk}/+${bp('infernals_soulglutton').hp}.`,
+    effects: [
+      {
+        trigger: { type: 'afterFriendlyDeaths', threshold: bp('infernals_soulglutton').threshold, everyN: false },
+        target: { selector: 'self' },
+        actions: [{ type: 'buffStats', atk: bp('infernals_soulglutton').atk, hp: bp('infernals_soulglutton').hp, permanent: true }],
+      },
+    ],
+  },
 
   // ═══════════════════════════ CONSTRUCTS — ASSEMBLY (redeploy) ═════════════════
   // Graceful degradation (reference engine 24): bodies leave Scrap on death and the board
@@ -1785,6 +1837,32 @@ export const UNITS: UnitCard[] = [
       },
     ],
   },
+  {
+    // ⭐ Phase 7 ELEMENTS scaling capstone — Elderstorm (decision #72). The old Primordials ceiling was the
+    // WEAKEST of the nine: only shop-turn / go-wide one-shots, no PERSISTENT axis. This turns every element
+    // CHANNELLED over the game into a WHOLE-BOARD payoff: a TIERED breakpoint on the persistent `elementsPlayed`
+    // counter (rides in on the CombatBoard scalar; incremented in shop.playUnit per Primordial played). One
+    // cumulative board-wide buff to your Primordials per crossed tier at start of combat, THIS COMBAT ONLY
+    // (permanent:false). A step, not a line — mirrors Magnaforge but on a lifetime PLAY counter. Numbers live
+    // in breakpoints.ts.tiers. Cleave body so the buffed wide line splashes; still folds to poison + tall.
+    id: 'primordials_elderstorm',
+    name: 'Elderstorm',
+    tribe: 'primordials',
+    tier: 6,
+    atk: 6,
+    hp: 8,
+    keywords: ['cleave'],
+    axis: ['elements'],
+    text: `Cleave. Start of combat: for every element-played milestone this game (${bp('primordials_elderstorm').tiers!.map((t) => t.threshold).join('/')}), give your Primordials an escalating +Atk/+Health this combat. ELEMENTS capstone.`,
+    effects: bp('primordials_elderstorm').tiers!.map(
+      (tier): Effect => ({
+        trigger: { type: 'startOfCombat' },
+        condition: { kind: 'elementsPlayedAtLeast', value: tier.threshold },
+        target: { selector: 'allAllies', filterTribe: 'primordials' },
+        actions: [{ type: 'buffStats', atk: tier.atk, hp: tier.hp, permanent: false }],
+      }),
+    ),
+  },
 
   // ═══════════════════════════ SIRENS — SPELLCRAFT (poison + burst) ═════════════════
   // A SECOND poison home (the counter is load-bearing, so more reachable poison boards
@@ -1972,6 +2050,34 @@ export const UNITS: UnitCard[] = [
         trigger: { type: 'startOfCombat' },
         target: { selector: 'allAllies', filterTribe: 'sirens' },
         actions: [{ type: 'grantKeyword', keyword: 'poison' }],
+      },
+    ],
+  },
+  {
+    // ⭐ Phase 7 POISON-COVERAGE capstone — Venomtide (decision #77). Sirens stays deliberately STAT-AGNOSTIC
+    // (decision #1): its scaling is measured in COVERAGE/REACH — more CONNECTING poison bodies — NOT stat totals.
+    // At a WIDE board (alliesAtStart≥6) it gives your Sirens Cleave this combat; because a poison attacker's cleave
+    // carries POISON to the splashed neighbours (combat `attackerPoison`), a wide poison board (innate poison +
+    // Abysscantor's board-poison) poisons the WHOLE enemy row per swing — the poison REACHES past the shielded front
+    // to the bodies beside/behind it. Coverage scales with the number of poison bodies (each becomes a 3-wide poison-
+    // cleaver), never with stats. Same primitive as Worldspark, different PURPOSE (poison delivery, not damage splash);
+    // this-combat only. Counter UNCHANGED: divine-SHIELD walls blank each poison instance (shield MORE to survive), and
+    // the fragile low-stat Sirens are out-tempo'd if walled. Its own body carries Poison so it is a cleaver too.
+    id: 'sirens_venomtide',
+    name: 'Venomtide',
+    tribe: 'sirens',
+    tier: 6,
+    atk: 5,
+    hp: 7,
+    keywords: ['poison'],
+    axis: ['spellcraft'],
+    text: `Poison. Start of combat: if you control ${bp('sirens_venomtide').threshold}+ minions, give your Sirens Cleave (so your poison splashes the enemy row). SPELLCRAFT capstone.`,
+    effects: [
+      {
+        trigger: { type: 'startOfCombat' },
+        condition: { kind: 'countAllies', value: bp('sirens_venomtide').threshold },
+        target: { selector: 'allAllies', filterTribe: 'sirens' },
+        actions: [{ type: 'grantKeyword', keyword: bp('sirens_venomtide').grantKeyword }],
       },
     ],
   },
@@ -2243,6 +2349,35 @@ export const UNITS: UnitCard[] = [
     text: `Taunt. While on your board, your gold cap is ${C.vaultKeeperGoldCap}.`,
     effects: [],
     auras: [{ scope: 'yourEconomy', modifier: { kind: 'goldCapSet', value: C.vaultKeeperGoldCap } }],
+  },
+  {
+    // ⭐ Phase 7 TEMPO/GOLD scaling capstone — Prizemaster (decision #73). Corsairs' pre-Phase-7 ceiling was
+    // the low-stat TEMPO/reborn+shields identity + a gold ECONOMY (Vault Keeper/Fence/Moneylender/Bursar)
+    // with NO stat payoff — gold could only buy tempo, never scale a carry. This is the first SPEND-GATED
+    // GOLD lever (§6.6a, §11.3c's second legal payoff class): once per turn, spend gold to permanently pump a
+    // chosen Corsair. Distinct from the Tuskers gem-doublers on every axis — GOLD not gems, ADDITIVE +5/+5 not
+    // a ×2 multiply (so it folds to poison, never a multiplyFactorCap concern), a CHOSEN carry not self. The
+    // high ceiling is EARNED + CAPPED: each +5/+5 is bought with gold you'd otherwise spend on tempo/tiering,
+    // one per turn, and how many you can afford scales with the gold ECONOMY (Vault Keeper's raised cap funds
+    // more). Reborn so the pump survives a combat to keep compounding; still folds to poison-that-connects
+    // (one-shots the carry regardless of size; a second poison kills the reborn return) and to removal/cleave.
+    id: 'corsairs_prizemaster',
+    name: 'Prizemaster',
+    tribe: 'corsairs',
+    tier: 6,
+    atk: 5,
+    hp: 7,
+    keywords: ['reborn'],
+    axis: ['tempo', 'endure'],
+    text: `Reborn. Once per turn: spend ${C.prizemasterCost} gold to give a friendly Corsair +${C.prizemasterBuffAtk}/+${C.prizemasterBuffHp} permanently.`,
+    effects: [],
+    activated: {
+      cost: C.prizemasterCost,
+      currency: 'gold',
+      target: { selector: 'chosenAlly', filterTribe: 'corsairs' },
+      actions: [{ type: 'buffStats', atk: C.prizemasterBuffAtk, hp: C.prizemasterBuffHp, permanent: true }],
+      prompt: 'choose a Corsair to reward with plunder',
+    },
   },
 ];
 

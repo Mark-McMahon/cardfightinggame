@@ -12,7 +12,8 @@ export type BreakpointCounter =
   | 'shieldBreak' // this unit's own divine shield broke (Pearlguard; degenerate threshold 1)
   | 'gemsThisTurn' // gems generated this shop turn (Round-6 Tuskers — the compounding doubler)
   | 'lifetimeDeaths' // Phase 3: PERSISTENT per-player friendly-death total (Ossuary Titan — tiered breakpoints)
-  | 'boardMerges'; // Phase 6: total MAGNETIC merges assembled across the board (Magnaforge — tiered board-wide payoff)
+  | 'boardMerges' // Phase 6: total MAGNETIC merges assembled across the board (Magnaforge — tiered board-wide payoff)
+  | 'elementsPlayed'; // Phase 7: PERSISTENT per-player count of Primordials PLAYED this game (Elderstorm — tiered board-wide payoff)
 
 export interface Breakpoint {
   card: string; // catalog id — the lint cross-checks against the catalog
@@ -56,6 +57,28 @@ export const breakpoints: BreakpointsConfig = {
     { card: 'wildkin_grovelord', counter: 'alliesAtStart', threshold: 7, once: true, atk: 2, hp: 2 }, // Phase 4 gate-spread: 5→7 — a FULL-BOARD payoff (decision #48). Balance-risk noted: nerfs an already-weak line; no compensating tuning this PR (rework rule). Phase 5 (#57): a 7→6 relaxation was tried to restore EV-BAL-B headroom and REVERTED (zero effect on the metric)
     { card: 'wildkin_packmother', counter: 'deaths', threshold: 2, atk: 3, hp: 3 }, // each-N (existing avenge); aligned to engines.wildkin.avengePayoff (balance pass #59: 2/2→3/3, the SWARM↔DEATHS carrier that rescued Wildkin from ~36% of mean)
     { card: 'wildkin_brackentide', counter: 'battlecries', threshold: 2, summonUnitId: 'wildkin_thornpup', summonCount: 2 },
+    // Thornqueen (Phase 7, decision #74 — the SWARM↔DEATHS scaling capstone). Wildkin was the WEAKEST tribe
+    // (macro avgP ~5.6): a WIDE board of modest per-body tokens with a flat, width-capped Grovelord buff and no
+    // way to make the swarm's per-body scale high. This turns the swarm's endless FALLEN into a whole-board payoff:
+    // a TIERED breakpoint on the PERSISTENT `lifetimeDeaths` counter — REUSED from Ossuary Titan (no new plumbing;
+    // combat deaths incl. tokens feed it via match.ts, so a wide board that loses bodies every combat accrues it
+    // FAST → reachable, unlike a build-gated counter). It extends Wildkin's existing avenge/DEATHS sub-theme (Pack
+    // Mother) rather than Revenants' identity (which uses `revenantDeaths` + a contested double + damage amp, not a
+    // generic board-wide buff). One cumulative this-combat buff to your WILDKIN per crossed milestone (permanent:false;
+    // the §7.5 writeback must NOT fold it); thresholds 8/16/24 (Wildkin dies ~3-5/combat → a whole-game brood), step
+    // payoffs 3/3 → 5/5 → 8/8 ESCALATE (≥1.5× → non-linear, EV-BAL-D shape). High ceiling by MANY EARNED STEPS (each
+    // fallen body is a bought+lost swarm member), never one multiply — and it still folds to POISON (one-shots each
+    // pumped body, stat-agnostic), to CLEAVE (mows the wide brood), and to WIDTH-removal. Thresholds 24/48/72 span the
+    // MEASURED accrual range (owners reach lifetimeDeaths min 43 / median 63 / max 97 — deaths auto-accrue fast) so the
+    // payoff is a GENUINE earned ramp, NOT a flat slab: tier-1 (24) is reliable at acquisition (100% of owners), tier-2
+    // (48) usual, tier-3 (72) the aspirational late-game stretch (~40%) as the brood's dead pile up over the game.
+    { card: 'wildkin_thornqueen', counter: 'lifetimeDeaths', threshold: 24, atk: 3, hp: 3,
+      tiers: [
+        { threshold: 24, atk: 3, hp: 3 },
+        { threshold: 48, atk: 5, hp: 5 },
+        { threshold: 72, atk: 8, hp: 8 },
+      ],
+    },
     // ── Revenants / DEATHS ──
     { card: 'revenants_mortarch', counter: 'deaths', threshold: 3, once: true, atk: 3, hp: 3 },
     { card: 'revenants_palelich', counter: 'revenantDeaths', threshold: 3, amp: 2 },
@@ -88,6 +111,17 @@ export const breakpoints: BreakpointsConfig = {
     // body and resets each fight. Registered as a breakpoint so the anti-linear lint bounds it (like
     // Pack Mother). Organic ceiling = deaths manufacturable in one combat; folds to poison + width.
     { card: 'infernals_carrionsovereign', counter: 'deaths', threshold: 1, atk: 2, hp: 1 },
+    // Soulglutton (Phase 7, decision #75 — the SACRIFICE PERSISTENT ceiling). Infernals' pre-Phase-7 payoffs were
+    // ALL this-combat (Bloodcaller/Abysslord death breakpoints, Carrion Sovereign's per-death board buff) or one-time
+    // (Gorgemaw's single battlecry eat) — nothing PERSISTED across combats, so the "few+tall" carry could never reach
+    // a very-high total. This is the first PERMANENT death payoff: at 3+ friendly deaths this combat (once), the carry
+    // PERMANENTLY gains +6/+6 (permanent:true → the §7.5 writeback folds it onto the SURVIVING instance). Each combat
+    // where you manufacture 3+ sacrifices adds one chunk, so over the game the carry grows TALL through MANY EARNED
+    // STEPS (each death is a spent body — Infernals sacrifice their own width via Hollow Priest/Pyrewalker/Dreadmaw/Maw),
+    // never one multiply (never the ×2 cap). It ends FEW + TALL, so it still folds HARD to POISON (a single touch kills
+    // the giant, ignoring its size — stat-agnostic) and to a WIDE board (2-3 bodies out-action one carry). Reuses the
+    // existing `deaths` counter (no new plumbing). Threshold 3 (not Abysslord's 4) so the two capstones don't share a gate.
+    { card: 'infernals_soulglutton', counter: 'deaths', threshold: 3, once: true, atk: 6, hp: 6 },
     // ── Prompt-2: Constructs / ASSEMBLY (reuse `deaths` + `alliesAtStart`). Rebuild payoffs —
     //    summon a guardian; countered by poison/tall (the refill can't out-attrition a chip). ──
     { card: 'constructs_foundry', counter: 'deaths', threshold: 4, once: true, summonUnitId: 'constructs_sentinel', summonCount: 1 },
@@ -125,11 +159,47 @@ export const breakpoints: BreakpointsConfig = {
     { card: 'primordials_stormcaller', counter: 'battlecries', threshold: 2, atk: 3, hp: 3 }, // balance pass (#59): 2/1→3/3 — Primordials' reachable permanent board buff was too small + gave no hp; tribe sat ~50% of mean
     { card: 'primordials_tempest', counter: 'alliesAtStart', threshold: 6, once: true, atk: 2 }, // Phase 4 gate-spread: 5→6 (mid-width, decision #48)
     { card: 'primordials_worldspark', counter: 'alliesAtStart', threshold: 7, once: true, grantKeyword: 'cleave' }, // Phase 4 gate-spread: 5→7 — FULL-BOARD cleave grant (decision #48). Balance-risk noted (see Grovelord); no compensating tuning this PR. Phase 5 (#57): a 7→6 relaxation was tried + REVERTED (zero effect on EV-BAL-B; reachability restored via harness payoff-credit instead)
+    // Elderstorm (Phase 7, decision #72 — the ELEMENTS scaling capstone). Primordials' pre-Phase-7 ceiling was
+    // the WEAKEST of the nine: all payoffs were shop-turn / go-wide one-shots (stormcaller, tempest, worldspark)
+    // with no PERSISTENT axis, so a developed board topped out at modest per-body buffs + a cleave grant. This
+    // turns every element CHANNELLED over the game into a WHOLE-BOARD payoff: a TIERED breakpoint on the persistent
+    // `elementsPlayed` counter (incremented in shop.playUnit per Primordial played, like forgemastersPlayed — NOT a
+    // board-state read), mirroring Ossuary Titan/Magnaforge but board-wide over your Primordials. A step, not a line —
+    // one cumulative this-combat buff per crossed tier (permanent:false; the §7.5 writeback must NOT fold it).
+    // Thresholds 4/8/12 are a whole-GAME investment (a Primordial played most turns). Tier-1 (4) is a real-but-light
+    // Primordials commitment reached by ~21% of Elderstorm owners in the macro sim (the Magnaforge 16.7% precedent —
+    // measured via ownedBreakpointMaxCounter); the higher tiers (8/12) are the aspirational ceiling a dedicated build
+    // reaches (scratchpad-proven, mirroring Magnaforge's top tier which needs ≥2 towers). Retuned DOWN from an initial
+    // 8/16/24: the bots splash Elderstorm as a strong 6/8 body rather than going mono-Primordials (the weakest, least-
+    // picked tribe), reaching max 5 elements — so 8+ was unreachable in the sim. Step payoffs 3/3 → 5/5 → 8/8 ESCALATE
+    // (≥1.5× the first → non-linear, EV-BAL-D shape). High ceiling by MANY EARNED STEPS (each element is a bought+played
+    // body), never one giant multiply — and it still folds to POISON (one-shots any buffed body, stat-agnostic), to TALL
+    // (a lone big wall starves the wide cleavers of neighbours to splash), and to WIDTH/removal. Its own body carries
+    // cleave so the buffed wide line splashes.
+    { card: 'primordials_elderstorm', counter: 'elementsPlayed', threshold: 4, atk: 3, hp: 3,
+      tiers: [
+        { threshold: 4, atk: 3, hp: 3 },
+        { threshold: 8, atk: 5, hp: 5 },
+        { threshold: 12, atk: 8, hp: 8 },
+      ],
+    },
     // ── Sirens / SPELLCRAFT: a second POISON home + start-of-combat burst. Counter: divine-shield
     //    walls (blank the poison instance) + being out-tempo'd. Reuses `battlecries`. ──
     { card: 'sirens_deepchanter', counter: 'battlecries', threshold: 2, atk: 2, hp: 2 },
     { card: 'sirens_abysscantor', counter: 'battlecries', threshold: 3 }, // payoff (board-wide Poison) is granted in-card
     { card: 'sirens_leviathansong', counter: 'battlecries', threshold: 3, atk: 2, hp: 2 },
+    // Venomtide (Phase 7, decision #77 — the POISON-COVERAGE capstone; Sirens stays deliberately STAT-AGNOSTIC per
+    // decision #1). Sirens' scaling is measured in COVERAGE/REACH — more CONNECTING poison bodies — NOT stat totals.
+    // At a WIDE board (alliesAtStart≥6) it grants your Sirens CLEAVE this combat: since a poison attacker's cleave
+    // carries POISON to the splashed neighbours (combat.ts `attackerPoison`), a wide poison board (innate poison +
+    // Abysscantor's board-poison) poisons the WHOLE enemy row per swing — poison REACHES past the shielded front to
+    // the unshielded bodies behind/beside it. Coverage scales with the number of poison bodies you field (each becomes
+    // a 3-wide poison-cleaver), never with stats. Reuses `alliesAtStart` + `grantKeyword:'cleave'` (no new plumbing).
+    // Same PRIMITIVE as Worldspark but a different PURPOSE — poison DELIVERY, not damage splash. This-combat only
+    // (grantKeyword in combat never persists). The counter is UNCHANGED (decision #1): divine-SHIELD walls blank each
+    // poison instance (cleave just means the opponent must shield MORE bodies), and Sirens' fragile low-stat bodies
+    // are out-tempo'd if the poison is walled off. Threshold 6 (go-wide) — a real full-board poison commitment.
+    { card: 'sirens_venomtide', counter: 'alliesAtStart', threshold: 6, once: true, grantKeyword: 'cleave' },
     // ── Corsairs / TEMPO: on-buy aggression → sticky REBORN / divine-shield width. Counter: poison
     //    (kills each reborn body twice over) + cleave (mows the width). Reuses `alliesAtStart`. ──
     { card: 'corsairs_reaver', counter: 'alliesAtStart', threshold: 5, once: true, atk: 1 }, // Phase 4 gate-spread: STAYS at 5 (low-width anchor, decision #48)
@@ -162,7 +232,7 @@ export function hasBreakpoint(card: string): boolean {
 
 export interface SpendGatedPayoff {
   card: string; // catalog id — the lint cross-checks against the catalog + its `activated` spec
-  currency: 'gems'; // only spendable currency today (gold↔gems stays one-way via Gemwright)
+  currency: 'gems' | 'gold'; // the spendable wallet (Tuskers spend gems; Phase 7 #73: Corsairs spend GOLD)
   costKnobs: string[]; // engines[<card.tribe>] knob names that price each step
 }
 
@@ -175,6 +245,10 @@ export const spendGated: SpendGatedPayoff[] = [
   { card: 'tuskers_gemwright', currency: 'gems', costKnobs: ['gemwrightCost'] },
   { card: 'tuskers_facetguard', currency: 'gems', costKnobs: ['facetguardCost'] },
   { card: 'tuskers_oreseeker', currency: 'gems', costKnobs: ['oreseekerCost'] },
+  // Prizemaster (Phase 7, decision #73): the Corsairs GOLD spend-gated lever — once/turn, spend gold to
+  // permanently +5/+5 a chosen Corsair. Flat gold cost; the ceiling scales with the gold economy (Vault
+  // Keeper's raised cap funds more activations). The FIRST non-gem spend-gated payoff (currency: 'gold').
+  { card: 'corsairs_prizemaster', currency: 'gold', costKnobs: ['prizemasterCost'] },
 ];
 
 const spendByCard: Record<string, SpendGatedPayoff> = Object.fromEntries(spendGated.map((r) => [r.card, r]));

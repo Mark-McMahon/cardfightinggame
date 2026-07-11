@@ -63,6 +63,7 @@ export function toCombatBoard(
   playerTier: number,
   lifetimeDeaths = 0,
   forgemastersPlayed = 0,
+  elementsPlayed = 0,
 ): CombatBoard {
   return {
     units: board.map(instanceToCombatUnit),
@@ -75,5 +76,9 @@ export function toCombatBoard(
     // each instance's mergeCount — single-sourced, always in sync) so combat can gate Magnaforge's
     // tiered board-wide payoff (`boardMergesAtLeast`) without ambient state (invariant 1b).
     boardMerges: board.reduce((n, u) => n + (u.mergeCount ?? 0), 0),
+    // Phase 7 (#72): the controller's persistent Primordials-played count rides in on the snapshot
+    // (Ossuary Titan pattern, incremented like forgemastersPlayed) so combat can gate Elderstorm's
+    // tiered board-wide payoff (`elementsPlayedAtLeast`) without ambient state (invariant 1b).
+    elementsPlayed,
   };
 }

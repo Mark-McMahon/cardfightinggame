@@ -156,6 +156,9 @@ export interface ConditionCounts {
   /** Phase 6: total MAGNETIC merges across the controller's board (combat carries it in on the
    *  CombatBoard snapshot as a derived scalar; a board-state read like countAllies). */
   boardMerges?: number;
+  /** Phase 7: the controller's persistent count of Primordials PLAYED this game (combat carries it in
+   *  on the CombatBoard snapshot; a lifetime play counter like lifetimeDeaths, not a board-state read). */
+  elementsPlayed?: number;
 }
 
 /** Evaluate an optional condition. Missing/unknown → true; wrong-phase counter reads 0 (§6.3). */
@@ -180,6 +183,8 @@ export function evaluateCondition(cond: ConditionSpec | undefined, counts: Condi
       return (counts.lifetimeDeaths ?? 0) >= v;
     case 'boardMergesAtLeast':
       return (counts.boardMerges ?? 0) >= v;
+    case 'elementsPlayedAtLeast':
+      return (counts.elementsPlayed ?? 0) >= v;
     default:
       // [reserved] kinds (hasTribe/hasKeyword/goldAtLeast/tierAtLeast/isGolden/isToken):
       // no live consumer → treated as unknown → true (spec §6.3 default).

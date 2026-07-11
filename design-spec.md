@@ -121,7 +121,7 @@ hardcoded in logic. §7.6 records where the current code falls short of (2) and 
 **Goals**
 - One 8-seat room, joinable by short code, fillable with bots.
 - Full shop → combat → placement loop with freeze and triple/upgrade.
-- **Nine original tribes; 110 unit definitions** (104 purchasable + 6 tokens) across tiers
+- **Nine original tribes; 115 unit definitions** (109 purchasable + 6 tokens) across tiers
   1–6, exercising all **6 live keywords** (`taunt`/`divineShield`/`poison`/`reborn`/`cleave`/
   `magnetic` — the last un-deferred by the Phase-5 Constructs merge, decision #54) and the
   breakpoint content model (§6.6). The design law of "breakpoints over linear stacking"
@@ -487,7 +487,12 @@ extension folds the capped factor onto surviving persistent instances (Gravemona
 absolute `setStats`/`resetToBase` can never be folded and stays this-combat-only.
 `permanent` on a combat-fired `buffStats` is **live** (decision #38): the buff writes back
 onto surviving persistent instances after combat (§7.5); on shop-fired actions it has always
-meant a direct persistent mutation. `plantDeathrattle` attaches a deathrattle `Effect` to a
+meant a direct persistent mutation. **Soulglutton (Infernals T6, decision #75)** is the first
+SHIPPED card to use it — an `afterFriendlyDeaths ≥3 once` self-buff flagged `permanent:true`, so
+the sacrifice carry grows TALL across the whole game (each 3+-death combat folds another +6/+6 onto
+the surviving instance). The EV-WBK-08 content lint (which guards against *accidental* permanence on
+combat-fired `buffStats`) exempts it by an explicit allowlist; it is a registered `deaths` breakpoint
+(bounded by the anti-linear lint) and folds to poison, so the ceiling stays capped + counterable. `plantDeathrattle` attaches a deathrattle `Effect` to a
 target (Reefmourner bridge). **Phase-3 CONSUMPTION (Infernals, shop-phase):** `destroyAlly`
 destroys a chosen friendly — removes it, returns its pool copy (like a sell), fires no
 combat/deathrattle, and increments the persistent `lifetimeFriendlyDeaths` (§7.5);
@@ -499,17 +504,20 @@ contributes its doubled stats; keywords are NOT transferred). Gorgemaw pairs the
 ```ts
 kind: 'countAllies' | 'gemsThisTurnAtLeast'                                    // [live] (gemsThisTurnAtLeast: engine+eval live, 0 card consumers since #39 — see §6.9)
     | 'battlecriesThisTurnAtLeast' | 'tokensSummonedThisTurnAtLeast' | 'deathsThisCombatAtLeast' // [live] manufactured-event breaks
-    | 'alliesAtMost' | 'lifetimeDeathsAtLeast' | 'boardMergesAtLeast'                             // [live] Phase 3: go-tall gate (Cindermarshal) + persistent-death breakpoint (Ossuary Titan); Phase 6: board-wide magnetic breakpoint (Magnaforge)
+    | 'alliesAtMost' | 'lifetimeDeathsAtLeast' | 'boardMergesAtLeast' | 'elementsPlayedAtLeast'   // [live] Phase 3: go-tall gate (Cindermarshal) + persistent-death breakpoint (Ossuary Titan); Phase 6: board-wide magnetic breakpoint (Magnaforge); Phase 7: persistent elements-played breakpoint (Elderstorm)
     | 'hasTribe' | 'hasKeyword' | 'goldAtLeast' | 'tierAtLeast' | 'isGolden' | 'isToken';        // [reserved]
 value?; tribe?; keyword?;
 ```
 **Phase-scoping (engine rule):** combat context populates `deathsThisCombat`, `countAllies`
 (start-of-combat count), `lifetimeDeaths` (the fixed per-board scalar carried in on
-`CombatBoard.lifetimeDeaths`, §7.5) and `boardMerges` (the derived per-board scalar — Σ of each
-instance's `mergeCount` — carried in on `CombatBoard.boardMerges`); shop context populates
+`CombatBoard.lifetimeDeaths`, §7.5), `boardMerges` (the derived per-board scalar — Σ of each
+instance's `mergeCount` — carried in on `CombatBoard.boardMerges`) and `elementsPlayed` (the
+persistent Primordials-played total carried in on `CombatBoard.elementsPlayed`); shop context populates
 `battlecries/tokens/gems` and `countAllies`. `alliesAtMost` is a ≤ gate (`countAllies ≤ value`);
 `lifetimeDeathsAtLeast` gates on the persistent friendly-death total; `boardMergesAtLeast` gates on
-the total magnetic merges assembled across the controller's board (a board-state read, like `countAllies`). A condition evaluated in the wrong phase reads
+the total magnetic merges assembled across the controller's board (a board-state read, like `countAllies`);
+`elementsPlayedAtLeast` gates on the persistent count of Primordials PLAYED this game (a lifetime PLAY
+counter, incremented in `shop.playUnit` like `forgemastersPlayed`). A condition evaluated in the wrong phase reads
 0/false silently. A missing or unknown condition evaluates **true**.
 
 ### 6.4 Aura (passive modifier) — the multipliers
@@ -599,7 +607,8 @@ type BreakpointCounter =
   | 'alliesAtStart'                      // minions controlled at start of combat
   | 'shieldBreak'                        // this unit's own shield broke
   | 'lifetimeDeaths'                     // Phase 3: PERSISTENT per-player friendly-death total (Ossuary Titan — TIERED)
-  | 'boardMerges';                       // Phase 6: total MAGNETIC merges across the board (Magnaforge — TIERED, board-wide)
+  | 'boardMerges'                        // Phase 6: total MAGNETIC merges across the board (Magnaforge — TIERED, board-wide)
+  | 'elementsPlayed';                    // Phase 7: PERSISTENT per-player Primordials-PLAYED total (Elderstorm — TIERED, board-wide)
 ```
 
 A breakpoint row may carry a `tiers?: {threshold, atk, hp}[]` array for a **tiered** payoff:
@@ -616,6 +625,30 @@ cumulative this-combat buff per crossed merge-milestone. It turns the magnetic M
 from MANY EARNED STEPS (every merge is a bought + consumed body), never one multiply, and it
 still folds to poison-that-connects (shielded/taunt poison one-shots each pumped body,
 stat-agnostic), cleave, and Nullforge (which strips the permanent merged towers beneath the buff).
+**Elderstorm** (Phase 7, decision #72) is the third tiered row and the second BOARD-WIDE one — thresholds
+4/8/12 on `elementsPlayed`, payoffs +3/+3 → +5/+5 → +8/+8 to your *Primordials* (not self), firing one
+cumulative this-combat buff per crossed element-milestone. Unlike `boardMerges` (a board-state read) it
+gates on a **persistent PLAY counter** (incremented in `shop.playUnit` per Primordial played, like
+`lifetimeDeaths`/`forgemastersPlayed`, surviving sale/death). It lifts Primordials off the WEAKEST
+pre-Phase-7 ceiling (only shop-turn / go-wide one-shots, no persistent axis) onto a whole-game scaler: a
+maxed 7-wide board reaches ~180 atk / ~170 hp aggregate (351 total) through ~27 earned element-plays,
+every step tier-capped (never the ×2 `multiplyFactorCap`). Tier-1 (4) assembles for ~21% of Elderstorm
+owners in the macro sim (the Magnaforge precedent); the higher tiers are the aspirational ceiling a
+dedicated build reaches (bots splash it as a strong 6/8 cleave body rather than going mono-Primordials —
+the same top-tier under-coverage as Magnaforge's ≥2-tower step). It still folds to **poison-that-connects**
+(a shielded/taunt poison wall one-shots each pumped body, stat-agnostic — proven 0% win / 85% loss over 200
+seeds), while fragile poison chaff and tall-without-poison lose to the stacked wide line (the Magnaforge
+profile).
+**Thornqueen** (Phase 7, decision #74) is the fourth tiered row — thresholds 24/48/72 on `lifetimeDeaths`,
+payoffs +3/+3 → +5/+5 → +8/+8 board-wide to your *Wildkin*. It **REUSES** the Ossuary Titan persistent-death
+counter (no new plumbing — combat deaths incl. tokens feed it via `match.ts`), turning the swarm's endless
+FALLEN into a whole-board scaler and lifting Wildkin off the WEAKEST-tribe floor (macro avgP ~5.6). Because a
+wide board dies fast, the counter **auto-accrues** (owners reach lifetimeDeaths min 43 / median 63 / max 97),
+so unlike Elderstorm's build-gated play counter it is reliably reachable: tier-1 (24) hits for 100% of owners
+at acquisition, tier-2 (48) for 95%, tier-3 (72) is the ~33% aspirational late-game stretch — a genuine earned
+ramp as the dead pile up. A maxed 7-wide brood reaches ~150 atk / ~155 hp aggregate (304 total); it still folds
+to **poison-that-connects** (a shielded/taunt poison wall → 100% loss over 200 seeds, stat-agnostic), while
+fragile poison and cleave-that-can't-one-shot lose to the buffed width.
 
 **Lint (decision #22, §11.3c):** a test asserts every primary payoff is expressible as a
 discrete breakpoint and flags any per-unit scaling that lacks a threshold. The lint now has
@@ -642,13 +675,16 @@ finishing the kill (poison the 1-hp reborn body, out-tempo). Legal by constructi
 ### 6.6a Activated abilities — the spend-gated payoff class (decisions #39/#40)
 
 **The second legal primary-payoff class beside breakpoints.** An *activated ability* is a
-shop-phase ability the OWNER buys with **gems** (the spendable wallet, §5). Declarative like
-an `Effect`, but with no trigger — the "trigger" is the player's `activate` intent:
+shop-phase ability the OWNER buys with a **wallet** — **gems** by default (the spendable wallet, §5)
+or, since **Phase 7 (decision #73)**, **gold** (Corsairs' Prizemaster — its lever off the gold
+economy). Declarative like an `Effect`, but with no trigger — the "trigger" is the player's
+`activate` intent:
 
 ```ts
 interface ActivatedSpec {
-  cost: number | 'doublerEscalating';  // gem price: flat (a config number on the card row)
+  cost: number | 'doublerEscalating';  // price: flat (a config number on the card row)
                                         // or the shared escalating doubler formula
+  currency?: 'gold' | 'gems';           // which wallet pays (#73; default 'gems')
   target: TargetSpec;                   // 'self' or 'chosenAlly' (shop-resolved, §7.4)
   actions: ActionSpec[];                // same vocabulary; + activated-only gainGold/refreshShop
   prompt?: string;                      // pendingTarget/UI text for chosenAlly abilities
@@ -661,12 +697,17 @@ interface ActivatedSpec {
 mutates nothing): shop phase (enforced by `Match`/room) → unit owned + **on board** (bench
 rejected) → card has an `activated` spec → **not already used this shop turn** (once per
 turn per *minion*; `abilityUsedThisTurn` resets in `startShopPhase`) → no pendingTarget
-outstanding → wallet ≥ current cost → a `chosenAlly` ability must have a legal target
-**before** the spend (an activation is a purchase: it is *rejected*, never fizzled —
-contrast D5's battlecry fizzle). Then the gems are deducted and the actions resolve:
-`chosenAlly` arms the same pendingTarget machinery as targeted battlecries (resolved by
-`targetChoice`; stat writes are persistent-instance writes like other shop permanents);
-`self` abilities resolve immediately.
+outstanding → **the named wallet** (`currency`, default gems) ≥ current cost → a `chosenAlly`
+ability must have a legal target **before** the spend (an activation is a purchase: it is
+*rejected*, never fizzled — contrast D5's battlecry fizzle). Then the cost is deducted from that
+wallet and the actions resolve: `chosenAlly` arms the same pendingTarget machinery as targeted
+battlecries (resolved by `targetChoice`; stat writes are persistent-instance writes like other
+shop permanents); `self` abilities resolve immediately. **Prizemaster (Corsairs T6, #73)** is the
+first `currency:'gold'` ability: once/turn, spend gold to permanently +5/+5 a chosen Corsair —
+additive (folds to poison, never a `multiplyFactorCap` concern), gold-throttled (a flat cost you'd
+otherwise spend on tempo/tiering), and its ceiling scales with the gold ECONOMY (Vault Keeper's
+raised cap funds more activations). A dedicated carry reaches the low hundreds; it folds to
+poison-that-connects (one-shots the carry regardless of size) and removal/cleave.
 
 **The escalating doubler formula.** The three Tusker doublers share
 `cost = engines.tuskers.doubleBaseCost + doubleCostStep × session.doublesPurchased`, where
@@ -1061,24 +1102,32 @@ data + engine vocabulary.
 
 | Tribe (orig.) | Reference engine family | Primitive used |
 |---|---|---|
-| Wildkin | token gen + amplifier, avenge, cleave, mid-combat deathrattle replay | `endOfTurn`→`summon`, `onSummon`+cond→`buffStats`, `afterFriendlyDeaths`, keyword `cleave`, **H** `replayAdjacentDeathrattle` |
+| Wildkin | token gen + amplifier, avenge, cleave, mid-combat deathrattle replay (+ SWARM↔DEATHS scaler) | `endOfTurn`→`summon`, `onSummon`+cond→`buffStats`, `afterFriendlyDeaths`, keyword `cleave`, **H** `replayAdjacentDeathrattle`; **Thornqueen** `lifetimeDeaths` TIERED board-wide breakpoint (#74, reuses the Ossuary Titan counter) |
 | Reefkin | battlecry chain/doubler, poison+shield carriers, single-target megabuff, plant | `battlecry`→`buffStats` (`chosenAlly`), aura `triggerMultiplier`, `grantKeyword`, `plantDeathrattle` |
 | Revenants | reborn stacking, death payoffs, tribe damage amp, deathrattle-double, positional reborn | keyword `reborn` + `deathrattle`, aura `damageMultiplier`+`activeWhen`, `adjacentAllies` deathrattle (Last Rites Drummer), **H** `primeNextDeathrattleDouble` |
-| Infernals | self-damage / sacrifice for burst | `startOfCombat`→`dealDamage(self)`+`buffStats`, deaths breakpoints |
+| Infernals | self-damage / sacrifice for burst (+ PERSISTENT few+tall carry) | `startOfCombat`→`dealDamage(self)`+`buffStats`, deaths breakpoints; **Soulglutton** `deaths≥3 once` **permanent** self-buff (#75, §7.5 fold → a tall carry that grows across the game) |
 | Tuskers | gem greed → PURCHASED exponential doubler + gem sinks (#39) | `giveGem` wallet + activated abilities (§6.6a): escalating `multiplyStats` doubles (capped), `gainGold` bridge, `refreshShop`, chosenAlly shield |
-| Primordials | play-count → wide cleave splash | `battlecries`/`alliesAtStart` breakpoints → `buffStats` / grant `cleave` |
-| Sirens | poison home + start-of-combat burst | `startOfCombat`→`dealDamage`, `battlecries` breakpoints, board `poison` |
+| Primordials | play-count → wide cleave splash (+ persistent ELEMENTS scaler) | `battlecries`/`alliesAtStart` breakpoints → `buffStats` / grant `cleave`; **Elderstorm** `elementsPlayed` TIERED board-wide breakpoint (#72, persistent play counter) |
+| Sirens | poison home + start-of-combat burst (+ stat-agnostic COVERAGE scaler) | `startOfCombat`→`dealDamage`, `battlecries` breakpoints, board `poison`; **Venomtide** `alliesAtStart≥6`→board `cleave` (#77, #1 — a wide poison board splashes poison across the enemy row; COVERAGE, never stats) |
 | Constructs | assembly / reassemble + **MAGNETIC merge** (single-carry *and* board-wide) | `deaths`/`alliesAtStart` breakpoints → `summon`; **`merge` intent** (magnetic bench unit → Construct tower, #54); **Magnaforge** `boardMerges` TIERED board-wide breakpoint (#68); **Forgemaster** `yourSentinels` persistent Sentinel-stack (#55) |
-| Corsairs | on-buy tempo, sticky reborn/shield width, positional front-buff, **gold economy** | `alliesAtStart` breakpoints, reborn/divine-shield width, `leftmost` positional aura (Vanguard Pennant); **gold cards** (#56): `gainGoldNextTurn` (Bursar) + `yourEconomy` auras (Fence/Moneylender/Vault Keeper) |
+| Corsairs | on-buy tempo, sticky reborn/shield width, positional front-buff, **gold economy → gold-spend carry** | `alliesAtStart` breakpoints, reborn/divine-shield width, `leftmost` positional aura (Vanguard Pennant); **gold cards** (#56): `gainGoldNextTurn` (Bursar) + `yourEconomy` auras (Fence/Moneylender/Vault Keeper); **Prizemaster** `currency:'gold'` spend-gated lever (#73, permanent +5/+5 a chosen Corsair) |
 
 Marquee ⭐ breakpoint cards per tribe live in `config/breakpoints.ts` (e.g. Mortarch
 `deaths≥3 once`, Pale Lich `revenantDeaths≥3 amp`, Chorus Tide `battlecries≥2`); the Tusker
 doublers are **spend-gated** rows in the same file's `spendGated` registry (#39, §6.6a).
-The full **110-row** roster is `shared/content/units.ts`;
-per-tribe counts (verified against the catalog): **Constructs 17**, Revenants 16, **Corsairs 15**,
-Reefkin 12, **Tuskers 12**, Wildkin 11, Infernals 10, Sirens 9, Primordials 8 (= 110; 104
-purchasable + 6 tokens). The **+3 over the Phase-5 catalog are the Phase-6 magnetic-scaling cards
-(decision #68):** Constructs **Rivetling (T1)** + **Coilcore (T3)** (magnetic merge fodder) +
+The full **115-row** roster is `shared/content/units.ts`;
+per-tribe counts (verified against the catalog): **Constructs 17**, **Corsairs 16**, Revenants 16,
+Reefkin 12, **Tuskers 12**, **Wildkin 12**, **Infernals 11**, **Primordials 9**, **Sirens 10** (= 115; 109
+purchasable + 6 tokens). The **+5 over the Phase-6 catalog are the Phase-7 scaling capstones (decisions
+#72/#73/#74/#75/#77):** Primordials **Elderstorm (T6)** (the board-wide `elementsPlayed` persistent-play capstone; no
+new fodder — the counter is fed by playing any Primordial) + Corsairs **Prizemaster (T6)** (the
+`currency:'gold'` spend-gated lever — permanent +5/+5 a chosen Corsair, funded by the gold economy) + Wildkin
+**Thornqueen (T6)** (the board-wide `lifetimeDeaths` tiered capstone — REUSES the Ossuary Titan counter, no new
+plumbing) + Infernals **Soulglutton (T6)** (the `deaths≥3 once` **permanent** self-buff — a few+tall carry that
+grows across the game via the §7.5 fold; reuses the `deaths` counter) + Sirens **Venomtide (T6)** (the
+`alliesAtStart≥6`→board `cleave` COVERAGE capstone — a wide poison board splashes poison across the enemy row;
+Sirens stays STAT-AGNOSTIC per decision #1, scaling in coverage not stats). The **+3 before them were the Phase-6
+magnetic-scaling cards (decision #68):** Constructs **Rivetling (T1)** + **Coilcore (T3)** (magnetic merge fodder) +
 **Magnaforge (T6)** (the board-wide `boardMerges` capstone). The +8 before those were the Phase-5
 cards: Constructs **Boltfitter (T2), Alloy Rig (T4), Omega Chassis (T5)** (magnetic merge sources, #54) +
 **Forgemaster (T4)** (#55); Corsairs **Bursar (T2), Fence (T3), Moneylender (T3), Vault Keeper

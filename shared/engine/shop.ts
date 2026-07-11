@@ -71,6 +71,9 @@ export interface ShopSession {
   forgemastersPlayed: number; // Phase 5 (decision #55): PERSISTENT count of Forgemasters PLAYED this game
   // (private). Incremented in playUnit; NEVER decremented (survives the Forgemaster's sale/death). Rides
   // into combat on the CombatBoard scalar to buff every summoned Sentinel.
+  elementsPlayed: number; // Phase 7 (decision #72): PERSISTENT count of Primordials PLAYED this game
+  // (private). Incremented in playUnit per Primordial played; NEVER decremented (survives sale/death).
+  // Rides into combat on the CombatBoard scalar to fire Elderstorm's tiered board-wide payoff.
   delayedGold: number; // Phase 5 (decision #56): gold QUEUED by Bursar/Moneylender, delivered (and cleared)
   // at the START of the next shop phase, clamped to the effective gold cap (private).
   discover: { reason: string; options: string[] } | null;
@@ -109,6 +112,7 @@ export function createShopSession(seat: number, opts: SessionOpts = {}): ShopSes
     tokensThisTurn: 0,
     lifetimeFriendlyDeaths: 0,
     forgemastersPlayed: 0,
+    elementsPlayed: 0,
     delayedGold: 0,
     discover: null,
     pendingTarget: null,
@@ -192,6 +196,12 @@ function hasMoneylender(s: ShopSession): boolean {
  *  hardcoded id (decision #55). Used by playUnit to increment the persistent forgemastersPlayed counter. */
 function isForgemasterCard(cardId: string): boolean {
   return (getCard(cardId).auras ?? []).some((a) => a.scope === 'yourSentinels');
+}
+
+/** True iff a card is a Primordial (an "element") — detected from its tribe (decision #72). Used by
+ *  playUnit to increment the persistent elementsPlayed counter (every element channelled counts). */
+function isElementCard(cardId: string): boolean {
+  return getCard(cardId).tribe === 'primordials';
 }
 
 // ── effect resolution (shop side) ──────────────────────────────────────────────────
@@ -620,6 +630,9 @@ export function playUnit(s: ShopSession, uid: string, toSlot?: number): OpResult
   // Phase 5 (decision #55): playing a Forgemaster increments the PERSISTENT stack counter (never
   // decremented — survives its later sale/death). Each play counts as 1 (a golden Forgemaster too).
   if (isForgemasterCard(inst.cardId)) s.forgemastersPlayed += 1;
+  // Phase 7 (decision #72): playing a Primordial channels an element — increment the PERSISTENT
+  // elementsPlayed counter (never decremented; survives sale/death). Gates Elderstorm's tiered payoff.
+  if (isElementCard(inst.cardId)) s.elementsPlayed += 1;
   fireBattlecry(s, inst);
   return { ok: true };
 }
@@ -755,7 +768,11 @@ export function activateAbility(s: ShopSession, uid: string): OpResult {
   if (s.abilityUsedThisTurn.includes(uid)) return { ok: false, error: 'already activated this turn' };
   if (s.pendingTarget) return { ok: false, error: 'resolve pending target first' };
   const cost = activatedCost(s, card);
-  if (s.gems < cost) return { ok: false, error: 'not enough gems' };
+  // Phase 7 (#73): abilities pay from the wallet named by `currency` (default gems). Corsairs' Prizemaster
+  // spends GOLD — its lever off the gold economy (Vault Keeper raises the cap that funds it).
+  const currency = spec.currency ?? 'gems';
+  const wallet = currency === 'gold' ? s.gold : s.gems;
+  if (wallet < cost) return { ok: false, error: `not enough ${currency}` };
 
   // chosenAlly: verify a legal target exists BEFORE spending.
   let candidates: Targetable[] = [];
@@ -765,11 +782,12 @@ export function activateAbility(s: ShopSession, uid: string): OpResult {
   }
 
   // spend + gates (all validation passed — from here the op commits).
-  s.gems -= cost;
+  if (currency === 'gold') s.gold -= cost;
+  else s.gems -= cost;
   s.abilityUsedThisTurn.push(uid);
   s.abilityUses[card.id] = (s.abilityUses[card.id] ?? 0) + 1;
   if (spec.cost === 'doublerEscalating') s.doublesPurchased += 1;
-  s.log.push(`${card.name} activated (−${cost} gems)`);
+  s.log.push(`${card.name} activated (−${cost} ${currency})`);
 
   if (spec.target.selector === 'chosenAlly') {
     s.pendingTarget = {
@@ -837,9 +855,10 @@ export function resolveDiscoverPick(s: ShopSession, optionIndex: number): OpResu
 }
 
 /** Convert the current board into a CombatBoard for resolveCombat (spec §9.7). The persistent
- *  lifetimeFriendlyDeaths rides in as the CombatBoard scalar (Phase 3, Ossuary Titan). */
+ *  per-player counters ride in as CombatBoard scalars: lifetimeFriendlyDeaths (Phase 3, Ossuary
+ *  Titan), forgemastersPlayed (Phase 5, Sentinel buff), elementsPlayed (Phase 7, Elderstorm). */
 export function boardToCombat(s: ShopSession): CombatBoard {
-  return toCombatBoard(s.board, s.tier, s.lifetimeFriendlyDeaths, s.forgemastersPlayed);
+  return toCombatBoard(s.board, s.tier, s.lifetimeFriendlyDeaths, s.forgemastersPlayed, s.elementsPlayed);
 }
 
 // ── projection to the private channel (owner-only) ──────────────────────────────────
@@ -854,6 +873,7 @@ function abilityStates(s: ShopSession): ActivatedAbilityState[] {
       uid: u.uid,
       cardId: u.cardId,
       cost: activatedCost(s, card),
+      currency: card.activated.currency ?? 'gems',
       used: s.abilityUsedThisTurn.includes(u.uid),
     });
   }

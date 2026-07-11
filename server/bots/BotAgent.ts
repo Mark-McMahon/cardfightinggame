@@ -349,7 +349,8 @@ export class BotAgent {
     if (abilities.length === 0) return null;
     const byUid = new Map<string, ClientUnit>();
     for (const u of priv.board) byUid.set(u.uid, u);
-    const usable = abilities.filter((a) => !a.used && priv.gems >= a.cost && byUid.has(a.uid));
+    // affordability reads the wallet the ability actually spends (#73: Corsairs' Prizemaster pays GOLD).
+    const usable = abilities.filter((a) => !a.used && (a.currency === 'gold' ? priv.gold : priv.gems) >= a.cost && byUid.has(a.uid));
     if (usable.length === 0) return null;
 
     const kindOf = (a: ActivatedAbilityState): 'doubler' | 'target' | 'gold' | 'refresh' | 'other' => {

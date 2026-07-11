@@ -522,6 +522,8 @@ const RECIPES: Record<string, () => string> = {
   wildkin_bonepiper: () => wk({ shape: 'tall', skin: 'bramble', ears: 'antler', eyes: 'fierce', mouth: 'open' }) + boneMark(70, 128, '#e8d9c0'),
   wildkin_thornbeast: () => wk({ shape: 'big', skin: 'bramble', ears: 'tuskBig', eyes: 'fierce', mouth: 'grin' }) + scar(66, 84) + scar(120, 90),
   wildkin_grovelord: () => glowMotes('#cdf7a4') + wk({ shape: 'big', skin: 'bramble', ears: 'antler', top: 'crown', eyes: 'glow', mouth: 'grin' }),
+  // Phase 7 SWARM↔DEATHS capstone — the brood queen: bone-pale motes + crown + warpaint + twin bone marks (decision #74).
+  wildkin_thornqueen: () => glowMotes('#e8d9c0') + wk({ shape: 'big', skin: 'moss', ears: 'antler', top: 'crown', eyes: 'fierce', mouth: 'fang' }) + warpaint('#caa37a') + boneMark(70, 128, '#e8d9c0') + boneMark(132, 128, '#e8d9c0'),
   // REVENANTS — deaths
   revenants_cryptling: () => rev({ variant: 'skull', hood: false }) + rebornSwirl(106, 78, '#bda9ee'),
   revenants_wisp: () => wisp({ size: 'sm' }),
@@ -562,6 +564,8 @@ const RECIPES: Record<string, () => string> = {
   infernals_abysslord: () => glowMotes('#ff8a3c') + inf({ shape: 'big', skin: 'blood', horns: 'tall', eyes: 'blaze', mouth: 'maw', wing: 1, cracks: 1 }),
   infernals_carrionsovereign: () => glowMotes('#c0392b') + inf({ shape: 'big', skin: 'ash', horns: 'ram', eyes: 'hollow', mouth: 'maw', wing: 1, cracks: 1, brand: 1 }) + droplet(72, 150, '#8a2a2e') + droplet(128, 150, '#8a2a2e'),
   infernals_gorgemaw: () => inf({ shape: 'round', skin: 'coal', horns: 'nub', eyes: 'round', mouth: 'maw', cracks: 1, brand: 1 }) + droplet(150, 150, '#ff8a3c'),
+  // Phase 7 SACRIFICE persistent carry — the soul-eater that grows tall (decision #75): violet soul-motes + ram horns + brand.
+  infernals_soulglutton: () => glowMotes('#b06cff') + inf({ shape: 'big', skin: 'blood', horns: 'ram', eyes: 'blaze', mouth: 'maw', wing: 1, cracks: 1, brand: 1 }) + droplet(100, 150, '#b06cff'),
   infernals_cindermarshal: () => glowMotes('#ffb14a') + inf({ shape: 'tall', skin: 'ember', horns: 'tall', eyes: 'blaze', mouth: 'grin', wing: 1, brand: 1 }),
   // CONSTRUCTS — assembly / redeploy
   constructs_scrapling: () => con({ shape: 'sm', skin: 'rust', head: 'box', eyes: 'wonky', mouth: 'slot', antenna: 'twin' }),
@@ -606,6 +610,7 @@ const RECIPES: Record<string, () => string> = {
   primordials_tempest: () => prm({ shape: 'tall', skin: 'storm', crown: 'cloud', ring: 1, cracks: 1, eyes: 'fierce', mouth: 'open' }),
   primordials_thunderhead: () => prm({ shape: 'big', skin: 'gale', crown: 'cloud', ring: 1, eyes: 'fierce', mouth: 'open' }),
   primordials_worldspark: () => prm({ shape: 'big', skin: 'spark', crown: 'bolt', ring: 1, cracks: 1, eyes: 'fierce', mouth: 'open', glow: '#d0ffee' }),
+  primordials_elderstorm: () => glowMotes('#ffe08a') + prm({ shape: 'big', skin: 'cinder', crown: 'cloud', ring: 1, cracks: 1, eyes: 'fierce', mouth: 'open', tint: '#7a5cff', glow: '#ffd166' }),
   // SIRENS — spellcraft / poison + burst
   sirens_lurefish: () => srn({ shape: 'sm', skin: 'venom', lure: 1, mouth: 'fang', poison: 1 }),
   sirens_reefwitch: () => srn({ shape: 'round', skin: 'abyss', crown: 'coral', mouth: 'smile', lashes: 1 }),
@@ -616,6 +621,8 @@ const RECIPES: Record<string, () => string> = {
   sirens_abysscantor: () => srn({ shape: 'tall', skin: 'pearl', crown: 'coral', lure: 1, mouth: 'sing', sing: 1, poison: 1 }),
   sirens_leviathansong: () => srn({ shape: 'big', skin: 'abyss', crown: 'coral', lure: 1, mouth: 'fang', poison: 1, sing: 1, tint: '#7a3fae' }),
   sirens_maelstromcantor: () => srn({ shape: 'wide', skin: 'abyss', crown: 'coral', lure: 1, mouth: 'fang', poison: 1, sing: 1 }) + droplet(100, 152, '#9bd06a'),
+  // Phase 7 POISON-COVERAGE capstone — the venom-tide that splashes poison wide (decision #77): venom motes + twin venom drops.
+  sirens_venomtide: () => glowMotes('#9bd06a') + srn({ shape: 'big', skin: 'venom', crown: 'coral', lure: 1, mouth: 'fang', poison: 1, sing: 1, tint: '#3fae6a' }) + droplet(56, 150, '#9bd06a') + droplet(146, 150, '#9bd06a'),
   // CORSAIRS — tempo / reborn + shields
   corsairs_swab: () => cor({ shape: 'sm', skin: 'tan', hat: 'bandana', mouth: 'smile', reborn: 1 }),
   corsairs_deckhand: () => cor({ shape: 'round', skin: 'brine', hat: 'bandana', bandanaCol: '#c0392b', mouth: 'grin' }),
@@ -633,6 +640,8 @@ const RECIPES: Record<string, () => string> = {
   corsairs_fence: () => cor({ shape: 'round', skin: 'ash', hat: 'bandana', bandanaCol: '#4a3f6b', eyes: 'fierce', mouth: 'grin' }) + droplet(52, 150, '#e8c45a'),
   corsairs_moneylender: () => cor({ shape: 'tall', skin: 'tan', hat: 'tricorne', beard: 1, mouth: 'smile' }) + droplet(150, 150, '#e8c45a'),
   corsairs_vaultkeeper: () => cor({ shape: 'big', skin: 'navy', hat: 'tricorne', beard: 1, eyepatch: 1, mouth: 'smile', shield: 1 }) + droplet(52, 150, '#e8c45a'),
+  // Phase 7 GOLD-spend capstone — the plunder captain: gold motes + full loadout + twin coins (decision #73).
+  corsairs_prizemaster: () => glowMotes('#e8c45a') + cor({ shape: 'big', skin: 'brine', hat: 'tricorne', beard: 1, eyepatch: 1, scar: 1, eyes: 'fierce', mouth: 'grin', shield: 1, reborn: 1 }) + droplet(52, 150, '#e8c45a') + droplet(150, 150, '#e8c45a'),
 };
 
 // Generic per-tribe fallback for any unit with no specific recipe (e.g. a non-catalog

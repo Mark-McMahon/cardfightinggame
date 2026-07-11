@@ -69,7 +69,7 @@ behavior uses a registered `custom` handler. Two handlers exist
 
 ## Content
 
-Nine original tribes, 90 unit definitions (84 purchasable + 6 tokens) across tiers 1–6.
+Nine original tribes, 115 unit definitions (109 purchasable + 6 tokens) across tiers 1–6.
 The balance-validated **core three** (below) shipped first; six more followed (Prompt-2:
 Infernals, Constructs; Round-6: Tuskers, Primordials, Sirens, Corsairs). Full roster:
 `shared/content/units.ts`. The core three and their showcase engines:

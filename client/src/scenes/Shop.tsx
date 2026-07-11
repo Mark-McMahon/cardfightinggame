@@ -372,7 +372,8 @@ export function Shop() {
             {boardN === 0 && dropSlot == null && <span className="dim board-empty">drag units here to fight</span>}
             {priv.board.map((u, i) => {
               const ability = abilityByUid.get(u.uid);
-              const abilityReady = !!ability && !ability.used && priv.gems >= ability.cost && shopLive && !pending;
+              const abilityWallet = ability?.currency === 'gold' ? priv.gold : priv.gems;
+              const abilityReady = !!ability && !ability.used && abilityWallet >= ability.cost && shopLive && !pending;
               return (
                 <div key={u.uid} style={{ display: 'contents' }}>
                   {dropSlot === i && <div className="drop-marker" />}
@@ -416,7 +417,7 @@ export function Shop() {
                           if (abilityReady) sendIntent({ type: 'activate', unitUid: u.uid });
                         }}
                       >
-                        {ability.used ? '✓ used' : <>◆{ability.cost} activate</>}
+                        {ability.used ? '✓ used' : <>{ability.currency === 'gold' ? '🪙' : '◆'}{ability.cost} activate</>}
                       </button>
                     )}
                   </div>

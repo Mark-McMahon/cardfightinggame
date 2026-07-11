@@ -178,7 +178,8 @@ export interface ConditionSpec {
     | 'deathsThisCombatAtLeast' // combat counter; DEATHS (Bone Colossus)
     | 'alliesAtMost' // Phase 3: true iff the controller has ≤ value minions (Lone Vanguard — a go-tall gate)
     | 'lifetimeDeathsAtLeast' // Phase 3: persistent per-player friendly-death total (Ossuary Titan; combat reads the CombatBoard scalar)
-    | 'boardMergesAtLeast'; // Phase 6: total MAGNETIC merges assembled across the controller's board (Magnaforge; combat reads the CombatBoard scalar)
+    | 'boardMergesAtLeast' // Phase 6: total MAGNETIC merges assembled across the controller's board (Magnaforge; combat reads the CombatBoard scalar)
+    | 'elementsPlayedAtLeast'; // Phase 7: persistent per-player count of Primordials PLAYED this game (Elderstorm; combat reads the CombatBoard scalar)
   value?: number;
   tribe?: TribeId;
   keyword?: Keyword;
@@ -206,7 +207,8 @@ export interface Effect {
  * (doublesPurchased is per-player per-GAME, shared across all doublers, never resets).
  */
 export interface ActivatedSpec {
-  cost: number | 'doublerEscalating'; // gem price (flat, from config) or the escalating doubler formula
+  cost: number | 'doublerEscalating'; // price (flat, from config) or the escalating doubler formula
+  currency?: 'gold' | 'gems'; // which wallet pays (Phase 7 #73: Corsairs spend GOLD; default 'gems')
   target: TargetSpec;
   actions: ActionSpec[];
   prompt?: string; // pendingTarget/UI description for chosenAlly abilities
@@ -365,6 +367,15 @@ export interface CombatBoard {
    * → identical log.
    */
   boardMerges?: number;
+  /**
+   * Phase 7 (decision #72, Elderstorm): the controller's PERSISTENT count of Primordials PLAYED this
+   * game (never decremented; survives sale/death), carried IN on the board snapshot (never ambient —
+   * invariant 1b). Incremented in `shop.playUnit` per Primordial played (like `forgemastersPlayed`), it
+   * is a lifetime PLAY counter (unlike `boardMerges`, a board-state read). Combat reads it for
+   * `elementsPlayedAtLeast` gates (Elderstorm's tiered board-wide payoff). Defaults to 0. Determinism
+   * holds: same (boards, seed) — including this scalar — → identical log.
+   */
+  elementsPlayed?: number;
 }
 
 export interface BoardSnapshot {
@@ -559,7 +570,8 @@ export interface PendingTarget {
 export interface ActivatedAbilityState {
   uid: string; // board unit instance
   cardId: string;
-  cost: number; // CURRENT gem cost (escalated for the shared doubler formula)
+  cost: number; // CURRENT cost (escalated for the shared doubler formula)
+  currency: 'gold' | 'gems'; // which wallet pays (Phase 7 #73: Corsairs spend GOLD; default 'gems')
   used: boolean; // already activated this shop turn (once per turn per minion)
 }
 

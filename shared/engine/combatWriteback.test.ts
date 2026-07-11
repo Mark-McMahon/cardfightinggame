@@ -256,8 +256,14 @@ describe('EV-WBK — combat writeback fold (§7.5, decision #38)', () => {
       'tokensSummonedThisTurnAtLeast',
       'gemsThisTurnAtLeast',
     ]);
+    // INTENTIONALLY-PERSISTENT combat buffs (decision #75): the SACRIFICE ceiling. Soulglutton's
+    // afterFriendlyDeaths self-buff is permanent BY DESIGN (the §7.5 writeback folds it onto the surviving
+    // carry so it grows tall across the game). It is a registered `deaths` breakpoint (bounded by the
+    // anti-linear lint) and folds to poison, so the guard against *accidental* permanence exempts it explicitly.
+    const intentionalPersistent = new Set(['infernals_soulglutton']);
     const offenders: string[] = [];
     for (const card of UNITS) {
+      if (intentionalPersistent.has(card.id)) continue;
       const all = [...card.effects];
       for (const e of all) {
         if (!combatTriggers.has(e.trigger.type)) continue;

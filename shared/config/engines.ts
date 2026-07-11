@@ -124,6 +124,12 @@ export interface EnginesConfig {
     moneylenderGold: number; // Moneylender payoff: delayed gold queued (once — non-stacking)
     fenceSellRefund: number; // Fence: minions sell for this while a Fence is on board (overrides economy.sellRefund)
     vaultKeeperGoldCap: number; // Vault Keeper: effective gold cap while a Vault Keeper is on board
+    // Phase 7 (decision #73) SPEND-GATED GOLD lever (Prizemaster): once/turn, spend GOLD to permanently
+    // buff a chosen Corsair. Flat gold cost (naturally capped by per-turn income + game length — no
+    // escalator needed); the ceiling scales with the gold ECONOMY (Vault Keeper's raised cap funds more).
+    prizemasterCost: number; // gold spent per activation (the spend-gated cost knob, §11.3c lint)
+    prizemasterBuffAtk: number; // permanent +Atk to the chosen Corsair per activation
+    prizemasterBuffHp: number; // permanent +Health to the chosen Corsair per activation
   };
 }
 
@@ -240,5 +246,8 @@ export const engines: EnginesConfig = {
     moneylenderGold: 1, // …to queue +1 gold next turn (non-stacking)
     fenceSellRefund: 2, // Fence: your minions sell for 2 (vs base 1) — a buy(3)/sell(2) churn still loses 1g/cycle
     vaultKeeperGoldCap: 13, // Vault Keeper: effective gold cap 13 while on board (vs base 10)
+    prizemasterCost: 3, // Prizemaster: spend 3 gold per activation (once/turn) — a real tempo cost vs buying/tiering
+    prizemasterBuffAtk: 5, // …the chosen Corsair permanently gains +5/+5 (additive — folds to poison, unlike a multiply)
+    prizemasterBuffHp: 5,
   },
 };

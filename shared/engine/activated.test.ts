@@ -300,6 +300,7 @@ describe('EV-ABL — privacy & the spend-gated lint (§11.3c)', () => {
       uid: tusk.uid,
       cardId: 'tuskers_ivorytusk',
       cost: T.doubleBaseCost + T.doubleCostStep, // escalated CURRENT price
+      currency: 'gems', // #73: the wallet the ability spends (Tuskers = gems; default)
       used: true,
     });
     // the opponent's private push never contains seat 0's ability state

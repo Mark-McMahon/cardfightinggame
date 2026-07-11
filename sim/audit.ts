@@ -94,6 +94,7 @@ const BREAKPOINT_CONDITIONS = new Set([
   'deathsThisCombatAtLeast',
   'lifetimeDeathsAtLeast', // Phase 3: Ossuary Titan's tiered persistent-death counter
   'boardMergesAtLeast', // Phase 6: Magnaforge's tiered board-wide magnetic counter
+  'elementsPlayedAtLeast', // Phase 7: Elderstorm's tiered persistent Primordials-played counter
   'countAllies',
   // NB: `alliesAtMost` is deliberately NOT here — it is a go-tall GATE on a fixed conditional buff
   // (Lone Vanguard), not a scaling counter, so it needs no breakpoint row.
